@@ -69,7 +69,7 @@ const Welcome = () => {
           transition={{ delay: 0.85, duration: 0.5 }}
           className="text-muted-foreground text-center text-xs leading-relaxed mb-12 max-w-xs"
         >
-          Marketing regional inteligente com influenciadoras reais
+          Marketing inteligente com criadores reais
         </motion.p>
 
         <motion.button
