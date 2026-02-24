@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
-import { Zap, CheckCircle2, MapPin, Calendar, Loader2, Send, XCircle, Hourglass } from "lucide-react";
+import { Zap, CheckCircle2, MapPin, Calendar, Loader2, Send, XCircle, Hourglass, Clock, Flame } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -40,18 +40,29 @@ const InfluencerDashboard = () => {
     return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
   };
 
-  // ✅ true se apply_deadline < hoje (em UTC, por ser DATE no banco)
-  const isExpired = (applyDeadline?: string | null) => {
-    if (!applyDeadline) return false;
-
-    // date-only vindo do Supabase geralmente vira "YYYY-MM-DD"
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(applyDeadline)) return false;
+  // ✅ Dias restantes (UTC) para um DATE do banco (YYYY-MM-DD)
+  const daysLeftUTC = (applyDeadline?: string | null) => {
+    if (!applyDeadline) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(applyDeadline)) return null;
 
     const deadlineUTC = new Date(`${applyDeadline}T00:00:00Z`);
     const now = new Date();
     const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
-    return deadlineUTC < todayUTC;
+    const diffMs = deadlineUTC.getTime() - todayUTC.getTime();
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  };
+
+  const isExpired = (applyDeadline?: string | null) => {
+    const d = daysLeftUTC(applyDeadline);
+    return typeof d === "number" ? d < 0 : false;
+  };
+
+  // ✅ Texto do badge de urgência
+  const getUrgencyLabel = (daysLeft: number) => {
+    if (daysLeft <= 0) return "Termina hoje";
+    if (daysLeft === 1) return "Termina amanhã";
+    return `Faltam ${daysLeft} dias`; // ex: 2
   };
 
   const fetchData = useCallback(async () => {
@@ -76,7 +87,7 @@ const InfluencerDashboard = () => {
         ...c,
         applicationStatus: appMap.get(c.id) || "available",
       }))
-      // ✅ defensivo: se por algum motivo vier vencida, remove do feed
+      // ✅ defensivo: remove vencidas caso apareçam
       .filter((c) => !isExpired((c as any).apply_deadline ?? null));
 
     setCampaigns(withStatus);
@@ -109,14 +120,13 @@ const InfluencerDashboard = () => {
 
     const { error } = await supabase.rpc("apply_to_campaign" as any, {
       p_campaign_id: campaignId,
-      // p_note é opcional e tem DEFAULT no SQL, então não precisa enviar
     });
 
     if (error) {
       console.error("Error applying:", error);
       const msg = error.message || "Erro ao se candidatar.";
-
       const lower = msg.toLowerCase();
+
       if (lower.includes("deadline passed")) {
         toast.error("Prazo de candidatura encerrado.");
       } else if (lower.includes("user not approved") || lower.includes("not approved")) {
@@ -218,9 +228,12 @@ const InfluencerDashboard = () => {
                   const status = statusConfig[statusKey] || statusConfig.available;
                   const isApplying = applyingTo === campaign.id;
 
-                  // defensivo: se por alguma razão existir apply_deadline e estiver expirado, trava o botão
                   const deadline = (campaign as any).apply_deadline as string | undefined;
                   const expired = !!deadline && isExpired(deadline);
+
+                  const dLeft = deadline ? daysLeftUTC(deadline) : null;
+                  const showUrgent = typeof dLeft === "number" && dLeft >= 0 && dLeft <= 2;
+                  const urgencyLabel = typeof dLeft === "number" ? getUrgencyLabel(dLeft) : null;
 
                   return (
                     <motion.div
@@ -232,9 +245,20 @@ const InfluencerDashboard = () => {
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1 min-w-0 mr-2">
-                          <h4 className="font-semibold text-foreground text-sm">{campaign.title}</h4>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-semibold text-foreground text-sm">{campaign.title}</h4>
+
+                            {showUrgent && urgencyLabel && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning font-medium flex items-center gap-1">
+                                {dLeft === 0 ? <Clock className="w-3 h-3" /> : <Flame className="w-3 h-3" />}
+                                {urgencyLabel}
+                              </span>
+                            )}
+                          </div>
+
                           <p className="text-xs text-muted-foreground mt-0.5 capitalize">{campaign.type}</p>
                         </div>
+
                         <div className={`flex items-center gap-1 shrink-0 ${status.color}`}>
                           <status.icon className="w-3.5 h-3.5" />
                           <span className="text-xs font-medium">{status.label}</span>
@@ -243,15 +267,24 @@ const InfluencerDashboard = () => {
 
                       <p className="text-xs text-foreground/60 mb-3 line-clamp-2">{campaign.brief_public}</p>
 
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      {/* Linha de infos */}
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <MapPin className="w-3 h-3" />
                           {campaign.city}, {campaign.state}
                         </span>
+
                         {campaign.campaign_date && (
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
                             {formatDateBR(campaign.campaign_date)}
+                          </span>
+                        )}
+
+                        {deadline && (
+                          <span className={`flex items-center gap-1 ${expired ? "text-destructive" : ""}`}>
+                            <Clock className="w-3 h-3" />
+                            Prazo: {expired ? "Encerrado" : formatDateBR(deadline)}
                           </span>
                         )}
                       </div>
