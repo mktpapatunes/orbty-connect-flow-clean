@@ -2,7 +2,18 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
-import { MapPin, Calendar, FileText, Users, Send, Loader2, CheckCircle2, Hourglass, XCircle, Clock } from "lucide-react";
+import {
+  MapPin,
+  Calendar,
+  FileText,
+  Users,
+  Send,
+  Loader2,
+  CheckCircle2,
+  Hourglass,
+  XCircle,
+  Clock,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -12,6 +23,7 @@ const CampaignView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { user, userRole } = useAuth();
+
   const [campaign, setCampaign] = useState<PublicCampaignFeed | null>(null);
   const [applicants, setApplicants] = useState<CampaignApplicant[]>([]);
   const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
@@ -24,44 +36,78 @@ const CampaignView = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!id || !user) return;
-
-      if (isContractor) {
-        // Contractor: fetch own campaign + applicants
-        const { data: campaignData } = await supabase
-          .from("campaigns")
-          .select("*")
-          .eq("id", id)
-          .single();
-
-        if (campaignData) {
-          setCampaign(campaignData as unknown as PublicCampaignFeed);
-        }
-
-        const { data: applicantData } = await supabase.rpc("get_campaign_applicants" as any, {
-          p_campaign_id: id,
-        });
-        setApplicants((applicantData || []) as unknown as CampaignApplicant[]);
-      } else {
-        // Influencer: fetch from public feed
-        const { data: feedData } = await supabase.rpc("get_campaigns_public_feed" as any);
-        const found = ((feedData || []) as unknown as PublicCampaignFeed[]).find((c) => c.id === id);
-        setCampaign(found || null);
-
-        // Check if already applied
-        const { data: appData } = await supabase
-          .from("campaign_applications")
-          .select("status")
-          .eq("campaign_id", id)
-          .eq("influencer_id", user.id)
-          .maybeSingle();
-
-        if (appData) {
-          setApplicationStatus((appData as any).status);
-        }
+      // ✅ Evita loading infinito quando params/auth ainda não carregaram
+      if (!id || !user) {
+        setIsLoading(false);
+        return;
       }
 
-      setIsLoading(false);
+      setIsLoading(true);
+
+      try {
+        if (isContractor) {
+          // ✅ Contractor: fetch own campaign + applicants (com segurança)
+          const { data: campaignData, error: campaignError } = await supabase
+            .from("campaigns")
+            .select("*")
+            .eq("id", id)
+            .eq("created_by", user.id)
+            .maybeSingle();
+
+          if (campaignError) {
+            console.error("CAMPAIGNVIEW_CONTRACTOR_FETCH_ERROR", campaignError);
+          }
+
+          setCampaign((campaignData ?? null) as unknown as PublicCampaignFeed);
+
+          const { data: applicantData, error: applicantsError } = await supabase.rpc(
+            "get_campaign_applicants" as any,
+            { p_campaign_id: id }
+          );
+
+          if (applicantsError) {
+            console.error("CAMPAIGNVIEW_APPLICANTS_ERROR", applicantsError);
+          }
+
+          setApplicants((applicantData || []) as unknown as CampaignApplicant[]);
+        } else {
+          // Influencer: fetch from public feed
+          const { data: feedData, error: feedError } = await supabase.rpc(
+            "get_campaigns_public_feed" as any
+          );
+
+          if (feedError) {
+            console.error("CAMPAIGNVIEW_PUBLIC_FEED_ERROR", feedError);
+          }
+
+          const found = ((feedData || []) as unknown as PublicCampaignFeed[]).find(
+            (c) => c.id === id
+          );
+          setCampaign(found || null);
+
+          // Check if already applied
+          const { data: appData, error: appError } = await supabase
+            .from("campaign_applications")
+            .select("status")
+            .eq("campaign_id", id)
+            .eq("influencer_id", user.id)
+            .maybeSingle();
+
+          if (appError) {
+            console.error("CAMPAIGNVIEW_APPLICATION_STATUS_ERROR", appError);
+          }
+
+          if (appData) {
+            setApplicationStatus((appData as any).status);
+          }
+        }
+      } catch (e) {
+        console.error("CAMPAIGNVIEW_UNEXPECTED_ERROR", e);
+        setCampaign(null);
+        setApplicants([]);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     fetchData();
@@ -97,10 +143,17 @@ const CampaignView = () => {
       toast.error("Erro ao atualizar candidatura.");
     } else {
       toast.success(decision === "accepted" ? "Influenciadora aprovada!" : "Candidatura recusada.");
+
       // Refresh applicants
-      const { data: applicantData } = await supabase.rpc("get_campaign_applicants" as any, {
-        p_campaign_id: id,
-      });
+      const { data: applicantData, error: applicantsError } = await supabase.rpc(
+        "get_campaign_applicants" as any,
+        { p_campaign_id: id }
+      );
+
+      if (applicantsError) {
+        console.error("CAMPAIGNVIEW_APPLICANTS_REFRESH_ERROR", applicantsError);
+      }
+
       setApplicants((applicantData || []) as unknown as CampaignApplicant[]);
     }
     setUpdatingId(null);
@@ -111,7 +164,15 @@ const CampaignView = () => {
 
   if (isLoading) {
     return (
-      <MobileLayout title="Campanha" showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
+      <MobileLayout
+        title="Campanha"
+        showBack
+        backTo={backTo}
+        navType={navType}
+        showNav={false}
+        showHome
+        homeRoute={backTo}
+      >
         <div className="flex justify-center py-16">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
@@ -121,7 +182,15 @@ const CampaignView = () => {
 
   if (!campaign) {
     return (
-      <MobileLayout title="Campanha" showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
+      <MobileLayout
+        title="Campanha"
+        showBack
+        backTo={backTo}
+        navType={navType}
+        showNav={false}
+        showHome
+        homeRoute={backTo}
+      >
         <div className="px-6 py-16 text-center">
           <p className="text-muted-foreground">Campanha não encontrada.</p>
         </div>
@@ -132,13 +201,25 @@ const CampaignView = () => {
   const reqs = (campaign.requirements || {}) as Record<string, unknown>;
 
   return (
-    <MobileLayout title={campaign.title} showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
+    <MobileLayout
+      title={campaign.title}
+      showBack
+      backTo={backTo}
+      navType={navType}
+      showNav={false}
+      showHome
+      homeRoute={backTo}
+    >
       <div className="px-6 py-6 space-y-4">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium capitalize">{campaign.type}</span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium">{campaign.status}</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium capitalize">
+              {campaign.type}
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium">
+              {campaign.status}
+            </span>
           </div>
           <h2 className="font-display text-2xl font-bold text-foreground">{campaign.title}</h2>
         </motion.div>
@@ -149,7 +230,9 @@ const CampaignView = () => {
             <button
               onClick={() => setTab("details")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all ${
-                tab === "details" ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
+                tab === "details"
+                  ? "bg-primary/10 text-primary border border-primary/30"
+                  : "bg-card text-muted-foreground border border-border/50"
               }`}
             >
               Detalhes
@@ -157,7 +240,9 @@ const CampaignView = () => {
             <button
               onClick={() => setTab("applicants")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
-                tab === "applicants" ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
+                tab === "applicants"
+                  ? "bg-primary/10 text-primary border border-primary/30"
+                  : "bg-card text-muted-foreground border border-border/50"
               }`}
             >
               <Users className="w-3.5 h-3.5" />
@@ -169,16 +254,25 @@ const CampaignView = () => {
         {/* Details tab */}
         {(tab === "details" || !isContractor) && (
           <>
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 gap-3">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="grid grid-cols-2 gap-3"
+            >
               <div className="glass-card p-4">
                 <MapPin className="w-4 h-4 text-primary mb-2" />
                 <p className="text-xs text-muted-foreground">Região</p>
-                <p className="text-sm font-medium text-foreground">{campaign.city}, {campaign.state}</p>
+                <p className="text-sm font-medium text-foreground">
+                  {campaign.city}, {campaign.state}
+                </p>
               </div>
               <div className="glass-card p-4">
                 <Calendar className="w-4 h-4 text-accent mb-2" />
                 <p className="text-xs text-muted-foreground">Data</p>
-                <p className="text-sm font-medium text-foreground">{campaign.campaign_date || "A definir"}</p>
+                <p className="text-sm font-medium text-foreground">
+                  {campaign.campaign_date || "A definir"}
+                </p>
               </div>
             </motion.div>
 
@@ -193,16 +287,28 @@ const CampaignView = () => {
             {/* Requirements */}
             {reqs.posts && (
               <div className="glass-card p-4 space-y-2">
-                <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Requisitos</h4>
+                <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+                  Requisitos
+                </h4>
                 <div className="flex flex-wrap gap-2">
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary">{String(reqs.posts)} post(s)</span>
-                  {reqs.format && <span className="text-xs px-2.5 py-1 rounded-full bg-accent/10 text-accent capitalize">{String(reqs.format)}</span>}
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary">
+                    {String(reqs.posts)} post(s)
+                  </span>
+                  {reqs.format && (
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-accent/10 text-accent capitalize">
+                      {String(reqs.format)}
+                    </span>
+                  )}
                 </div>
                 {Array.isArray(reqs.hashtags) && (reqs.hashtags as string[]).length > 0 && (
-                  <p className="text-xs text-muted-foreground">{(reqs.hashtags as string[]).join(" ")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(reqs.hashtags as string[]).join(" ")}
+                  </p>
                 )}
                 {Array.isArray(reqs.mentions) && (reqs.mentions as string[]).length > 0 && (
-                  <p className="text-xs text-muted-foreground">{(reqs.mentions as string[]).join(" ")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(reqs.mentions as string[]).join(" ")}
+                  </p>
                 )}
               </div>
             )}
@@ -213,7 +319,9 @@ const CampaignView = () => {
                 <FileText className="w-4 h-4 text-primary" />
                 <h4 className="font-semibold text-foreground text-sm">Descrição</h4>
               </div>
-              <p className="text-sm text-foreground/70 leading-relaxed glass-card p-4">{campaign.brief_public}</p>
+              <p className="text-sm text-foreground/70 leading-relaxed glass-card p-4">
+                {campaign.brief_public}
+              </p>
             </div>
           </>
         )}
@@ -228,19 +336,37 @@ const CampaignView = () => {
               </div>
             ) : (
               applicants.map((app) => (
-                <motion.div key={app.application_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-4 space-y-3">
+                <motion.div
+                  key={app.application_id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="glass-card p-4 space-y-3"
+                >
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                       <Users className="w-5 h-5 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-foreground text-sm truncate">{app.influencer_name}</h4>
+                      <h4 className="font-semibold text-foreground text-sm truncate">
+                        {app.influencer_name}
+                      </h4>
                       <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-                        {app.influencer_instagram && <span>@{app.influencer_instagram.replace("@", "")}</span>}
-                        <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{app.influencer_city}, {app.influencer_state}</span>
+                        {app.influencer_instagram && (
+                          <span>@{app.influencer_instagram.replace("@", "")}</span>
+                        )}
+                        <span className="flex items-center gap-0.5">
+                          <MapPin className="w-3 h-3" />
+                          {app.influencer_city}, {app.influencer_state}
+                        </span>
                       </div>
-                      {app.influencer_followers && <span className="text-[10px] text-muted-foreground">{app.influencer_followers} seguidores</span>}
-                      {app.note && <p className="text-xs text-foreground/60 mt-1 italic">"{app.note}"</p>}
+                      {app.influencer_followers && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {app.influencer_followers} seguidores
+                        </span>
+                      )}
+                      {app.note && (
+                        <p className="text-xs text-foreground/60 mt-1 italic">"{app.note}"</p>
+                      )}
                     </div>
                   </div>
 
@@ -258,7 +384,11 @@ const CampaignView = () => {
                         disabled={updatingId === app.application_id}
                         className="flex-[2] py-2.5 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-xs glow-blue flex items-center justify-center gap-1.5 disabled:opacity-50"
                       >
-                        {updatingId === app.application_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                        {updatingId === app.application_id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        )}
                         Aprovar
                       </button>
                     </div>
@@ -266,12 +396,14 @@ const CampaignView = () => {
 
                   {app.status === "accepted" && (
                     <div className="flex items-center gap-2 pt-2 border-t border-border/30 text-accent">
-                      <CheckCircle2 className="w-3.5 h-3.5" /><span className="text-xs font-medium">Aprovada</span>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span className="text-xs font-medium">Aprovada</span>
                     </div>
                   )}
                   {app.status === "rejected" && (
                     <div className="flex items-center gap-2 pt-2 border-t border-border/30 text-muted-foreground">
-                      <XCircle className="w-3.5 h-3.5" /><span className="text-xs font-medium">Recusada</span>
+                      <XCircle className="w-3.5 h-3.5" />
+                      <span className="text-xs font-medium">Recusada</span>
                     </div>
                   )}
                 </motion.div>
@@ -296,7 +428,8 @@ const CampaignView = () => {
           )}
           {applicationStatus === "pending" && (
             <div className="flex items-center justify-center gap-2 py-3 text-warning">
-              <Hourglass className="w-4 h-4" /><span className="text-sm font-medium">Aguardando aprovação</span>
+              <Hourglass className="w-4 h-4" />
+              <span className="text-sm font-medium">Aguardando aprovação</span>
             </div>
           )}
           {applicationStatus === "accepted" && (
@@ -310,7 +443,8 @@ const CampaignView = () => {
           )}
           {applicationStatus === "rejected" && (
             <div className="flex items-center justify-center gap-2 py-3 text-muted-foreground">
-              <XCircle className="w-4 h-4" /><span className="text-sm font-medium">Não selecionada</span>
+              <XCircle className="w-4 h-4" />
+              <span className="text-sm font-medium">Não selecionada</span>
             </div>
           )}
         </div>
