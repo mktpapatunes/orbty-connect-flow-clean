@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
-import { MapPin, Calendar, FileText, CheckCircle2, Download, Loader2, Info, Clock } from "lucide-react";
+import { MapPin, Calendar, FileText, CheckCircle2, Download, Loader2, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { CampaignAsset } from "@/types/database";
@@ -30,6 +30,20 @@ const AcceptedCampaignDetail = () => {
   const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
   const [assets, setAssets] = useState<CampaignAsset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // ✅ Formata datas para pt-BR (DD/MM/AAAA) sem bug de fuso em YYYY-MM-DD
+  const formatDateBR = (value?: string | null) => {
+    if (!value) return "-";
+
+    const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+    const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
+
+    if (Number.isNaN(d.getTime())) return "-";
+
+    return isDateOnly
+      ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" })
+      : d.toLocaleDateString("pt-BR");
+  };
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -124,7 +138,9 @@ const AcceptedCampaignDetail = () => {
           <div className="glass-card p-4">
             <Calendar className="w-4 h-4 text-accent mb-2" />
             <p className="text-xs text-muted-foreground">Data</p>
-            <p className="text-sm font-medium text-foreground">{campaign.campaign_date || "A definir"}</p>
+            <p className="text-sm font-medium text-foreground">
+              {campaign.campaign_date ? formatDateBR(campaign.campaign_date) : "A definir"}
+            </p>
           </div>
         </div>
 

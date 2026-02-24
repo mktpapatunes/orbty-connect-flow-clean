@@ -28,6 +28,20 @@ const InfluencerDashboard = () => {
   const [filter, setFilter] = useState<"all" | "available" | "pending" | "accepted">("all");
   const isPending = approvalStatus === "pending";
 
+  // ✅ Formata datas para pt-BR (DD/MM/AAAA) sem bug de fuso em YYYY-MM-DD
+  const formatDateBR = (value?: string | null) => {
+    if (!value) return "-";
+
+    const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+    const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
+
+    if (Number.isNaN(d.getTime())) return "-";
+
+    return isDateOnly
+      ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" })
+      : d.toLocaleDateString("pt-BR");
+  };
+
   const fetchData = useCallback(async () => {
     if (!user) return;
 
@@ -199,7 +213,7 @@ const InfluencerDashboard = () => {
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{campaign.city}, {campaign.state}</span>
                         {campaign.campaign_date && (
-                          <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{campaign.campaign_date}</span>
+                          <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDateBR(campaign.campaign_date)}</span>
                         )}
                       </div>
 

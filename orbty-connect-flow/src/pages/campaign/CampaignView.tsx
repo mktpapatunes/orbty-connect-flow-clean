@@ -34,6 +34,20 @@ const CampaignView = () => {
 
   const isContractor = userRole === "contractor";
 
+  // ✅ Formata datas para pt-BR (DD/MM/AAAA) sem bug de fuso em YYYY-MM-DD
+  const formatDateBR = (value?: string | null) => {
+    if (!value) return "-";
+
+    const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+    const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
+
+    if (Number.isNaN(d.getTime())) return "-";
+
+    return isDateOnly
+      ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" })
+      : d.toLocaleDateString("pt-BR");
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       // ✅ Evita loading infinito quando params/auth ainda não carregaram
@@ -271,7 +285,7 @@ const CampaignView = () => {
                 <Calendar className="w-4 h-4 text-accent mb-2" />
                 <p className="text-xs text-muted-foreground">Data</p>
                 <p className="text-sm font-medium text-foreground">
-                  {campaign.campaign_date || "A definir"}
+                  {campaign.campaign_date ? formatDateBR(campaign.campaign_date) : "A definir"}
                 </p>
               </div>
             </motion.div>
@@ -281,7 +295,7 @@ const CampaignView = () => {
                 <Clock className="w-4 h-4 text-warning" />
                 <span className="text-xs text-muted-foreground">Prazo para candidatura</span>
               </div>
-              <p className="text-sm font-medium text-foreground">{campaign.apply_deadline}</p>
+              <p className="text-sm font-medium text-foreground">{formatDateBR(campaign.apply_deadline)}</p>
             </div>
 
             {/* Requirements */}

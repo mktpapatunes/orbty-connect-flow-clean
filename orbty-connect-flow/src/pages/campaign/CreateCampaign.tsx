@@ -46,6 +46,21 @@ const CreateCampaign = () => {
 
   const today = new Date().toISOString().split("T")[0];
 
+  // ✅ Formata datas para pt-BR (DD/MM/AAAA) sem bug de fuso em YYYY-MM-DD
+  const formatDateBR = (value?: string | null) => {
+    if (!value) return "-";
+
+    const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+    const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
+
+    if (Number.isNaN(d.getTime())) return "-";
+
+    // Se for "date-only", força UTC pra não voltar um dia no Brasil
+    return isDateOnly
+      ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" })
+      : d.toLocaleDateString("pt-BR");
+  };
+
   // Step 1 validation
   const canStep2 = data.title && data.campaignType && data.selectedState && data.selectedCity && data.applyDeadline && data.briefPublic;
   // Step 2 validation
@@ -376,7 +391,7 @@ const CreateCampaign = () => {
               <div className="flex justify-between"><span className="text-muted-foreground">Título</span><span className="text-foreground font-medium truncate ml-4">{data.title}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Tipo</span><span className="text-foreground font-medium capitalize">{data.campaignType}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Região</span><span className="text-foreground font-medium">{data.selectedCity}, {data.selectedState}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Prazo</span><span className="text-foreground font-medium">{data.applyDeadline}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Prazo</span><span className="text-foreground font-medium">{formatDateBR(data.applyDeadline)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Posts</span><span className="text-foreground font-medium">{data.posts}x {data.format}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Arquivos</span><span className="text-foreground font-medium">{files.length}</span></div>
             </div>
