@@ -7,16 +7,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface ApplicationWithCampaign {
-  id: string;
+  application_id: string;
   campaign_id: string;
   status: string;
   note: string | null;
-  created_at: string;
-  campaign_title?: string;
-  campaign_type?: string;
-  campaign_city?: string;
-  campaign_state?: string;
-  campaign_date?: string | null;
+  applied_at: string;
+
+  campaign_title: string;
+  campaign_type: string;
+  campaign_city: string;
+  campaign_state: string;
+  campaign_date: string | null;
 }
 
 const statusConfig: Record<string, { label: string; color: string; icon: typeof Hourglass }> = {
@@ -33,43 +34,23 @@ const MyApplications = () => {
 
   useEffect(() => {
     const fetchApplications = async () => {
-      if (!user) return;
-
-      // Fetch applications
-      const { data: apps, error } = await supabase
-        .from("campaign_applications")
-        .select("*")
-        .eq("influencer_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (error || !apps) {
+      if (!user) {
         setIsLoading(false);
         return;
       }
 
-      // Fetch campaign details for accepted ones (via RLS) and public feed for others
-      const { data: feedData } = await supabase.rpc("get_campaigns_public_feed" as any);
-      const { data: acceptedData } = await supabase
-        .from("campaigns")
-        .select("id, title, type, city, state, campaign_date");
+      setIsLoading(true);
 
-      const feedMap = new Map<string, any>();
-      ((feedData || []) as any[]).forEach((c: any) => feedMap.set(c.id, c));
-      ((acceptedData || []) as any[]).forEach((c: any) => feedMap.set(c.id, c));
+      const { data, error } = await supabase.rpc("get_my_applications_feed" as any);
 
-      const enriched: ApplicationWithCampaign[] = (apps as any[]).map((a) => {
-        const campaign = feedMap.get(a.campaign_id);
-        return {
-          ...a,
-          campaign_title: campaign?.title || "Campanha",
-          campaign_type: campaign?.type || "",
-          campaign_city: campaign?.city || "",
-          campaign_state: campaign?.state || "",
-          campaign_date: campaign?.campaign_date,
-        };
-      });
+      if (error) {
+        console.error("MY_APPLICATIONS_FEED_ERROR", error);
+        setApplications([]);
+        setIsLoading(false);
+        return;
+      }
 
-      setApplications(enriched);
+      setApplications(((data || []) as unknown) as ApplicationWithCampaign[]);
       setIsLoading(false);
     };
 
@@ -98,9 +79,10 @@ const MyApplications = () => {
           <div className="space-y-3">
             {applications.map((app, i) => {
               const st = statusConfig[app.status] || statusConfig.pending;
+
               return (
                 <motion.div
-                  key={app.id}
+                  key={app.application_id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 + i * 0.06 }}
@@ -108,14 +90,15 @@ const MyApplications = () => {
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <h4 className="font-semibold text-foreground text-sm">{app.campaign_title}</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5 capitalize">{app.campaign_type}</p>
+                      <h4 className="font-semibold text-foreground text-sm">{app.campaign_title || "Campanha"}</h4>
+                      <p className="text-xs text-muted-foreground mt-0.5 capitalize">{app.campaign_type || ""}</p>
                     </div>
                     <div className={`flex items-center gap-1 ${st.color}`}>
                       <st.icon className="w-3.5 h-3.5" />
                       <span className="text-xs font-medium">{st.label}</span>
                     </div>
                   </div>
+
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
                     {app.campaign_city && (
                       <span className="flex items-center gap-1">
