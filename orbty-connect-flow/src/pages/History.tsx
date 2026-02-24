@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import MobileLayout from "@/components/MobileLayout";
-import { Clock, CheckCircle2, MapPin, Calendar, Loader2, Zap } from "lucide-react";
+import { CheckCircle2, MapPin, Calendar, Loader2, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -23,37 +23,66 @@ const History = () => {
 
   useEffect(() => {
     const fetchHistory = async () => {
-      if (!user) return;
+      // Evita loading infinito caso o user ainda não esteja carregado
+      if (!user) {
+        setCampaigns([]);
+        setIsLoading(false);
+        return;
+      }
 
-      if (userRole === "contractor") {
-        const { data } = await supabase.rpc("get_my_campaigns" as any);
-        if (data) {
-          setCampaigns(
-            ((data as any[]).filter((c: any) => c.status === "closed") as unknown as HistoryCampaign[])
-          );
-        }
-      } else {
-        // Influencer: show accepted campaigns
-        const { data: apps } = await supabase
-          .from("campaign_applications")
-          .select("campaign_id")
-          .eq("influencer_id", user.id)
-          .eq("status", "accepted");
+      setIsLoading(true);
 
-        if (apps && apps.length > 0) {
-          const ids = (apps as any[]).map((a: any) => a.campaign_id);
-          const { data: campData } = await supabase
+      try {
+        if (userRole === "contractor") {
+          // Contractor: mostrar APENAS campanhas criadas pelo próprio usuário (created_by)
+          const { data, error } = await supabase
             .from("campaigns")
-            .select("*")
-            .in("id", ids)
+            .select("id,title,type,city,state,campaign_date,status,created_at")
+            .eq("created_by", user.id)
             .order("created_at", { ascending: false });
 
-          if (campData) {
-            setCampaigns(campData as unknown as HistoryCampaign[]);
+          if (error) {
+            console.error("HISTORY_CONTRACTOR_FETCH_ERROR", error);
+            setCampaigns([]);
+          } else {
+            setCampaigns((data || []) as unknown as HistoryCampaign[]);
+          }
+        } else {
+          // Influencer: show accepted campaigns
+          const { data: apps, error: appsError } = await supabase
+            .from("campaign_applications")
+            .select("campaign_id")
+            .eq("influencer_id", user.id)
+            .eq("status", "accepted");
+
+          if (appsError) {
+            console.error("HISTORY_INFLUENCER_APPS_ERROR", appsError);
+            setCampaigns([]);
+          } else if (apps && apps.length > 0) {
+            const ids = (apps as any[]).map((a: any) => a.campaign_id);
+
+            const { data: campData, error: campError } = await supabase
+              .from("campaigns")
+              .select("id,title,type,city,state,campaign_date,status,created_at")
+              .in("id", ids)
+              .order("created_at", { ascending: false });
+
+            if (campError) {
+              console.error("HISTORY_INFLUENCER_CAMPAIGNS_ERROR", campError);
+              setCampaigns([]);
+            } else {
+              setCampaigns((campData || []) as unknown as HistoryCampaign[]);
+            }
+          } else {
+            setCampaigns([]);
           }
         }
+      } catch (e) {
+        console.error("HISTORY_UNEXPECTED_ERROR", e);
+        setCampaigns([]);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     fetchHistory();
@@ -71,7 +100,9 @@ const History = () => {
         </motion.div>
 
         {isLoading ? (
-          <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 text-primary animate-spin" /></div>
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-6 h-6 text-primary animate-spin" />
+          </div>
         ) : campaigns.length === 0 ? (
           <div className="py-12 text-center">
             <Zap className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
@@ -97,10 +128,17 @@ const History = () => {
                     <span className="text-xs font-medium capitalize">{campaign.status}</span>
                   </div>
                 </div>
+
                 <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{campaign.city}, {campaign.state}</span>
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    {campaign.city}, {campaign.state}
+                  </span>
                   {campaign.campaign_date && (
-                    <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{campaign.campaign_date}</span>
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {campaign.campaign_date}
+                    </span>
                   )}
                 </div>
               </motion.div>
