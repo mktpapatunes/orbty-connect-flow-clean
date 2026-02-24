@@ -33,6 +33,10 @@ const History = () => {
       setIsLoading(true);
 
       try {
+        // ✅ Debug essencial (sem quebrar nada)
+        console.log("[HISTORY] user.id:", user.id);
+        console.log("[HISTORY] userRole:", userRole);
+
         if (userRole === "contractor") {
           // Contractor: mostrar APENAS campanhas criadas pelo próprio usuário (created_by)
           const { data, error } = await supabase
@@ -45,7 +49,33 @@ const History = () => {
             console.error("HISTORY_CONTRACTOR_FETCH_ERROR", error);
             setCampaigns([]);
           } else {
-            setCampaigns((data || []) as unknown as HistoryCampaign[]);
+            const rows = (data || []) as unknown as HistoryCampaign[];
+            console.log("[HISTORY] contractor rows:", rows.length);
+            if (rows[0]) console.log("[HISTORY] contractor first row:", rows[0]);
+            setCampaigns(rows);
+          }
+
+          // ✅ Diagnóstico DEV-only (somente console)
+          // Se não apareceu nada, a causa mais provável é:
+          // - campaign foi criada com created_by diferente do user.id
+          // - userRole não é contractor como você imagina
+          // - ambiente/projeto supabase diferente
+          // - RLS/Policy permitindo SELECT parcial (menos comum sem erro)
+          if (import.meta.env.DEV) {
+            const currentCount = (data || []).length;
+            if (currentCount === 0) {
+              const { data: last, error: lastErr } = await supabase
+                .from("campaigns")
+                .select("id,title,created_by,status,created_at")
+                .order("created_at", { ascending: false })
+                .limit(5);
+
+              if (lastErr) {
+                console.error("HISTORY_DEV_LAST5_ERROR", lastErr);
+              } else {
+                console.log("[HISTORY][DEV] last 5 campaigns:", last || []);
+              }
+            }
           }
         } else {
           // Influencer: show accepted campaigns
@@ -71,9 +101,12 @@ const History = () => {
               console.error("HISTORY_INFLUENCER_CAMPAIGNS_ERROR", campError);
               setCampaigns([]);
             } else {
-              setCampaigns((campData || []) as unknown as HistoryCampaign[]);
+              const rows = (campData || []) as unknown as HistoryCampaign[];
+              console.log("[HISTORY] influencer campaigns rows:", rows.length);
+              setCampaigns(rows);
             }
           } else {
+            console.log("[HISTORY] influencer has no accepted applications.");
             setCampaigns([]);
           }
         }
@@ -91,7 +124,11 @@ const History = () => {
   const navType = userRole === "influencer" ? "influencer" : "contractor";
 
   return (
-    <MobileLayout title="Histórico" showBack navType={navType as "contractor" | "influencer"}>
+    <MobileLayout
+      title="Histórico"
+      showBack
+      navType={navType as "contractor" | "influencer"}
+    >
       <div className="px-6 py-6 space-y-6">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <h2 className="font-display text-2xl font-bold text-foreground">
@@ -121,7 +158,9 @@ const History = () => {
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h4 className="font-semibold text-foreground text-sm">{campaign.title}</h4>
-                    <p className="text-xs text-muted-foreground mt-0.5 capitalize">{campaign.type}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 capitalize">
+                      {campaign.type}
+                    </p>
                   </div>
                   <div className="flex items-center gap-1 text-muted-foreground">
                     <CheckCircle2 className="w-3.5 h-3.5" />
