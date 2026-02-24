@@ -13,6 +13,7 @@ import {
   Hourglass,
   XCircle,
   Clock,
+  Flame,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,16 +47,28 @@ const CampaignView = () => {
     return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
   };
 
-  // ✅ true se apply_deadline < hoje (UTC)
-  const isExpired = (applyDeadline?: string | null) => {
-    if (!applyDeadline) return false;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(applyDeadline)) return false;
+  // ✅ Dias restantes (UTC) para um DATE do banco (YYYY-MM-DD)
+  const daysLeftUTC = (applyDeadline?: string | null) => {
+    if (!applyDeadline) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(applyDeadline)) return null;
 
     const deadlineUTC = new Date(`${applyDeadline}T00:00:00Z`);
     const now = new Date();
     const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
-    return deadlineUTC < todayUTC;
+    const diffMs = deadlineUTC.getTime() - todayUTC.getTime();
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  };
+
+  const isExpired = (applyDeadline?: string | null) => {
+    const d = daysLeftUTC(applyDeadline);
+    return typeof d === "number" ? d < 0 : false;
+  };
+
+  const getUrgencyLabel = (daysLeft: number) => {
+    if (daysLeft <= 0) return "Termina hoje";
+    if (daysLeft === 1) return "Termina amanhã";
+    return `Faltam ${daysLeft} dias`;
   };
 
   useEffect(() => {
@@ -220,8 +233,12 @@ const CampaignView = () => {
   }
 
   const reqs = (campaign.requirements || {}) as Record<string, unknown>;
+
   const deadline = (campaign as any)?.apply_deadline ?? null;
   const expired = !isContractor && !!deadline && isExpired(deadline);
+  const dLeft = !isContractor && deadline ? daysLeftUTC(deadline) : null;
+  const showUrgent = !isContractor && typeof dLeft === "number" && dLeft >= 0 && dLeft <= 2;
+  const urgencyLabel = !isContractor && typeof dLeft === "number" ? getUrgencyLabel(dLeft) : null;
 
   return (
     <MobileLayout title={campaign.title} showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
@@ -235,7 +252,16 @@ const CampaignView = () => {
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium">
               {campaign.status}
             </span>
+
+            {/* ✅ Badge de urgência (somente influencer) */}
+            {!isContractor && showUrgent && urgencyLabel && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning font-medium flex items-center gap-1">
+                {dLeft === 0 ? <Clock className="w-3 h-3" /> : <Flame className="w-3 h-3" />}
+                {urgencyLabel}
+              </span>
+            )}
           </div>
+
           <h2 className="font-display text-2xl font-bold text-foreground">{campaign.title}</h2>
         </motion.div>
 
@@ -265,34 +291,54 @@ const CampaignView = () => {
         {/* Details tab */}
         {(tab === "details" || !isContractor) && (
           <>
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 gap-3">
-              <div className="glass-card p-4">
-                <MapPin className="w-4 h-4 text-primary mb-2" />
-                <p className="text-xs text-muted-foreground">Região</p>
-                <p className="text-sm font-medium text-foreground">
-                  {campaign.city}, {campaign.state}
-                </p>
+            {/* Região */}
+            <div className="glass-card p-4">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-primary" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Região</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {campaign.city}, {campaign.state}
+                  </p>
+                </div>
               </div>
-              <div className="glass-card p-4">
-                <Calendar className="w-4 h-4 text-accent mb-2" />
-                <p className="text-xs text-muted-foreground">Data</p>
-                <p className="text-sm font-medium text-foreground">
+            </div>
+
+            {/* ✅ Datas em chips separados (reduz confusão) */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="grid grid-cols-2 gap-3"
+            >
+              <div className="rounded-xl border border-border/50 bg-card/60 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Calendar className="w-4 h-4 text-accent" />
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Data do evento</p>
+                </div>
+                <p className="text-sm font-semibold text-foreground">
                   {campaign.campaign_date ? formatDateBR(campaign.campaign_date) : "A definir"}
                 </p>
               </div>
-            </motion.div>
 
-            {/* Prazo para candidatura */}
-            <div className={`glass-card p-4 ${expired ? "border border-destructive/20" : ""}`}>
-              <div className="flex items-center gap-2 mb-2">
-                <Clock className={`w-4 h-4 ${expired ? "text-destructive" : "text-warning"}`} />
-                <span className="text-xs text-muted-foreground">Prazo para candidatura</span>
+              <div
+                className={`rounded-xl border p-4 ${
+                  expired
+                    ? "border-destructive/30 bg-destructive/5"
+                    : showUrgent
+                      ? "border-warning/30 bg-warning/10"
+                      : "border-border/50 bg-card/60"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className={`w-4 h-4 ${expired ? "text-destructive" : showUrgent ? "text-warning" : "text-warning"}`} />
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Prazo candidatura</p>
+                </div>
+                <p className={`text-sm font-semibold ${expired ? "text-destructive" : "text-foreground"}`}>
+                  {deadline ? (expired ? "Encerrado" : formatDateBR(deadline)) : "-"}
+                </p>
               </div>
-              <p className={`text-sm font-medium ${expired ? "text-destructive" : "text-foreground"}`}>
-                {formatDateBR(campaign.apply_deadline)}
-                {expired ? " (encerrado)" : ""}
-              </p>
-            </div>
+            </motion.div>
 
             {/* Requirements */}
             {reqs.posts && (

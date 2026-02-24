@@ -28,19 +28,14 @@ const InfluencerDashboard = () => {
   const [filter, setFilter] = useState<"all" | "available" | "pending" | "accepted">("all");
   const isPending = approvalStatus === "pending";
 
-  // ✅ Formata datas para pt-BR (DD/MM/AAAA) sem bug de fuso em YYYY-MM-DD
   const formatDateBR = (value?: string | null) => {
     if (!value) return "-";
-
     const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
     const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
-
     if (Number.isNaN(d.getTime())) return "-";
-
     return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
   };
 
-  // ✅ Dias restantes (UTC) para um DATE do banco (YYYY-MM-DD)
   const daysLeftUTC = (applyDeadline?: string | null) => {
     if (!applyDeadline) return null;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(applyDeadline)) return null;
@@ -48,7 +43,6 @@ const InfluencerDashboard = () => {
     const deadlineUTC = new Date(`${applyDeadline}T00:00:00Z`);
     const now = new Date();
     const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-
     const diffMs = deadlineUTC.getTime() - todayUTC.getTime();
     return Math.floor(diffMs / (1000 * 60 * 60 * 24));
   };
@@ -58,11 +52,10 @@ const InfluencerDashboard = () => {
     return typeof d === "number" ? d < 0 : false;
   };
 
-  // ✅ Texto do badge de urgência
   const getUrgencyLabel = (daysLeft: number) => {
     if (daysLeft <= 0) return "Termina hoje";
     if (daysLeft === 1) return "Termina amanhã";
-    return `Faltam ${daysLeft} dias`; // ex: 2
+    return `Faltam ${daysLeft} dias`;
   };
 
   const fetchData = useCallback(async () => {
@@ -87,7 +80,6 @@ const InfluencerDashboard = () => {
         ...c,
         applicationStatus: appMap.get(c.id) || "available",
       }))
-      // ✅ defensivo: remove vencidas caso apareçam
       .filter((c) => !isExpired((c as any).apply_deadline ?? null));
 
     setCampaigns(withStatus);
@@ -267,29 +259,42 @@ const InfluencerDashboard = () => {
 
                       <p className="text-xs text-foreground/60 mb-3 line-clamp-2">{campaign.brief_public}</p>
 
-                      {/* Linha de infos */}
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          {campaign.city}, {campaign.state}
-                        </span>
-
-                        {campaign.campaign_date && (
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {formatDateBR(campaign.campaign_date)}
-                          </span>
-                        )}
-
-                        {deadline && (
-                          <span className={`flex items-center gap-1 ${expired ? "text-destructive" : ""}`}>
-                            <Clock className="w-3 h-3" />
-                            Prazo: {expired ? "Encerrado" : formatDateBR(deadline)}
-                          </span>
-                        )}
+                      {/* Região */}
+                      <div className="text-xs text-muted-foreground flex items-center gap-1 mb-3">
+                        <MapPin className="w-3 h-3" />
+                        <span>{campaign.city}, {campaign.state}</span>
                       </div>
 
-                      <div className="mt-3 pt-3 border-t border-border/30">
+                      {/* ✅ Datas em chips separados (reduz confusão) */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-xl border border-border/50 bg-card/60 px-3 py-2">
+                          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <Calendar className="w-3 h-3" />
+                            Data do evento
+                          </div>
+                          <div className="text-sm font-semibold text-foreground mt-0.5">
+                            {campaign.campaign_date ? formatDateBR(campaign.campaign_date) : "A definir"}
+                          </div>
+                        </div>
+
+                        <div className={`rounded-xl border px-3 py-2 ${
+                          expired
+                            ? "border-destructive/30 bg-destructive/5"
+                            : showUrgent
+                              ? "border-warning/30 bg-warning/10"
+                              : "border-border/50 bg-card/60"
+                        }`}>
+                          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <Clock className={`w-3 h-3 ${expired ? "text-destructive" : showUrgent ? "text-warning" : ""}`} />
+                            Prazo candidatura
+                          </div>
+                          <div className={`text-sm font-semibold mt-0.5 ${expired ? "text-destructive" : "text-foreground"}`}>
+                            {deadline ? (expired ? "Encerrado" : formatDateBR(deadline)) : "-"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t border-border/30">
                         {statusKey === "available" && (
                           <div className="flex gap-2">
                             <button
