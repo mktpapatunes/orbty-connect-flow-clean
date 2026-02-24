@@ -17,7 +17,8 @@ interface MobileLayoutProps {
 
 const contractorNav = [
   { icon: LayoutDashboard, label: "Início", path: "/dashboard-contratante" },
-  { icon: PlusCircle, label: "Criar", path: "/campanha/tipo" },
+  // ✅ Corrigido: antes era "/campanha/tipo" (isso quebrava e virava id=tipo)
+  { icon: PlusCircle, label: "Criar", path: "/criar-campanha" },
   { icon: Clock, label: "Histórico", path: "/historico" },
   { icon: User, label: "Perfil", path: "/perfil" },
 ];
@@ -52,7 +53,8 @@ const MobileLayout = ({
   };
 
   const handleHome = () => {
-    const home = homeRoute || (navType === "contractor" ? "/dashboard-contratante" : "/dashboard-influenciadora");
+    const home =
+      homeRoute || (navType === "contractor" ? "/dashboard-contratante" : "/dashboard-influenciadora");
     navigate(home);
   };
 
