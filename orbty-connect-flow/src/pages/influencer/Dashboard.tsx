@@ -37,9 +37,21 @@ const InfluencerDashboard = () => {
 
     if (Number.isNaN(d.getTime())) return "-";
 
-    return isDateOnly
-      ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" })
-      : d.toLocaleDateString("pt-BR");
+    return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
+  };
+
+  // ✅ true se apply_deadline < hoje (em UTC, por ser DATE no banco)
+  const isExpired = (applyDeadline?: string | null) => {
+    if (!applyDeadline) return false;
+
+    // date-only vindo do Supabase geralmente vira "YYYY-MM-DD"
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(applyDeadline)) return false;
+
+    const deadlineUTC = new Date(`${applyDeadline}T00:00:00Z`);
+    const now = new Date();
+    const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+    return deadlineUTC < todayUTC;
   };
 
   const fetchData = useCallback(async () => {
@@ -47,10 +59,7 @@ const InfluencerDashboard = () => {
 
     const [campaignsRes, appsRes] = await Promise.all([
       supabase.rpc("get_campaigns_public_feed" as any),
-      supabase
-        .from("campaign_applications")
-        .select("campaign_id, status")
-        .eq("influencer_id", user.id),
+      supabase.from("campaign_applications").select("campaign_id, status").eq("influencer_id", user.id),
     ]);
 
     if (campaignsRes.error) {
@@ -62,10 +71,13 @@ const InfluencerDashboard = () => {
     const appMap = new Map<string, string>();
     ((appsRes.data || []) as any[]).forEach((a: any) => appMap.set(a.campaign_id, a.status));
 
-    const withStatus: CampaignWithStatus[] = ((campaignsRes.data || []) as unknown as PublicCampaignFeed[]).map((c) => ({
-      ...c,
-      applicationStatus: appMap.get(c.id) || "available",
-    }));
+    const withStatus: CampaignWithStatus[] = ((campaignsRes.data || []) as unknown as PublicCampaignFeed[])
+      .map((c) => ({
+        ...c,
+        applicationStatus: appMap.get(c.id) || "available",
+      }))
+      // ✅ defensivo: se por algum motivo vier vencida, remove do feed
+      .filter((c) => !isExpired((c as any).apply_deadline ?? null));
 
     setCampaigns(withStatus);
     setIsLoading(false);
@@ -84,20 +96,37 @@ const InfluencerDashboard = () => {
       toast.error("Seu perfil ainda está em análise. Aguarde aprovação.");
       return;
     }
+
+    const selected = campaigns.find((c) => c.id === campaignId) as any;
+    const deadline = selected?.apply_deadline ?? null;
+
+    if (deadline && isExpired(deadline)) {
+      toast.error("Prazo de candidatura encerrado.");
+      return;
+    }
+
     setApplyingTo(campaignId);
 
     const { error } = await supabase.rpc("apply_to_campaign" as any, {
       p_campaign_id: campaignId,
+      // p_note é opcional e tem DEFAULT no SQL, então não precisa enviar
     });
 
     if (error) {
       console.error("Error applying:", error);
       const msg = error.message || "Erro ao se candidatar.";
-      if (msg.toLowerCase().includes("not approved")) {
+
+      const lower = msg.toLowerCase();
+      if (lower.includes("deadline passed")) {
+        toast.error("Prazo de candidatura encerrado.");
+      } else if (lower.includes("user not approved") || lower.includes("not approved")) {
         toast.error("Seu perfil ainda está em análise. Aguarde aprovação.");
+      } else if (lower.includes("only influencers")) {
+        toast.error("Apenas influenciadoras podem se candidatar.");
       } else {
         toast.error(msg);
       }
+
       setApplyingTo(null);
       return;
     }
@@ -133,7 +162,9 @@ const InfluencerDashboard = () => {
         )}
 
         {isLoading ? (
-          <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 text-primary animate-spin" /></div>
+          <div className="flex justify-center py-8">
+            <Loader2 className="w-6 h-6 text-primary animate-spin" />
+          </div>
         ) : (
           <>
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-3 gap-3">
@@ -166,9 +197,7 @@ const InfluencerDashboard = () => {
                   key={f.key}
                   onClick={() => setFilter(f.key)}
                   className={`px-4 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-                    filter === f.key
-                      ? "bg-primary/10 text-primary border border-primary/30"
-                      : "bg-card text-muted-foreground border border-border/50"
+                    filter === f.key ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
                   }`}
                 >
                   {f.label}
@@ -188,6 +217,10 @@ const InfluencerDashboard = () => {
                   const statusKey = campaign.applicationStatus;
                   const status = statusConfig[statusKey] || statusConfig.available;
                   const isApplying = applyingTo === campaign.id;
+
+                  // defensivo: se por alguma razão existir apply_deadline e estiver expirado, trava o botão
+                  const deadline = (campaign as any).apply_deadline as string | undefined;
+                  const expired = !!deadline && isExpired(deadline);
 
                   return (
                     <motion.div
@@ -211,9 +244,15 @@ const InfluencerDashboard = () => {
                       <p className="text-xs text-foreground/60 mb-3 line-clamp-2">{campaign.brief_public}</p>
 
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{campaign.city}, {campaign.state}</span>
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />
+                          {campaign.city}, {campaign.state}
+                        </span>
                         {campaign.campaign_date && (
-                          <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDateBR(campaign.campaign_date)}</span>
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {formatDateBR(campaign.campaign_date)}
+                          </span>
                         )}
                       </div>
 
@@ -228,30 +267,36 @@ const InfluencerDashboard = () => {
                             </button>
                             <button
                               onClick={() => handleApply(campaign.id)}
-                              disabled={isApplying}
+                              disabled={isApplying || expired}
                               className="flex-[2] py-2.5 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-xs glow-blue flex items-center justify-center gap-1.5 disabled:opacity-60"
                             >
                               {isApplying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                              {isApplying ? "Enviando..." : "Candidatar-se"}
+                              {isApplying ? "Enviando..." : expired ? "Prazo encerrado" : "Candidatar-se"}
                             </button>
                           </div>
                         )}
+
                         {statusKey === "pending" && (
                           <div className="flex items-center justify-center gap-2 py-2 text-warning">
-                            <Hourglass className="w-3.5 h-3.5" /><span className="text-xs font-medium">Aguardando aprovação</span>
+                            <Hourglass className="w-3.5 h-3.5" />
+                            <span className="text-xs font-medium">Aguardando aprovação</span>
                           </div>
                         )}
+
                         {statusKey === "accepted" && (
                           <button
                             onClick={() => navigate(`/campanha-detalhe/${campaign.id}`)}
                             className="w-full py-2.5 rounded-xl border border-accent/30 bg-accent/5 text-accent font-semibold text-xs flex items-center justify-center gap-1.5"
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5" />Ver detalhes completos
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Ver detalhes completos
                           </button>
                         )}
+
                         {statusKey === "rejected" && (
                           <div className="flex items-center justify-center gap-2 py-2 text-muted-foreground">
-                            <XCircle className="w-3.5 h-3.5" /><span className="text-xs font-medium">Não selecionada</span>
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span className="text-xs font-medium">Não selecionada</span>
                           </div>
                         )}
                       </div>
