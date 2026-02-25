@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
 import {
   MapPin,
@@ -27,11 +27,13 @@ import {
   X,
   Sparkles,
   ArrowLeft,
+  Paperclip,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import type { PublicCampaignFeed, CampaignApplicant } from "@/types/database";
+import CampaignFilesTab from "@/components/campaign/CampaignFilesTab";
 
 type CampaignTimelineRow = {
   event_id: string;
@@ -85,8 +87,11 @@ type SearchSuggestion = {
   value: string;
 };
 
+type TabKey = "details" | "applicants" | "history" | "files";
+
 const CampaignView = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
   const { user, userRole } = useAuth();
 
@@ -98,7 +103,7 @@ const CampaignView = () => {
   const [isApplying, setIsApplying] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  const [tab, setTab] = useState<"details" | "applicants" | "history">("details");
+  const [tab, setTab] = useState<TabKey>("details");
 
   const [timeline, setTimeline] = useState<CampaignTimelineRow[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
@@ -118,6 +123,53 @@ const CampaignView = () => {
   const [metricsLoading, setMetricsLoading] = useState(false);
 
   const isContractor = userRole === "contractor";
+  const influencerAccepted = applicationStatus === "accepted";
+
+  /* =========================
+     URL state (tab)
+  ========================= */
+
+  const setTabWithUrl = useCallback(
+    (next: TabKey) => {
+      setTab(next);
+
+      const sp = new URLSearchParams(location.search);
+      sp.set("tab", next);
+
+      navigate(
+        {
+          pathname: location.pathname,
+          search: sp.toString(),
+        },
+        { replace: true }
+      );
+    },
+    [location.pathname, location.search, navigate]
+  );
+
+  useEffect(() => {
+    const sp = new URLSearchParams(location.search);
+    const t = sp.get("tab");
+
+    const allowed: TabKey[] = ["details", "applicants", "history", "files"];
+
+    if (t && allowed.includes(t as TabKey)) {
+      const next = t as TabKey;
+
+      // regras simples:
+      // - influencer sem aceite não deve ficar em files
+      if (!isContractor && next === "files" && !influencerAccepted) {
+        if (tab !== "details") setTab("details");
+        return;
+      }
+
+      if (tab !== next) setTab(next);
+      return;
+    }
+
+    // se não tem tab na URL, mantém default
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, isContractor, influencerAccepted]);
 
   /* =========================
      Utils
@@ -177,10 +229,7 @@ const CampaignView = () => {
         {parts.map((p, idx) => {
           const isMatch = p.toLowerCase() === q.toLowerCase();
           return isMatch ? (
-            <mark
-              key={idx}
-              className="rounded px-1 py-0.5 bg-primary/10 text-foreground border border-primary/15"
-            >
+            <mark key={idx} className="rounded px-1 py-0.5 bg-primary/10 text-foreground border border-primary/15">
               {p}
             </mark>
           ) : (
@@ -750,6 +799,9 @@ const CampaignView = () => {
     } else {
       toast.success("Candidatura enviada!");
       setApplicationStatus("pending");
+
+      // influencer acabou de aplicar -> garante que está em detalhes
+      if (tab !== "details") setTabWithUrl("details");
     }
 
     setIsApplying(false);
@@ -818,8 +870,6 @@ const CampaignView = () => {
     );
   }
 
-  const reqs = (campaign.requirements || {}) as Record<string, unknown>;
-
   const deadline = (campaign as any)?.apply_deadline ?? null;
   const expired = !isContractor && !!deadline && isExpired(deadline);
   const dLeft = !isContractor && deadline ? daysLeftUTC(deadline) : null;
@@ -857,11 +907,11 @@ const CampaignView = () => {
           <h2 className="font-display text-2xl font-bold text-foreground">{campaign.title}</h2>
         </motion.div>
 
-        {/* Contractor tabs */}
+        {/* Tabs (contractor) */}
         {isContractor && (
           <div className="flex gap-2">
             <button
-              onClick={() => setTab("details")}
+              onClick={() => setTabWithUrl("details")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all ${
                 tab === "details"
                   ? "bg-primary/10 text-primary border border-primary/30"
@@ -872,7 +922,7 @@ const CampaignView = () => {
             </button>
 
             <button
-              onClick={() => setTab("applicants")}
+              onClick={() => setTabWithUrl("applicants")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
                 tab === "applicants"
                   ? "bg-primary/10 text-primary border border-primary/30"
@@ -884,7 +934,7 @@ const CampaignView = () => {
             </button>
 
             <button
-              onClick={() => setTab("history")}
+              onClick={() => setTabWithUrl("history")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
                 tab === "history"
                   ? "bg-primary/10 text-primary border border-primary/30"
@@ -894,11 +944,60 @@ const CampaignView = () => {
               <History className="w-3.5 h-3.5" />
               Histórico
             </button>
+
+            <button
+              onClick={() => setTabWithUrl("files")}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
+                tab === "files"
+                  ? "bg-primary/10 text-primary border border-primary/30"
+                  : "bg-card text-muted-foreground border border-border/50"
+              }`}
+            >
+              <Paperclip className="w-3.5 h-3.5" />
+              Arquivos
+            </button>
           </div>
         )}
 
+        {/* Tabs (influencer) — só quando aceita */}
+        {!isContractor && influencerAccepted && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setTabWithUrl("details")}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all ${
+                tab === "details"
+                  ? "bg-primary/10 text-primary border border-primary/30"
+                  : "bg-card text-muted-foreground border border-border/50"
+              }`}
+            >
+              Detalhes
+            </button>
+
+            <button
+              onClick={() => setTabWithUrl("files")}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
+                tab === "files"
+                  ? "bg-primary/10 text-primary border border-primary/30"
+                  : "bg-card text-muted-foreground border border-border/50"
+              }`}
+            >
+              <Paperclip className="w-3.5 h-3.5" />
+              Arquivos
+            </button>
+          </div>
+        )}
+
+        {/* Files tab */}
+        {tab === "files" && (
+          <CampaignFilesTab
+            campaignId={String(id)}
+            role={isContractor ? "contractor" : "influencer"}
+            influencerAccepted={!!influencerAccepted}
+          />
+        )}
+
         {/* Details tab */}
-        {(tab === "details" || !isContractor) && (
+        {(tab === "details" || (!isContractor && !influencerAccepted)) && (
           <>
             {/* Região */}
             <div className="glass-card p-4">
@@ -914,7 +1013,12 @@ const CampaignView = () => {
             </div>
 
             {/* Datas destacadas */}
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 gap-3">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="grid grid-cols-2 gap-3"
+            >
               <div className="rounded-xl border border-border/50 bg-card/60 p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Calendar className="w-4 h-4 text-accent" />
@@ -927,7 +1031,11 @@ const CampaignView = () => {
 
               <div
                 className={`rounded-xl border p-4 ${
-                  expired ? "border-destructive/30 bg-destructive/5" : showUrgent ? "border-warning/30 bg-warning/10" : "border-border/50 bg-card/60"
+                  expired
+                    ? "border-destructive/30 bg-destructive/5"
+                    : showUrgent
+                      ? "border-warning/30 bg-warning/10"
+                      : "border-border/50 bg-card/60"
                 }`}
               >
                 <div className="flex items-center gap-2 mb-2">
@@ -991,6 +1099,23 @@ const CampaignView = () => {
               </div>
               <p className="text-sm text-foreground/70 leading-relaxed glass-card p-4">{campaign.brief_public}</p>
             </div>
+
+            {/* Influencer accepted hint */}
+            {!isContractor && influencerAccepted && (
+              <div className="glass-card p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm text-muted-foreground">
+                    Você pode acessar **Arquivos** para ver briefing/arte e enviar comprovantes.
+                  </div>
+                  <button
+                    onClick={() => setTabWithUrl("files")}
+                    className="px-3 py-2 rounded-xl text-xs font-medium border border-primary/30 bg-primary/10 text-primary"
+                  >
+                    Abrir arquivos
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -1004,7 +1129,12 @@ const CampaignView = () => {
               </div>
             ) : (
               applicants.map((app) => (
-                <motion.div key={app.application_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-4 space-y-3">
+                <motion.div
+                  key={app.application_id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="glass-card p-4 space-y-3"
+                >
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                       <Users className="w-5 h-5 text-primary" />
@@ -1035,7 +1165,11 @@ const CampaignView = () => {
                         disabled={updatingId === app.application_id}
                         className="flex-[2] py-2.5 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-xs glow-blue flex items-center justify-center gap-1.5 disabled:opacity-50"
                       >
-                        {updatingId === app.application_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                        {updatingId === app.application_id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        )}
                         Aprovar
                       </button>
                     </div>
@@ -1246,7 +1380,8 @@ const CampaignView = () => {
 
                     const isNegative =
                       ev.event_type === "application.rejected" ||
-                      (ev.event_type === "campaign.status_changed" && (ev.to_status === "deleted" || ev.to_status === "closed_expired"));
+                      (ev.event_type === "campaign.status_changed" &&
+                        (ev.to_status === "deleted" || ev.to_status === "closed_expired"));
 
                     const avatarName = ev.event_type === "application.submitted" ? ev.influencer_name : ev.actor_name;
 
