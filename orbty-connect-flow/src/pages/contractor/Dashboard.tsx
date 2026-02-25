@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
@@ -13,13 +13,14 @@ import {
   Sparkles,
   Loader2,
   Calendar,
+  BadgeCheck,
   Flame,
-  CheckCircle2,
   Trash2,
   Ban,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 import type { MyCampaign } from "@/types/database";
 
 type Bucket =
@@ -34,7 +35,7 @@ type Bucket =
 type MyCampaignRow = MyCampaign & {
   campaign_date?: string | null;
   apply_deadline?: string | null;
-  created_at?: string;
+  created_at?: string | null;
   applicant_count?: number;
   bucket?: Bucket | string;
 };
@@ -47,7 +48,7 @@ const ContractorDashboard = () => {
   const [bucket, setBucket] = useState<Bucket>("active");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  // ✅ Datas pt-BR (DATE sem bug de fuso)
+  // ✅ Datas pt-BR sem bug de fuso (para DATE YYYY-MM-DD)
   const formatDateBR = (value?: string | null) => {
     if (!value) return "-";
     const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -56,7 +57,7 @@ const ContractorDashboard = () => {
     return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
   };
 
-  // ✅ Dias restantes (UTC)
+  // ✅ Dias restantes (UTC) baseado em DATE
   const daysLeftUTC = (applyDeadline?: string | null) => {
     if (!applyDeadline) return null;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(applyDeadline)) return null;
@@ -69,11 +70,6 @@ const ContractorDashboard = () => {
     return Math.floor(diffMs / (1000 * 60 * 60 * 24));
   };
 
-  const isExpired = (applyDeadline?: string | null) => {
-    const d = daysLeftUTC(applyDeadline);
-    return typeof d === "number" ? d < 0 : false;
-  };
-
   const getUrgencyLabel = (daysLeft: number) => {
     if (daysLeft <= 0) return "Termina hoje";
     if (daysLeft === 1) return "Termina amanhã";
@@ -82,12 +78,17 @@ const ContractorDashboard = () => {
 
   const fetchCampaigns = useCallback(async () => {
     if (!user) return;
+
     setIsLoading(true);
 
+    // ✅ novo get_my_campaigns com bucket (mas pedimos all e filtramos no front)
     const { data, error } = await supabase.rpc("get_my_campaigns" as any, { p_bucket: "all" });
 
     if (!error && data) {
       setCampaigns(data as unknown as MyCampaignRow[]);
+    } else if (error) {
+      console.error("GET_MY_CAMPAIGNS_ERROR", error);
+      toast.error("Erro ao carregar campanhas.");
     }
 
     setIsLoading(false);
@@ -97,44 +98,63 @@ const ContractorDashboard = () => {
     fetchCampaigns();
   }, [fetchCampaigns]);
 
-  const active = campaigns.filter((c) => c.bucket === "active");
-  const expired = campaigns.filter((c) => c.bucket === "closed_expired");
-  const closedManual = campaigns.filter((c) => c.bucket === "closed_manual");
-  const completed = campaigns.filter((c) => c.bucket === "completed");
-  const draft = campaigns.filter((c) => c.bucket === "draft");
-  const deleted = campaigns.filter((c) => c.bucket === "deleted");
+  const groups = useMemo(() => {
+    const active = campaigns.filter((c) => c.bucket === "active");
+    const expired = campaigns.filter((c) => c.bucket === "closed_expired");
+    const closedManual = campaigns.filter((c) => c.bucket === "closed_manual");
+    const completed = campaigns.filter((c) => c.bucket === "completed");
+    const draft = campaigns.filter((c) => c.bucket === "draft");
+    const deleted = campaigns.filter((c) => c.bucket === "deleted");
+    return { active, expired, closedManual, completed, draft, deleted };
+  }, [campaigns]);
 
-  const list =
-    bucket === "active"
-      ? active
-      : bucket === "closed_expired"
-        ? expired
-        : bucket === "closed_manual"
-          ? closedManual
-          : bucket === "completed"
-            ? completed
-            : bucket === "draft"
-              ? draft
-              : bucket === "deleted"
-                ? deleted
-                : campaigns;
+  const list = useMemo(() => {
+    if (bucket === "active") return groups.active;
+    if (bucket === "closed_expired") return groups.expired;
+    if (bucket === "closed_manual") return groups.closedManual;
+    if (bucket === "completed") return groups.completed;
+    if (bucket === "draft") return groups.draft;
+    if (bucket === "deleted") return groups.deleted;
+    return campaigns;
+  }, [bucket, campaigns, groups]);
 
-  // Ordenação premium: ativas pelo prazo, resto por created_at desc
-  const sortedList = [...list].sort((a, b) => {
-    if (bucket === "active") {
-      const ad = a.apply_deadline ? new Date(`${a.apply_deadline}T00:00:00Z`).getTime() : Number.POSITIVE_INFINITY;
-      const bd = b.apply_deadline ? new Date(`${b.apply_deadline}T00:00:00Z`).getTime() : Number.POSITIVE_INFINITY;
-      if (ad !== bd) return ad - bd;
-    }
-    const ac = a.created_at ? new Date(a.created_at).getTime() : 0;
-    const bc = b.created_at ? new Date(b.created_at).getTime() : 0;
-    return bc - ac;
-  });
+  // ✅ Ordenação premium
+  const sortedList = useMemo(() => {
+    const copy = [...list];
+
+    copy.sort((a, b) => {
+      if (bucket === "active") {
+        const ad = a.apply_deadline ? new Date(`${a.apply_deadline}T00:00:00Z`).getTime() : Number.POSITIVE_INFINITY;
+        const bd = b.apply_deadline ? new Date(`${b.apply_deadline}T00:00:00Z`).getTime() : Number.POSITIVE_INFINITY;
+        if (ad !== bd) return ad - bd;
+      }
+
+      const ac = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const bc = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return bc - ac;
+    });
+
+    return copy;
+  }, [bucket, list]);
+
+  const activeCount = groups.active.length;
+  const closedCount = groups.closedManual.length + groups.expired.length;
+  const completedCount = groups.completed.length;
 
   const stats = [
-    { label: "Ativas", value: String(active.length), icon: Zap, color: "text-primary" },
-    { label: "Concluídas", value: String(completed.length), icon: CheckCircle2, color: "text-accent" },
-    { label: "Total", value: String(campaigns.length), icon: Users, color: "text-neon-cyan" },
+    { label: "Ativas", value: String(activeCount), icon: Zap, color: "text-primary" },
+    { label: "Concluídas", value: String(completedCount), icon: BadgeCheck, color: "text-accent" },
+    { label: "Encerradas", value: String(closedCount), icon: TrendingUp, color: "text-muted-foreground" },
+  ];
+
+  const tabs = [
+    { key: "active" as const, label: `Ativas (${groups.active.length})` },
+    { key: "closed_expired" as const, label: `Vencidas (${groups.expired.length})` },
+    { key: "closed_manual" as const, label: `Encerradas (${groups.closedManual.length})` },
+    { key: "completed" as const, label: `Concluídas (${groups.completed.length})` },
+    { key: "draft" as const, label: `Rascunhos (${groups.draft.length})` },
+    { key: "deleted" as const, label: `Excluídas (${groups.deleted.length})` },
+    { key: "all" as const, label: `Todas (${campaigns.length})` },
   ];
 
   const menuItems = [
@@ -142,19 +162,17 @@ const ContractorDashboard = () => {
     { icon: User, label: "Meu perfil", description: "Dados da conta e configurações", route: "/perfil" },
   ];
 
-  const runAction = async (id: string, action: "close" | "complete" | "delete") => {
-    if (!id) return;
-
+  const runAction = async (campaignId: string, action: "close" | "complete" | "delete") => {
     const confirmText =
       action === "delete"
-        ? "Tem certeza que deseja excluir esta campanha? (Ela ficará como excluída e não aparecerá para influenciadoras.)"
+        ? "Tem certeza que deseja excluir esta campanha? Ela ficará como excluída e não aparecerá para influenciadoras."
         : action === "close"
           ? "Encerrar campanha agora? Isso impede novas candidaturas."
           : "Marcar como CONCLUÍDA? Use quando tudo foi entregue corretamente.";
 
     if (!window.confirm(confirmText)) return;
 
-    setUpdatingId(id);
+    setUpdatingId(campaignId);
 
     try {
       const fn =
@@ -164,12 +182,9 @@ const ContractorDashboard = () => {
             ? "contractor_mark_campaign_completed"
             : "contractor_delete_campaign";
 
-      const { error } = await supabase.rpc(fn as any, { p_campaign_id: id });
+      const { error } = await supabase.rpc(fn as any, { p_campaign_id: campaignId });
 
-      if (error) {
-        console.error("ACTION_ERROR", error);
-        throw error;
-      }
+      if (error) throw error;
 
       if (action === "close") toast.success("Campanha encerrada.");
       if (action === "complete") toast.success("Campanha marcada como concluída.");
@@ -177,21 +192,27 @@ const ContractorDashboard = () => {
 
       await fetchCampaigns();
     } catch (e: any) {
+      console.error("CAMPAIGN_ACTION_ERROR", e);
       toast.error(e?.message || "Erro ao atualizar campanha.");
     } finally {
       setUpdatingId(null);
     }
   };
 
-  const bucketTabs = [
-    { key: "active" as const, label: `Ativas (${active.length})` },
-    { key: "closed_expired" as const, label: `Vencidas (${expired.length})` },
-    { key: "closed_manual" as const, label: `Encerradas (${closedManual.length})` },
-    { key: "completed" as const, label: `Concluídas (${completed.length})` },
-    { key: "draft" as const, label: `Rascunhos (${draft.length})` },
-    { key: "deleted" as const, label: `Excluídas (${deleted.length})` },
-    { key: "all" as const, label: `Todas (${campaigns.length})` },
-  ];
+  const bucketTitle =
+    bucket === "active"
+      ? "Campanhas ativas"
+      : bucket === "closed_expired"
+        ? "Campanhas vencidas"
+        : bucket === "closed_manual"
+          ? "Campanhas encerradas"
+          : bucket === "completed"
+            ? "Campanhas concluídas"
+            : bucket === "draft"
+              ? "Rascunhos"
+              : bucket === "deleted"
+                ? "Excluídas"
+                : "Todas as campanhas";
 
   return (
     <MobileLayout title="Suas campanhas" navType="contractor">
@@ -209,7 +230,12 @@ const ContractorDashboard = () => {
           </div>
         ) : (
           <>
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-3 gap-3">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="grid grid-cols-3 gap-3"
+            >
               {stats.map((stat) => (
                 <div key={stat.label} className="glass-card p-4 flex flex-col items-center text-center gap-2">
                   <stat.icon className={`w-5 h-5 ${stat.color}`} />
@@ -232,21 +258,28 @@ const ContractorDashboard = () => {
               Nova campanha
             </motion.button>
 
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }} className="glass-card p-4 flex items-start gap-3">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.25 }}
+              className="glass-card p-4 flex items-start gap-3"
+            >
               <Sparkles className="w-4 h-4 text-accent shrink-0 mt-0.5" />
               <p className="text-xs text-muted-foreground leading-relaxed">
                 <span className="text-foreground font-medium">Dica inteligente:</span> Campanhas regionais têm 3x mais engajamento.
               </p>
             </motion.div>
 
-            {/* Tabs premium */}
+            {/* ✅ Tabs premium */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              {bucketTabs.map((t) => (
+              {tabs.map((t) => (
                 <button
                   key={t.key}
                   onClick={() => setBucket(t.key)}
                   className={`px-4 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-                    bucket === t.key ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
+                    bucket === t.key
+                      ? "bg-primary/10 text-primary border border-primary/30"
+                      : "bg-card text-muted-foreground border border-border/50"
                   }`}
                 >
                   {t.label}
@@ -254,23 +287,9 @@ const ContractorDashboard = () => {
               ))}
             </div>
 
-            {/* Lista */}
+            {/* ✅ Lista premium */}
             <div className="space-y-2">
-              <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
-                {bucket === "active"
-                  ? "Campanhas ativas"
-                  : bucket === "closed_expired"
-                    ? "Campanhas vencidas"
-                    : bucket === "closed_manual"
-                      ? "Campanhas encerradas manualmente"
-                      : bucket === "completed"
-                        ? "Campanhas concluídas"
-                        : bucket === "draft"
-                          ? "Rascunhos"
-                          : bucket === "deleted"
-                            ? "Excluídas"
-                            : "Todas as campanhas"}
-              </p>
+              <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">{bucketTitle}</p>
 
               {sortedList.length === 0 ? (
                 <div className="py-10 text-center">
@@ -279,38 +298,38 @@ const ContractorDashboard = () => {
                 </div>
               ) : (
                 sortedList.map((campaign, i) => {
+                  const isBusy = updatingId === campaign.id;
+
                   const deadline = campaign.apply_deadline ?? null;
                   const eventDate = campaign.campaign_date ?? null;
                   const dLeft = deadline ? daysLeftUTC(deadline) : null;
 
-                  const showUrgent = campaign.bucket === "active" && typeof dLeft === "number" && dLeft >= 0 && dLeft <= 2;
-                  const urgencyLabel = typeof dLeft === "number" ? getUrgencyLabel(dLeft) : null;
+                  const showUrgent =
+                    campaign.bucket === "active" &&
+                    typeof dLeft === "number" &&
+                    dLeft >= 0 &&
+                    dLeft <= 2;
 
-                  const isBusy = updatingId === campaign.id;
+                  const isCompleted = campaign.bucket === "completed";
 
                   return (
                     <motion.div
                       key={campaign.id}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.15 + i * 0.06 }}
-                      className="w-full glass-card-hover p-4"
+                      transition={{ delay: 0.12 + i * 0.06 }}
+                      className="glass-card-hover p-4"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="font-semibold text-foreground text-sm truncate">{campaign.title}</h4>
+                            <h4 className="font-semibold text-foreground text-sm truncate">
+                              {campaign.title}
+                            </h4>
 
-                            {showUrgent && urgencyLabel && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning font-medium flex items-center gap-1">
-                                {dLeft === 0 ? <Clock className="w-3 h-3" /> : <Flame className="w-3 h-3" />}
-                                {urgencyLabel}
-                              </span>
-                            )}
-
-                            {campaign.bucket === "completed" && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full border border-accent/30 bg-accent/10 text-accent font-medium flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3" />
+                            {isCompleted && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full border border-accent/50 bg-accent/15 text-accent font-medium flex items-center gap-1">
+                                <BadgeCheck className="w-3 h-3" />
                                 Concluída
                               </span>
                             )}
@@ -328,15 +347,17 @@ const ContractorDashboard = () => {
                               </span>
                             )}
 
-                            {campaign.bucket === "draft" && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground font-medium">
-                                Rascunho
+                            {campaign.bucket === "deleted" && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground font-medium flex items-center gap-1">
+                                <Trash2 className="w-3 h-3" />
+                                Excluída
                               </span>
                             )}
 
-                            {campaign.bucket === "deleted" && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground font-medium">
-                                Excluída
+                            {showUrgent && typeof dLeft === "number" && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning font-medium flex items-center gap-1">
+                                <Flame className="w-3 h-3" />
+                                {getUrgencyLabel(dLeft)}
                               </span>
                             )}
                           </div>
@@ -381,7 +402,11 @@ const ContractorDashboard = () => {
                             Prazo candidatura
                           </div>
                           <div className={`text-sm font-semibold mt-0.5 ${campaign.bucket === "closed_expired" ? "text-destructive" : "text-foreground"}`}>
-                            {deadline ? (campaign.bucket === "closed_expired" ? "Encerrado" : formatDateBR(deadline)) : "-"}
+                            {deadline
+                              ? campaign.bucket === "closed_expired"
+                                ? "Encerrado"
+                                : formatDateBR(deadline)
+                              : "-"}
                           </div>
                         </div>
                       </div>
@@ -395,7 +420,7 @@ const ContractorDashboard = () => {
                           Ver
                         </button>
 
-                        {(campaign.bucket === "active") && (
+                        {campaign.bucket === "active" && (
                           <button
                             onClick={() => runAction(campaign.id, "close")}
                             disabled={isBusy}
@@ -405,7 +430,9 @@ const ContractorDashboard = () => {
                           </button>
                         )}
 
-                        {(campaign.bucket === "active" || campaign.bucket === "closed_manual" || campaign.bucket === "closed_expired") && (
+                        {(campaign.bucket === "active" ||
+                          campaign.bucket === "closed_manual" ||
+                          campaign.bucket === "closed_expired") && (
                           <button
                             onClick={() => runAction(campaign.id, "complete")}
                             disabled={isBusy}
