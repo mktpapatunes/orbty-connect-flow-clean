@@ -3,9 +3,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { CampaignProvider } from "./contexts/CampaignContext";
-import { AuthProvider } from "./contexts/AuthContext";
-import ProtectedRoute from "./components/ProtectedRoute";
+import { CampaignProvider } from "@/contexts/CampaignContext";
+import { AuthProvider } from "@/contexts/AuthContext";
+import ProtectedRoute from "@/components/ProtectedRoute";
 
 import Welcome from "./pages/Welcome";
 import Login from "./pages/Login";
@@ -22,16 +22,16 @@ import CampaignView from "./pages/campaign/CampaignView";
 import MyApplications from "./pages/influencer/MyApplications";
 import AcceptedCampaignDetail from "./pages/influencer/AcceptedCampaignDetail";
 
-import ProfileRouter from "./pages/profile/ProfileRouter";
-import ContractorProfile from "./pages/profile/ContractorProfile";
-import InfluencerProfile from "./pages/profile/InfluencerProfile";
+import ProfileRouter from "@/pages/profile/ProfileRouter";
+import ContractorProfile from "@/pages/profile/ContractorProfile";
+import InfluencerProfile from "@/pages/profile/InfluencerProfile";
 
 import History from "./pages/History";
 import CheckEmail from "./pages/CheckEmail";
 import NotFound from "./pages/NotFound";
 
 // (Opcional) mantém a tela antiga acessível pra você comparar durante migração
-import LegacyProfile from "./pages/Profile";
+import LegacyProfile from "@/pages/Profile";
 
 const queryClient = new QueryClient();
 
