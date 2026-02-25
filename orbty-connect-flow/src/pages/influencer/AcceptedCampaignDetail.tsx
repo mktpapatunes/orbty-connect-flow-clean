@@ -2,7 +2,17 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
-import { MapPin, Calendar, FileText, CheckCircle2, Download, Loader2, Info } from "lucide-react";
+import {
+  MapPin,
+  Calendar,
+  FileText,
+  CheckCircle2,
+  Download,
+  Loader2,
+  Info,
+  Clock,
+  BadgeCheck,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { CampaignAsset } from "@/types/database";
@@ -23,6 +33,24 @@ interface CampaignDetail {
   created_at: string;
 }
 
+/* =========================
+   Utils (premium + sem bug de fuso)
+========================= */
+
+// ✅ Formata datas para pt-BR (DD/MM/AAAA) sem bug de fuso em YYYY-MM-DD
+const formatDateBR = (value?: string | null) => {
+  if (!value) return "-";
+
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
+
+  if (Number.isNaN(d.getTime())) return "-";
+
+  return isDateOnly
+    ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" })
+    : d.toLocaleDateString("pt-BR");
+};
+
 const AcceptedCampaignDetail = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -30,20 +58,6 @@ const AcceptedCampaignDetail = () => {
   const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
   const [assets, setAssets] = useState<CampaignAsset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  // ✅ Formata datas para pt-BR (DD/MM/AAAA) sem bug de fuso em YYYY-MM-DD
-  const formatDateBR = (value?: string | null) => {
-    if (!value) return "-";
-
-    const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
-    const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
-
-    if (Number.isNaN(d.getTime())) return "-";
-
-    return isDateOnly
-      ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" })
-      : d.toLocaleDateString("pt-BR");
-  };
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -88,7 +102,15 @@ const AcceptedCampaignDetail = () => {
 
   if (isLoading) {
     return (
-      <MobileLayout title="Campanha" showBack backTo="/minhas-candidaturas" navType="influencer" showNav={false} showHome homeRoute="/dashboard-influenciadora">
+      <MobileLayout
+        title="Campanha"
+        showBack
+        backTo="/minhas-candidaturas"
+        navType="influencer"
+        showNav={false}
+        showHome
+        homeRoute="/dashboard-influenciadora"
+      >
         <div className="flex justify-center py-16">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
@@ -98,10 +120,21 @@ const AcceptedCampaignDetail = () => {
 
   if (!campaign) {
     return (
-      <MobileLayout title="Campanha" showBack backTo="/minhas-candidaturas" navType="influencer" showNav={false} showHome homeRoute="/dashboard-influenciadora">
+      <MobileLayout
+        title="Campanha"
+        showBack
+        backTo="/minhas-candidaturas"
+        navType="influencer"
+        showNav={false}
+        showHome
+        homeRoute="/dashboard-influenciadora"
+      >
         <div className="px-6 py-16 text-center">
           <p className="text-muted-foreground">Campanha não encontrada ou acesso não autorizado.</p>
-          <button onClick={() => navigate("/dashboard-influenciadora")} className="mt-4 text-sm text-primary font-medium">
+          <button
+            onClick={() => navigate("/dashboard-influenciadora")}
+            className="mt-4 text-sm text-primary font-medium"
+          >
             Voltar ao painel
           </button>
         </div>
@@ -110,50 +143,96 @@ const AcceptedCampaignDetail = () => {
   }
 
   const reqs = campaign.requirements || {};
+  const isCompleted = campaign.status === "completed";
 
   return (
-    <MobileLayout title="Campanha aceita" showBack backTo="/minhas-candidaturas" navType="influencer" showNav={false} showHome homeRoute="/dashboard-influenciadora">
+    <MobileLayout
+      title="Campanha aceita"
+      showBack
+      backTo="/minhas-candidaturas"
+      navType="influencer"
+      showNav={false}
+      showHome
+      homeRoute="/dashboard-influenciadora"
+    >
       <div className="px-6 py-6 space-y-5">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium capitalize">{campaign.type}</span>
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium capitalize">
+              {campaign.type}
+            </span>
+
+            {/* ✅ Badge premium: Concluída */}
+            {isCompleted && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-accent/30 bg-accent/10 text-accent font-medium flex items-center gap-1">
+                <BadgeCheck className="w-3 h-3" />
+                Concluída
+              </span>
+            )}
           </div>
+
           <h2 className="font-display text-2xl font-bold text-foreground">{campaign.title}</h2>
         </motion.div>
 
         {/* Accepted badge */}
         <div className="glass-card p-3 flex items-center gap-3 border-accent/30">
           <CheckCircle2 className="w-4 h-4 text-accent shrink-0" />
-          <span className="text-xs text-accent font-medium">Você foi aprovada para esta campanha</span>
+          <span className="text-xs text-accent font-medium">
+            {isCompleted ? "Campanha concluída com sucesso" : "Você foi aprovada para esta campanha"}
+          </span>
         </div>
 
-        {/* Info grid */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="glass-card p-4">
-            <MapPin className="w-4 h-4 text-primary mb-2" />
-            <p className="text-xs text-muted-foreground">Região</p>
-            <p className="text-sm font-medium text-foreground">{campaign.city}, {campaign.state}</p>
+        {/* Região */}
+        <div className="glass-card p-4">
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-primary" />
+            <div>
+              <p className="text-xs text-muted-foreground">Região</p>
+              <p className="text-sm font-medium text-foreground">
+                {campaign.city}, {campaign.state}
+              </p>
+            </div>
           </div>
-          <div className="glass-card p-4">
-            <Calendar className="w-4 h-4 text-accent mb-2" />
-            <p className="text-xs text-muted-foreground">Data</p>
-            <p className="text-sm font-medium text-foreground">
+        </div>
+
+        {/* ✅ Datas em chips separados (premium + sem confusão) */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl border border-border/50 bg-card/60 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar className="w-4 h-4 text-accent" />
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Data do evento</p>
+            </div>
+            <p className="text-sm font-semibold text-foreground">
               {campaign.campaign_date ? formatDateBR(campaign.campaign_date) : "A definir"}
             </p>
+          </div>
+
+          <div className="rounded-xl border border-border/50 bg-card/60 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Clock className="w-4 h-4 text-warning" />
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Prazo candidatura</p>
+            </div>
+            <p className="text-sm font-semibold text-foreground">{formatDateBR(campaign.apply_deadline)}</p>
           </div>
         </div>
 
         {/* Requirements */}
-        {reqs.posts && (
+        {(reqs as any).posts && (
           <div className="glass-card p-4 space-y-2">
             <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Requisitos</h4>
             <div className="flex flex-wrap gap-2">
-              <span className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary">{String(reqs.posts)} post(s)</span>
-              {reqs.format && <span className="text-xs px-2.5 py-1 rounded-full bg-accent/10 text-accent capitalize">{String(reqs.format)}</span>}
+              <span className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary">
+                {String((reqs as any).posts)} post(s)
+              </span>
+              {(reqs as any).format && (
+                <span className="text-xs px-2.5 py-1 rounded-full bg-accent/10 text-accent capitalize">
+                  {String((reqs as any).format)}
+                </span>
+              )}
             </div>
-            {Array.isArray(reqs.hashtags) && (reqs.hashtags as string[]).length > 0 && (
-              <p className="text-xs text-muted-foreground">{(reqs.hashtags as string[]).join(" ")}</p>
+            {Array.isArray((reqs as any).hashtags) && (reqs as any).hashtags.length > 0 && (
+              <p className="text-xs text-muted-foreground">{(reqs as any).hashtags.join(" ")}</p>
             )}
           </div>
         )}
@@ -174,7 +253,9 @@ const AcceptedCampaignDetail = () => {
               <FileText className="w-4 h-4 text-accent" />
               <h4 className="font-semibold text-foreground text-sm">Briefing privado</h4>
             </div>
-            <p className="text-sm text-foreground/70 leading-relaxed glass-card p-4 border-accent/20">{campaign.brief_private}</p>
+            <p className="text-sm text-foreground/70 leading-relaxed glass-card p-4 border-accent/20">
+              {campaign.brief_private}
+            </p>
           </div>
         )}
 
@@ -209,7 +290,9 @@ const AcceptedCampaignDetail = () => {
         <div className="glass-card p-4 flex items-start gap-3">
           <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Você foi aprovada! Siga o briefing e publique na data indicada.
+            {isCompleted
+              ? "Esta campanha foi marcada como concluída pelo contratante. Obrigado por participar!"
+              : "Você foi aprovada! Siga o briefing e publique na data indicada."}
           </p>
         </div>
       </div>
