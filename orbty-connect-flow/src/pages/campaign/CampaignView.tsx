@@ -34,6 +34,8 @@ type CampaignTimelineRow = {
   actor_id: string | null;
   actor_role: string | null;
 
+  actor_name: string | null;
+
   application_id: string | null;
   influencer_id: string | null;
   influencer_name: string | null;
@@ -135,6 +137,21 @@ const CampaignView = () => {
     return s;
   };
 
+  // ✅ Só eventos “ação do contratante” devem exibir "por <nome>"
+  const isContractorActionEvent = (t: CampaignTimelineRow) => {
+    if (t.event_type === "application.accepted") return true;
+    if (t.event_type === "application.rejected") return true;
+
+    if (t.event_type === "campaign.status_changed") {
+      // quando status foi alterado via ações do contratante
+      if (t.to_status === "closed_manual") return true;
+      if (t.to_status === "completed") return true;
+      if (t.to_status === "deleted") return true;
+    }
+
+    return false;
+  };
+
   const timelineIconFor = (t: CampaignTimelineRow) => {
     if (t.event_type === "application.submitted") return Send;
     if (t.event_type === "application.accepted") return CheckCircle2;
@@ -170,16 +187,24 @@ const CampaignView = () => {
 
   const timelineSubFor = (t: CampaignTimelineRow) => {
     const when = formatDateTimeBR(t.created_at);
-    const who = t.actor_role ? t.actor_role : "sistema";
 
+    // ✅ Apenas em ações do contratante: exibir "por Nome"
+    if (isContractorActionEvent(t)) {
+      const by = t.actor_name ? `por ${t.actor_name}` : "por contratante";
+      if (t.event_type === "campaign.status_changed" && t.reason) {
+        return `${when} · ${by} · Motivo: ${t.reason}`;
+      }
+      return `${when} · ${by}`;
+    }
+
+    // demais: minimalista (sem "por")
     if (t.event_type === "application.submitted") {
-      // nota pode existir (se você permitir nota na candidatura)
-      return t.note ? `${when} · ${who} · Nota: "${t.note}"` : `${when} · ${who}`;
+      return t.note ? `${when} · Nota: "${t.note}"` : when;
     }
     if (t.event_type === "campaign.status_changed" && t.reason) {
-      return `${when} · ${who} · Motivo: ${t.reason}`;
+      return `${when} · Motivo: ${t.reason}`;
     }
-    return `${when} · ${who}`;
+    return when;
   };
 
   const fetchTimeline = useCallback(async () => {
@@ -263,7 +288,6 @@ const CampaignView = () => {
 
       try {
         if (isContractor) {
-          // Contractor: fetch own campaign + applicants (com segurança)
           const { data: campaignData, error: campaignError } = await supabase
             .from("campaigns")
             .select("*")
@@ -283,10 +307,8 @@ const CampaignView = () => {
 
           setApplicants((applicantData || []) as unknown as CampaignApplicant[]);
 
-          // métricas em background
           fetchMetrics();
         } else {
-          // Influencer: fetch from public feed
           const { data: feedData, error: feedError } = await supabase.rpc("get_campaigns_public_feed" as any);
 
           if (feedError) console.error("CAMPAIGNVIEW_PUBLIC_FEED_ERROR", feedError);
@@ -294,7 +316,6 @@ const CampaignView = () => {
           const found = ((feedData || []) as unknown as PublicCampaignFeed[]).find((c) => c.id === id);
           setCampaign(found || null);
 
-          // Check if already applied
           const { data: appData, error: appError } = await supabase
             .from("campaign_applications")
             .select("status")
@@ -320,9 +341,7 @@ const CampaignView = () => {
   }, [id, user, isContractor]);
 
   useEffect(() => {
-    if (tab === "history") {
-      fetchTimeline();
-    }
+    if (tab === "history") fetchTimeline();
   }, [tab, fetchTimeline]);
 
   const handleApply = async () => {
@@ -353,7 +372,6 @@ const CampaignView = () => {
     } else {
       toast.success("Candidatura enviada!");
       setApplicationStatus("pending");
-      // Se abrir o histórico depois, já estará registrado pelo trigger
     }
 
     setIsApplying(false);
@@ -372,7 +390,6 @@ const CampaignView = () => {
     } else {
       toast.success(decision === "accepted" ? "Influenciadora aprovada!" : "Candidatura recusada.");
 
-      // Refresh applicants
       const { data: applicantData, error: applicantsError } = await supabase.rpc("get_campaign_applicants" as any, {
         p_campaign_id: id,
       });
@@ -381,7 +398,6 @@ const CampaignView = () => {
 
       setApplicants((applicantData || []) as unknown as CampaignApplicant[]);
 
-      // atualiza métricas e timeline
       fetchMetrics();
       if (tab === "history") fetchTimeline();
     }
@@ -450,9 +466,7 @@ const CampaignView = () => {
             <button
               onClick={() => setTab("details")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all ${
-                tab === "details"
-                  ? "bg-primary/10 text-primary border border-primary/30"
-                  : "bg-card text-muted-foreground border border-border/50"
+                tab === "details" ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
               }`}
             >
               Detalhes
@@ -461,9 +475,7 @@ const CampaignView = () => {
             <button
               onClick={() => setTab("applicants")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
-                tab === "applicants"
-                  ? "bg-primary/10 text-primary border border-primary/30"
-                  : "bg-card text-muted-foreground border border-border/50"
+                tab === "applicants" ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
               }`}
             >
               <Users className="w-3.5 h-3.5" />
@@ -473,9 +485,7 @@ const CampaignView = () => {
             <button
               onClick={() => setTab("history")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
-                tab === "history"
-                  ? "bg-primary/10 text-primary border border-primary/30"
-                  : "bg-card text-muted-foreground border border-border/50"
+                tab === "history" ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
               }`}
             >
               <History className="w-3.5 h-3.5" />
@@ -487,6 +497,7 @@ const CampaignView = () => {
         {/* Details tab */}
         {(tab === "details" || !isContractor) && (
           <>
+            {/* Região */}
             <div className="glass-card p-4">
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-primary" />
@@ -500,12 +511,7 @@ const CampaignView = () => {
             </div>
 
             {/* Datas destacadas */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="grid grid-cols-2 gap-3"
-            >
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-border/50 bg-card/60 p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Calendar className="w-4 h-4 text-accent" />
@@ -518,11 +524,7 @@ const CampaignView = () => {
 
               <div
                 className={`rounded-xl border p-4 ${
-                  expired
-                    ? "border-destructive/30 bg-destructive/5"
-                    : showUrgent
-                      ? "border-warning/30 bg-warning/10"
-                      : "border-border/50 bg-card/60"
+                  expired ? "border-destructive/30 bg-destructive/5" : showUrgent ? "border-warning/30 bg-warning/10" : "border-border/50 bg-card/60"
                 }`}
               >
                 <div className="flex items-center gap-2 mb-2">
@@ -543,10 +545,7 @@ const CampaignView = () => {
                     <BarChart3 className="w-4 h-4 text-primary" />
                     <p className="text-xs text-muted-foreground uppercase tracking-widest">Métricas</p>
                   </div>
-                  <button
-                    onClick={fetchMetrics}
-                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                  >
+                  <button onClick={fetchMetrics} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
                     {metricsLoading ? "Atualizando..." : "Atualizar"}
                   </button>
                 </div>
@@ -586,21 +585,11 @@ const CampaignView = () => {
               <div className="glass-card p-4 space-y-2">
                 <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Requisitos</h4>
                 <div className="flex flex-wrap gap-2">
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary">
-                    {String(reqs.posts)} post(s)
-                  </span>
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary">{String(reqs.posts)} post(s)</span>
                   {reqs.format && (
-                    <span className="text-xs px-2.5 py-1 rounded-full bg-accent/10 text-accent capitalize">
-                      {String(reqs.format)}
-                    </span>
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-accent/10 text-accent capitalize">{String(reqs.format)}</span>
                   )}
                 </div>
-                {Array.isArray(reqs.hashtags) && (reqs.hashtags as string[]).length > 0 && (
-                  <p className="text-xs text-muted-foreground">{(reqs.hashtags as string[]).join(" ")}</p>
-                )}
-                {Array.isArray(reqs.mentions) && (reqs.mentions as string[]).length > 0 && (
-                  <p className="text-xs text-muted-foreground">{(reqs.mentions as string[]).join(" ")}</p>
-                )}
               </div>
             )}
 
@@ -615,7 +604,7 @@ const CampaignView = () => {
           </>
         )}
 
-        {/* Applicants tab (contractor) */}
+        {/* Applicants tab */}
         {isContractor && tab === "applicants" && (
           <div className="space-y-3">
             {applicants.length === 0 ? (
@@ -639,8 +628,6 @@ const CampaignView = () => {
                           {app.influencer_city}, {app.influencer_state}
                         </span>
                       </div>
-                      {app.influencer_followers && <span className="text-[10px] text-muted-foreground">{app.influencer_followers} seguidores</span>}
-                      {app.note && <p className="text-xs text-foreground/60 mt-1 italic">"{app.note}"</p>}
                     </div>
                   </div>
 
@@ -683,7 +670,7 @@ const CampaignView = () => {
           </div>
         )}
 
-        {/* History tab (timeline premium) */}
+        {/* History tab */}
         {tab === "history" && (
           <div className="space-y-3">
             <div className="glass-card p-4 flex items-center justify-between">
@@ -691,14 +678,11 @@ const CampaignView = () => {
                 <History className="w-4 h-4 text-primary" />
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-widest">Linha do tempo</p>
-                  <p className="text-xs text-muted-foreground">Eventos e decisões (com nome e @)</p>
+                  <p className="text-xs text-muted-foreground">Eventos e decisões</p>
                 </div>
               </div>
 
-              <button
-                onClick={fetchTimeline}
-                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-              >
+              <button onClick={fetchTimeline} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
                 {timelineLoading ? "Atualizando..." : "Atualizar"}
               </button>
             </div>
@@ -718,50 +702,35 @@ const CampaignView = () => {
                   const Icon = timelineIconFor(ev);
 
                   const isPositive =
-                    ev.event_type === "application.accepted" || (ev.event_type === "campaign.status_changed" && ev.to_status === "completed");
+                    ev.event_type === "application.accepted" ||
+                    (ev.event_type === "campaign.status_changed" && ev.to_status === "completed");
+
                   const isNegative =
                     ev.event_type === "application.rejected" ||
                     (ev.event_type === "campaign.status_changed" && (ev.to_status === "deleted" || ev.to_status === "closed_expired"));
 
                   return (
-                    <motion.div
-                      key={ev.event_id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="glass-card p-4"
-                    >
+                    <motion.div key={ev.event_id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-4">
                       <div className="flex items-start gap-3">
                         <div
                           className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                            isPositive
-                              ? "bg-accent/10"
-                              : isNegative
-                                ? "bg-destructive/10"
-                                : "bg-primary/10"
+                            isPositive ? "bg-accent/10" : isNegative ? "bg-destructive/10" : "bg-primary/10"
                           }`}
                         >
-                          <Icon
-                            className={`w-4 h-4 ${
-                              isPositive ? "text-accent" : isNegative ? "text-destructive" : "text-primary"
-                            }`}
-                          />
+                          <Icon className={`w-4 h-4 ${isPositive ? "text-accent" : isNegative ? "text-destructive" : "text-primary"}`} />
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-foreground">
-                            {timelineTitleFor(ev)}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {timelineSubFor(ev)}
-                          </p>
+                          <p className="text-sm font-semibold text-foreground">{timelineTitleFor(ev)}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{timelineSubFor(ev)}</p>
 
-                          {/* micro badge do creator (quando existir) */}
+                          {/* micro badge do creator (sempre que existir) */}
                           {(ev.influencer_name || ev.influencer_instagram) && (
                             <div className="mt-2 inline-flex items-center gap-2 text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
                               <UserIcon className="w-3 h-3" />
                               <span className="truncate">
-                                {ev.influencer_name || "Creator"}{" "}
-                                {normalizeAt(ev.influencer_instagram) ? `· ${normalizeAt(ev.influencer_instagram)}` : ""}
+                                {ev.influencer_name || "Creator"}
+                                {normalizeAt(ev.influencer_instagram) ? ` · ${normalizeAt(ev.influencer_instagram)}` : ""}
                               </span>
                             </div>
                           )}
