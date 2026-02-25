@@ -48,7 +48,6 @@ const ContractorDashboard = () => {
   const [bucket, setBucket] = useState<Bucket>("active");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  // ✅ Datas pt-BR sem bug de fuso (para DATE YYYY-MM-DD)
   const formatDateBR = (value?: string | null) => {
     if (!value) return "-";
     const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -57,7 +56,6 @@ const ContractorDashboard = () => {
     return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
   };
 
-  // ✅ Dias restantes (UTC) baseado em DATE
   const daysLeftUTC = (applyDeadline?: string | null) => {
     if (!applyDeadline) return null;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(applyDeadline)) return null;
@@ -78,10 +76,8 @@ const ContractorDashboard = () => {
 
   const fetchCampaigns = useCallback(async () => {
     if (!user) return;
-
     setIsLoading(true);
 
-    // ✅ novo get_my_campaigns com bucket (mas pedimos all e filtramos no front)
     const { data, error } = await supabase.rpc("get_my_campaigns" as any, { p_bucket: "all" });
 
     if (!error && data) {
@@ -118,22 +114,18 @@ const ContractorDashboard = () => {
     return campaigns;
   }, [bucket, campaigns, groups]);
 
-  // ✅ Ordenação premium
   const sortedList = useMemo(() => {
     const copy = [...list];
-
     copy.sort((a, b) => {
       if (bucket === "active") {
         const ad = a.apply_deadline ? new Date(`${a.apply_deadline}T00:00:00Z`).getTime() : Number.POSITIVE_INFINITY;
         const bd = b.apply_deadline ? new Date(`${b.apply_deadline}T00:00:00Z`).getTime() : Number.POSITIVE_INFINITY;
         if (ad !== bd) return ad - bd;
       }
-
       const ac = a.created_at ? new Date(a.created_at).getTime() : 0;
       const bc = b.created_at ? new Date(b.created_at).getTime() : 0;
       return bc - ac;
     });
-
     return copy;
   }, [bucket, list]);
 
@@ -184,7 +176,23 @@ const ContractorDashboard = () => {
 
       const { error } = await supabase.rpc(fn as any, { p_campaign_id: campaignId });
 
-      if (error) throw error;
+      if (error) {
+        const msg = (error.message || "").toLowerCase();
+        const looksLikeCache =
+          msg.includes("schema cache") ||
+          msg.includes("could not find the function") ||
+          msg.includes("does not exist");
+
+        if (looksLikeCache) {
+          toast.error(
+            "Função ainda não apareceu no cache do Supabase. Abra Supabase → Settings → API → Reload schema cache, ou faça hard refresh (Ctrl+Shift+R) e tente novamente."
+          );
+          console.error("RPC_SCHEMA_CACHE_ERROR", error);
+          return;
+        }
+
+        throw error;
+      }
 
       if (action === "close") toast.success("Campanha encerrada.");
       if (action === "complete") toast.success("Campanha marcada como concluída.");
@@ -230,12 +238,7 @@ const ContractorDashboard = () => {
           </div>
         ) : (
           <>
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="grid grid-cols-3 gap-3"
-            >
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-3 gap-3">
               {stats.map((stat) => (
                 <div key={stat.label} className="glass-card p-4 flex flex-col items-center text-center gap-2">
                   <stat.icon className={`w-5 h-5 ${stat.color}`} />
@@ -258,19 +261,13 @@ const ContractorDashboard = () => {
               Nova campanha
             </motion.button>
 
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.25 }}
-              className="glass-card p-4 flex items-start gap-3"
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }} className="glass-card p-4 flex items-start gap-3">
               <Sparkles className="w-4 h-4 text-accent shrink-0 mt-0.5" />
               <p className="text-xs text-muted-foreground leading-relaxed">
                 <span className="text-foreground font-medium">Dica inteligente:</span> Campanhas regionais têm 3x mais engajamento.
               </p>
             </motion.div>
 
-            {/* ✅ Tabs premium */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
               {tabs.map((t) => (
                 <button
@@ -287,7 +284,6 @@ const ContractorDashboard = () => {
               ))}
             </div>
 
-            {/* ✅ Lista premium */}
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">{bucketTitle}</p>
 
@@ -376,7 +372,6 @@ const ContractorDashboard = () => {
                         </button>
                       </div>
 
-                      {/* Chips de datas */}
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <div className="rounded-xl border border-border/50 bg-card/60 px-3 py-2">
                           <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -411,7 +406,6 @@ const ContractorDashboard = () => {
                         </div>
                       </div>
 
-                      {/* Ações */}
                       <div className="mt-3 pt-3 border-t border-border/30 flex gap-2">
                         <button
                           onClick={() => navigate(`/campanha/${campaign.id}`)}
@@ -459,7 +453,6 @@ const ContractorDashboard = () => {
               )}
             </div>
 
-            {/* Menu */}
             <div className="space-y-3">
               {menuItems.map((item, i) => (
                 <motion.button
