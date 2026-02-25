@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { CampaignProvider } from "./contexts/CampaignContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+
 import Welcome from "./pages/Welcome";
 import Login from "./pages/Login";
 import ProfileChoice from "./pages/ProfileChoice";
@@ -20,10 +21,17 @@ import CreateCampaign from "./pages/campaign/CreateCampaign";
 import CampaignView from "./pages/campaign/CampaignView";
 import MyApplications from "./pages/influencer/MyApplications";
 import AcceptedCampaignDetail from "./pages/influencer/AcceptedCampaignDetail";
-import Profile from "./pages/Profile";
+
+import ProfileRouter from "./pages/profile/ProfileRouter";
+import ContractorProfile from "./pages/profile/ContractorProfile";
+import InfluencerProfile from "./pages/profile/InfluencerProfile";
+
 import History from "./pages/History";
 import CheckEmail from "./pages/CheckEmail";
 import NotFound from "./pages/NotFound";
+
+// (Opcional) mantém a tela antiga acessível pra você comparar durante migração
+import LegacyProfile from "./pages/Profile";
 
 const queryClient = new QueryClient();
 
@@ -48,27 +56,132 @@ const App = () => (
               <Route path="/cadastro-influenciadora" element={<InfluencerRegistration />} />
 
               {/* Status pages (require login but NOT approval) */}
-              <Route path="/aguardando-aprovacao" element={<ProtectedRoute requireApproval={false}><PendingApproval /></ProtectedRoute>} />
-              <Route path="/conta-rejeitada" element={<ProtectedRoute requireApproval={false}><RejectedStatus /></ProtectedRoute>} />
+              <Route
+                path="/aguardando-aprovacao"
+                element={
+                  <ProtectedRoute requireApproval={false}>
+                    <PendingApproval />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/conta-rejeitada"
+                element={
+                  <ProtectedRoute requireApproval={false}>
+                    <RejectedStatus />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Admin panel */}
-              <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute adminOnly>
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Contractor flow */}
-              <Route path="/dashboard-contratante" element={<ProtectedRoute requiredRole="contractor"><ContractorDashboard /></ProtectedRoute>} />
-              <Route path="/criar-campanha" element={<ProtectedRoute requiredRole="contractor"><CreateCampaign /></ProtectedRoute>} />
+              <Route
+                path="/dashboard-contratante"
+                element={
+                  <ProtectedRoute requiredRole="contractor">
+                    <ContractorDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/criar-campanha"
+                element={
+                  <ProtectedRoute requiredRole="contractor">
+                    <CreateCampaign />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Influencer flow */}
-              <Route path="/dashboard-influenciadora" element={<ProtectedRoute requiredRole="influencer"><InfluencerDashboard /></ProtectedRoute>} />
-              <Route path="/minhas-candidaturas" element={<ProtectedRoute requiredRole="influencer"><MyApplications /></ProtectedRoute>} />
-              <Route path="/campanha-detalhe/:id" element={<ProtectedRoute requiredRole="influencer"><AcceptedCampaignDetail /></ProtectedRoute>} />
+              <Route
+                path="/dashboard-influenciadora"
+                element={
+                  <ProtectedRoute requiredRole="influencer">
+                    <InfluencerDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/minhas-candidaturas"
+                element={
+                  <ProtectedRoute requiredRole="influencer">
+                    <MyApplications />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/campanha-detalhe/:id"
+                element={
+                  <ProtectedRoute requiredRole="influencer">
+                    <AcceptedCampaignDetail />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Shared campaign view (role-aware) */}
-              <Route path="/campanha/:id" element={<ProtectedRoute><CampaignView /></ProtectedRoute>} />
+              <Route
+                path="/campanha/:id"
+                element={
+                  <ProtectedRoute>
+                    <CampaignView />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Profile routes (NEW) */}
+              <Route
+                path="/perfil"
+                element={
+                  <ProtectedRoute>
+                    <ProfileRouter />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/perfil-contratante"
+                element={
+                  <ProtectedRoute requiredRole="contractor">
+                    <ContractorProfile />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/perfil-influenciadora"
+                element={
+                  <ProtectedRoute requiredRole="influencer">
+                    <InfluencerProfile />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* (Opcional) tela antiga, só pra comparar durante a migração */}
+              <Route
+                path="/perfil-antigo"
+                element={
+                  <ProtectedRoute>
+                    <LegacyProfile />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Shared pages */}
-              <Route path="/perfil" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-              <Route path="/historico" element={<ProtectedRoute><History /></ProtectedRoute>} />
+              <Route
+                path="/historico"
+                element={
+                  <ProtectedRoute>
+                    <History />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Catch-all */}
               <Route path="*" element={<NotFound />} />
