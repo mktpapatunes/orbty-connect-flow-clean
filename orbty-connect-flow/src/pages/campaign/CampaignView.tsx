@@ -19,20 +19,30 @@ import {
   BadgeCheck,
   Ban,
   Trash2,
+  User as UserIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import type { PublicCampaignFeed, CampaignApplicant } from "@/types/database";
 
-type CampaignEventRow = {
-  id: string;
+type CampaignTimelineRow = {
+  event_id: string;
   campaign_id: string;
+  event_type: string;
+  created_at: string;
   actor_id: string | null;
   actor_role: string | null;
-  event_type: string;
-  metadata: any;
-  created_at: string;
+
+  application_id: string | null;
+  influencer_id: string | null;
+  influencer_name: string | null;
+  influencer_instagram: string | null;
+
+  from_status: string | null;
+  to_status: string | null;
+  reason: string | null;
+  note: string | null;
 };
 
 type CampaignMetrics = {
@@ -53,20 +63,22 @@ const CampaignView = () => {
   const [campaign, setCampaign] = useState<PublicCampaignFeed | null>(null);
   const [applicants, setApplicants] = useState<CampaignApplicant[]>([]);
   const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isApplying, setIsApplying] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const [tab, setTab] = useState<"details" | "applicants" | "history">("details");
 
-  const [events, setEvents] = useState<CampaignEventRow[]>([]);
-  const [eventsLoading, setEventsLoading] = useState(false);
+  const [timeline, setTimeline] = useState<CampaignTimelineRow[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
 
   const [metrics, setMetrics] = useState<CampaignMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
 
   const isContractor = userRole === "contractor";
 
+  // ✅ Formata datas para pt-BR (DD/MM/AAAA) sem bug de fuso em YYYY-MM-DD
   const formatDateBR = (value?: string | null) => {
     if (!value) return "-";
     const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -82,6 +94,7 @@ const CampaignView = () => {
     return d.toLocaleString("pt-BR");
   };
 
+  // ✅ Dias restantes (UTC) para um DATE do banco (YYYY-MM-DD)
   const daysLeftUTC = (applyDeadline?: string | null) => {
     if (!applyDeadline) return null;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(applyDeadline)) return null;
@@ -105,34 +118,97 @@ const CampaignView = () => {
     return `Faltam ${daysLeft} dias`;
   };
 
-  const fetchEvents = useCallback(async () => {
-    if (!id || !user || !isContractor) return;
+  const normalizeAt = (handle?: string | null) => {
+    if (!handle) return null;
+    const h = handle.trim();
+    if (!h) return null;
+    return h.startsWith("@") ? h : `@${h}`;
+  };
 
-    setEventsLoading(true);
+  const statusLabel = (s?: string | null) => {
+    if (!s) return "—";
+    if (s === "active") return "Ativa";
+    if (s === "closed_manual") return "Encerrada (manual)";
+    if (s === "closed_expired") return "Encerrada (prazo)";
+    if (s === "completed") return "Concluída";
+    if (s === "deleted") return "Excluída";
+    return s;
+  };
+
+  const timelineIconFor = (t: CampaignTimelineRow) => {
+    if (t.event_type === "application.submitted") return Send;
+    if (t.event_type === "application.accepted") return CheckCircle2;
+    if (t.event_type === "application.rejected") return XCircle;
+    if (t.event_type === "campaign.status_changed") {
+      if (t.to_status === "completed") return BadgeCheck;
+      if (t.to_status === "closed_manual") return Ban;
+      if (t.to_status === "closed_expired") return Clock;
+      if (t.to_status === "deleted") return Trash2;
+      return CheckCircle2;
+    }
+    return History;
+  };
+
+  const timelineTitleFor = (t: CampaignTimelineRow) => {
+    const name = t.influencer_name || "Creator";
+    const ig = normalizeAt(t.influencer_instagram);
+
+    if (t.event_type === "application.submitted") {
+      return ig ? `Candidatura enviada por ${name} (${ig})` : `Candidatura enviada por ${name}`;
+    }
+    if (t.event_type === "application.accepted") {
+      return ig ? `Creator aprovado: ${name} (${ig})` : `Creator aprovado: ${name}`;
+    }
+    if (t.event_type === "application.rejected") {
+      return ig ? `Creator recusado: ${name} (${ig})` : `Creator recusado: ${name}`;
+    }
+    if (t.event_type === "campaign.status_changed") {
+      return `Status atualizado: ${statusLabel(t.from_status)} → ${statusLabel(t.to_status)}`;
+    }
+    return "Evento";
+  };
+
+  const timelineSubFor = (t: CampaignTimelineRow) => {
+    const when = formatDateTimeBR(t.created_at);
+    const who = t.actor_role ? t.actor_role : "sistema";
+
+    if (t.event_type === "application.submitted") {
+      // nota pode existir (se você permitir nota na candidatura)
+      return t.note ? `${when} · ${who} · Nota: "${t.note}"` : `${when} · ${who}`;
+    }
+    if (t.event_type === "campaign.status_changed" && t.reason) {
+      return `${when} · ${who} · Motivo: ${t.reason}`;
+    }
+    return `${when} · ${who}`;
+  };
+
+  const fetchTimeline = useCallback(async () => {
+    if (!id || !user) return;
+
+    setTimelineLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("campaign_events")
-        .select("*")
-        .eq("campaign_id", id)
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.rpc("get_campaign_timeline" as any, {
+        p_campaign_id: id,
+      });
 
       if (error) {
         const msg = (error.message || "").toLowerCase();
-        const missing =
-          msg.includes("relation") ||
+        const looksMissing =
+          msg.includes("could not find the function") ||
           msg.includes("does not exist") ||
           msg.includes("schema cache");
 
-        if (!missing) console.error("CAMPAIGN_EVENTS_ERROR", error);
-        setEvents([]);
+        if (!looksMissing) console.error("GET_CAMPAIGN_TIMELINE_ERROR", error);
+
+        setTimeline([]);
         return;
       }
 
-      setEvents((data || []) as unknown as CampaignEventRow[]);
+      setTimeline((data || []) as unknown as CampaignTimelineRow[]);
     } finally {
-      setEventsLoading(false);
+      setTimelineLoading(false);
     }
-  }, [id, user, isContractor]);
+  }, [id, user]);
 
   const fetchMetrics = useCallback(async () => {
     if (!id || !user || !isContractor) return;
@@ -151,6 +227,7 @@ const CampaignView = () => {
           msg.includes("schema cache");
 
         if (!missing) console.error("CAMPAIGN_METRICS_ERROR", error);
+
         setMetrics(null);
         return;
       }
@@ -186,6 +263,7 @@ const CampaignView = () => {
 
       try {
         if (isContractor) {
+          // Contractor: fetch own campaign + applicants (com segurança)
           const { data: campaignData, error: campaignError } = await supabase
             .from("campaigns")
             .select("*")
@@ -197,18 +275,18 @@ const CampaignView = () => {
 
           setCampaign((campaignData ?? null) as unknown as PublicCampaignFeed);
 
-          const { data: applicantData, error: applicantsError } = await supabase.rpc(
-            "get_campaign_applicants" as any,
-            { p_campaign_id: id }
-          );
+          const { data: applicantData, error: applicantsError } = await supabase.rpc("get_campaign_applicants" as any, {
+            p_campaign_id: id,
+          });
 
           if (applicantsError) console.error("CAMPAIGNVIEW_APPLICANTS_ERROR", applicantsError);
 
           setApplicants((applicantData || []) as unknown as CampaignApplicant[]);
 
-          // ✅ já aproveita e puxa métricas em background (não quebra se não existir)
+          // métricas em background
           fetchMetrics();
         } else {
+          // Influencer: fetch from public feed
           const { data: feedData, error: feedError } = await supabase.rpc("get_campaigns_public_feed" as any);
 
           if (feedError) console.error("CAMPAIGNVIEW_PUBLIC_FEED_ERROR", feedError);
@@ -216,6 +294,7 @@ const CampaignView = () => {
           const found = ((feedData || []) as unknown as PublicCampaignFeed[]).find((c) => c.id === id);
           setCampaign(found || null);
 
+          // Check if already applied
           const { data: appData, error: appError } = await supabase
             .from("campaign_applications")
             .select("status")
@@ -241,8 +320,10 @@ const CampaignView = () => {
   }, [id, user, isContractor]);
 
   useEffect(() => {
-    if (tab === "history" && isContractor) fetchEvents();
-  }, [tab, isContractor, fetchEvents]);
+    if (tab === "history") {
+      fetchTimeline();
+    }
+  }, [tab, fetchTimeline]);
 
   const handleApply = async () => {
     if (!id || !user) return;
@@ -264,18 +345,15 @@ const CampaignView = () => {
       const msg = error.message || "Erro ao se candidatar.";
       const lower = msg.toLowerCase();
 
-      if (lower.includes("deadline passed")) {
-        toast.error("Prazo de candidatura encerrado.");
-      } else if (lower.includes("user not approved") || lower.includes("not approved")) {
+      if (lower.includes("deadline passed")) toast.error("Prazo de candidatura encerrado.");
+      else if (lower.includes("user not approved") || lower.includes("not approved"))
         toast.error("Seu perfil ainda está em análise. Aguarde aprovação.");
-      } else if (lower.includes("only influencers")) {
-        toast.error("Apenas influenciadoras podem se candidatar.");
-      } else {
-        toast.error(msg);
-      }
+      else if (lower.includes("only influencers")) toast.error("Apenas influenciadoras podem se candidatar.");
+      else toast.error(msg);
     } else {
       toast.success("Candidatura enviada!");
       setApplicationStatus("pending");
+      // Se abrir o histórico depois, já estará registrado pelo trigger
     }
 
     setIsApplying(false);
@@ -294,20 +372,20 @@ const CampaignView = () => {
     } else {
       toast.success(decision === "accepted" ? "Influenciadora aprovada!" : "Candidatura recusada.");
 
-      const { data: applicantData, error: applicantsError } = await supabase.rpc(
-        "get_campaign_applicants" as any,
-        { p_campaign_id: id }
-      );
+      // Refresh applicants
+      const { data: applicantData, error: applicantsError } = await supabase.rpc("get_campaign_applicants" as any, {
+        p_campaign_id: id,
+      });
 
       if (applicantsError) console.error("CAMPAIGNVIEW_APPLICANTS_REFRESH_ERROR", applicantsError);
 
       setApplicants((applicantData || []) as unknown as CampaignApplicant[]);
 
-      // ✅ atualiza métricas
+      // atualiza métricas e timeline
       fetchMetrics();
-      // ✅ atualiza eventos se já estiver no histórico
-      if (tab === "history") fetchEvents();
+      if (tab === "history") fetchTimeline();
     }
+
     setUpdatingId(null);
   };
 
@@ -342,25 +420,6 @@ const CampaignView = () => {
   const showUrgent = !isContractor && typeof dLeft === "number" && dLeft >= 0 && dLeft <= 2;
   const urgencyLabel = !isContractor && typeof dLeft === "number" ? getUrgencyLabel(dLeft) : null;
 
-  // UI labels de status (para timeline mais bonito)
-  const statusLabel = (s?: string | null) => {
-    if (!s) return "—";
-    if (s === "active") return "Ativa";
-    if (s === "closed_manual") return "Encerrada (manual)";
-    if (s === "closed_expired") return "Encerrada (prazo)";
-    if (s === "completed") return "Concluída";
-    if (s === "deleted") return "Excluída";
-    return s;
-  };
-
-  const statusIcon = (s?: string | null) => {
-    if (s === "completed") return BadgeCheck;
-    if (s === "closed_manual") return Ban;
-    if (s === "closed_expired") return Clock;
-    if (s === "deleted") return Trash2;
-    return CheckCircle2;
-  };
-
   return (
     <MobileLayout title={campaign.title} showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
       <div className="px-6 py-6 space-y-4">
@@ -371,7 +430,7 @@ const CampaignView = () => {
               {campaign.type}
             </span>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium">
-              {statusLabel((campaign as any)?.status)}
+              {(campaign as any)?.status || "—"}
             </span>
 
             {!isContractor && showUrgent && urgencyLabel && (
@@ -440,6 +499,7 @@ const CampaignView = () => {
               </div>
             </div>
 
+            {/* Datas destacadas */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -475,7 +535,7 @@ const CampaignView = () => {
               </div>
             </motion.div>
 
-            {/* ✅ Métricas por campanha (contratante) */}
+            {/* Métricas (contractor) */}
             {isContractor && (
               <div className="glass-card p-4">
                 <div className="flex items-center justify-between mb-3">
@@ -521,6 +581,7 @@ const CampaignView = () => {
               </div>
             )}
 
+            {/* Requirements */}
             {reqs.posts && (
               <div className="glass-card p-4 space-y-2">
                 <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Requisitos</h4>
@@ -543,14 +604,13 @@ const CampaignView = () => {
               </div>
             )}
 
+            {/* Brief */}
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="w-4 h-4 text-primary" />
                 <h4 className="font-semibold text-foreground text-sm">Descrição</h4>
               </div>
-              <p className="text-sm text-foreground/70 leading-relaxed glass-card p-4">
-                {campaign.brief_public}
-              </p>
+              <p className="text-sm text-foreground/70 leading-relaxed glass-card p-4">{campaign.brief_public}</p>
             </div>
           </>
         )}
@@ -565,12 +625,7 @@ const CampaignView = () => {
               </div>
             ) : (
               applicants.map((app) => (
-                <motion.div
-                  key={app.application_id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="glass-card p-4 space-y-3"
-                >
+                <motion.div key={app.application_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-4 space-y-3">
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                       <Users className="w-5 h-5 text-primary" />
@@ -584,9 +639,7 @@ const CampaignView = () => {
                           {app.influencer_city}, {app.influencer_state}
                         </span>
                       </div>
-                      {app.influencer_followers && (
-                        <span className="text-[10px] text-muted-foreground">{app.influencer_followers} seguidores</span>
-                      )}
+                      {app.influencer_followers && <span className="text-[10px] text-muted-foreground">{app.influencer_followers} seguidores</span>}
                       {app.note && <p className="text-xs text-foreground/60 mt-1 italic">"{app.note}"</p>}
                     </div>
                   </div>
@@ -605,11 +658,7 @@ const CampaignView = () => {
                         disabled={updatingId === app.application_id}
                         className="flex-[2] py-2.5 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-xs glow-blue flex items-center justify-center gap-1.5 disabled:opacity-50"
                       >
-                        {updatingId === app.application_id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                        )}
+                        {updatingId === app.application_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                         Aprovar
                       </button>
                     </div>
@@ -621,6 +670,7 @@ const CampaignView = () => {
                       <span className="text-xs font-medium">Aprovada</span>
                     </div>
                   )}
+
                   {app.status === "rejected" && (
                     <div className="flex items-center gap-2 pt-2 border-t border-border/30 text-muted-foreground">
                       <XCircle className="w-3.5 h-3.5" />
@@ -633,63 +683,91 @@ const CampaignView = () => {
           </div>
         )}
 
-        {/* ✅ History tab (contractor) */}
-        {isContractor && tab === "history" && (
+        {/* History tab (timeline premium) */}
+        {tab === "history" && (
           <div className="space-y-3">
             <div className="glass-card p-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <History className="w-4 h-4 text-primary" />
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-widest">Linha do tempo</p>
-                  <p className="text-xs text-muted-foreground">Eventos importantes da campanha</p>
+                  <p className="text-xs text-muted-foreground">Eventos e decisões (com nome e @)</p>
                 </div>
               </div>
 
               <button
-                onClick={fetchEvents}
+                onClick={fetchTimeline}
                 className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
               >
-                {eventsLoading ? "Atualizando..." : "Atualizar"}
+                {timelineLoading ? "Atualizando..." : "Atualizar"}
               </button>
             </div>
 
-            {eventsLoading ? (
-              <div className="flex justify-center py-8">
+            {timelineLoading ? (
+              <div className="flex justify-center py-10">
                 <Loader2 className="w-6 h-6 text-primary animate-spin" />
               </div>
-            ) : events.length === 0 ? (
+            ) : timeline.length === 0 ? (
               <div className="py-10 text-center">
                 <History className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
                 <p className="text-sm text-muted-foreground">Nenhum evento registrado ainda.</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {events.map((ev) => {
-                  const toStatus = ev?.metadata?.to ?? null;
-                  const fromStatus = ev?.metadata?.from ?? null;
-                  const Icon = statusIcon(toStatus);
+                {timeline.map((ev) => {
+                  const Icon = timelineIconFor(ev);
+
+                  const isPositive =
+                    ev.event_type === "application.accepted" || (ev.event_type === "campaign.status_changed" && ev.to_status === "completed");
+                  const isNegative =
+                    ev.event_type === "application.rejected" ||
+                    (ev.event_type === "campaign.status_changed" && (ev.to_status === "deleted" || ev.to_status === "closed_expired"));
 
                   return (
-                    <div key={ev.id} className="glass-card p-4">
+                    <motion.div
+                      key={ev.event_id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="glass-card p-4"
+                    >
                       <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                          <Icon className="w-4 h-4 text-primary" />
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                            isPositive
+                              ? "bg-accent/10"
+                              : isNegative
+                                ? "bg-destructive/10"
+                                : "bg-primary/10"
+                          }`}
+                        >
+                          <Icon
+                            className={`w-4 h-4 ${
+                              isPositive ? "text-accent" : isNegative ? "text-destructive" : "text-primary"
+                            }`}
+                          />
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-foreground">
-                            Status atualizado:{" "}
-                            <span className="text-foreground">
-                              {statusLabel(fromStatus)} → {statusLabel(toStatus)}
-                            </span>
+                            {timelineTitleFor(ev)}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {timelineSubFor(ev)}
                           </p>
 
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {formatDateTimeBR(ev.created_at)} · {ev.actor_role || "sistema"}
-                          </p>
+                          {/* micro badge do creator (quando existir) */}
+                          {(ev.influencer_name || ev.influencer_instagram) && (
+                            <div className="mt-2 inline-flex items-center gap-2 text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
+                              <UserIcon className="w-3 h-3" />
+                              <span className="truncate">
+                                {ev.influencer_name || "Creator"}{" "}
+                                {normalizeAt(ev.influencer_instagram) ? `· ${normalizeAt(ev.influencer_instagram)}` : ""}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>
