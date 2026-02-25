@@ -17,6 +17,10 @@ import {
   Flame,
   Trash2,
   Ban,
+  BarChart3,
+  CheckCircle2,
+  Hourglass,
+  XCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -40,20 +44,42 @@ type MyCampaignRow = MyCampaign & {
   bucket?: Bucket | string;
 };
 
+type ContractorMetrics = {
+  total_campaigns: number;
+  active_campaigns: number;
+  closed_expired_campaigns: number;
+  closed_manual_campaigns: number;
+  completed_campaigns: number;
+  deleted_campaigns: number;
+
+  total_applications: number;
+  accepted_applications: number;
+  rejected_applications: number;
+  pending_applications: number;
+
+  approval_rate: number;
+};
+
 const ContractorDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+
   const [campaigns, setCampaigns] = useState<MyCampaignRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [bucket, setBucket] = useState<Bucket>("active");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  const [metrics, setMetrics] = useState<ContractorMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
 
   const formatDateBR = (value?: string | null) => {
     if (!value) return "-";
     const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
     const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
     if (Number.isNaN(d.getTime())) return "-";
-    return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
+    return isDateOnly
+      ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" })
+      : d.toLocaleDateString("pt-BR");
   };
 
   const daysLeftUTC = (applyDeadline?: string | null) => {
@@ -62,7 +88,9 @@ const ContractorDashboard = () => {
 
     const deadlineUTC = new Date(`${applyDeadline}T00:00:00Z`);
     const now = new Date();
-    const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const todayUTC = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+    );
 
     const diffMs = deadlineUTC.getTime() - todayUTC.getTime();
     return Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -78,7 +106,9 @@ const ContractorDashboard = () => {
     if (!user) return;
     setIsLoading(true);
 
-    const { data, error } = await supabase.rpc("get_my_campaigns" as any, { p_bucket: "all" });
+    const { data, error } = await supabase.rpc("get_my_campaigns" as any, {
+      p_bucket: "all",
+    });
 
     if (!error && data) {
       setCampaigns(data as unknown as MyCampaignRow[]);
@@ -90,9 +120,53 @@ const ContractorDashboard = () => {
     setIsLoading(false);
   }, [user]);
 
+  const fetchMetrics = useCallback(async () => {
+    if (!user) return;
+    setMetricsLoading(true);
+
+    try {
+      const { data, error } = await supabase.rpc("get_contractor_metrics" as any);
+
+      if (error) {
+        const msg = (error.message || "").toLowerCase();
+        const looksMissing =
+          msg.includes("could not find the function") ||
+          msg.includes("does not exist") ||
+          msg.includes("schema cache");
+
+        if (!looksMissing) console.error("GET_CONTRACTOR_METRICS_ERROR", error);
+        setMetrics(null);
+        return;
+      }
+
+      if (data) {
+        // data pode vir como objeto ou array dependendo do retorno
+        const row = Array.isArray(data) ? (data[0] as any) : (data as any);
+        setMetrics({
+          total_campaigns: Number(row.total_campaigns ?? 0),
+          active_campaigns: Number(row.active_campaigns ?? 0),
+          closed_expired_campaigns: Number(row.closed_expired_campaigns ?? 0),
+          closed_manual_campaigns: Number(row.closed_manual_campaigns ?? 0),
+          completed_campaigns: Number(row.completed_campaigns ?? 0),
+          deleted_campaigns: Number(row.deleted_campaigns ?? 0),
+          total_applications: Number(row.total_applications ?? 0),
+          accepted_applications: Number(row.accepted_applications ?? 0),
+          rejected_applications: Number(row.rejected_applications ?? 0),
+          pending_applications: Number(row.pending_applications ?? 0),
+          approval_rate: Number(row.approval_rate ?? 0),
+        });
+      } else {
+        setMetrics(null);
+      }
+    } finally {
+      setMetricsLoading(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchCampaigns();
-  }, [fetchCampaigns]);
+    fetchMetrics();
+  }, [fetchCampaigns, fetchMetrics]);
 
   const groups = useMemo(() => {
     const active = campaigns.filter((c) => c.bucket === "active");
@@ -118,8 +192,12 @@ const ContractorDashboard = () => {
     const copy = [...list];
     copy.sort((a, b) => {
       if (bucket === "active") {
-        const ad = a.apply_deadline ? new Date(`${a.apply_deadline}T00:00:00Z`).getTime() : Number.POSITIVE_INFINITY;
-        const bd = b.apply_deadline ? new Date(`${b.apply_deadline}T00:00:00Z`).getTime() : Number.POSITIVE_INFINITY;
+        const ad = a.apply_deadline
+          ? new Date(`${a.apply_deadline}T00:00:00Z`).getTime()
+          : Number.POSITIVE_INFINITY;
+        const bd = b.apply_deadline
+          ? new Date(`${b.apply_deadline}T00:00:00Z`).getTime()
+          : Number.POSITIVE_INFINITY;
         if (ad !== bd) return ad - bd;
       }
       const ac = a.created_at ? new Date(a.created_at).getTime() : 0;
@@ -185,12 +263,11 @@ const ContractorDashboard = () => {
 
         if (looksLikeCache) {
           toast.error(
-            "Função ainda não apareceu no cache do Supabase. Abra Supabase → Settings → API → Reload schema cache, ou faça hard refresh (Ctrl+Shift+R) e tente novamente."
+            "Função ainda não apareceu no cache do Supabase. Supabase → Settings → API → Reload schema cache, ou hard refresh (Ctrl+Shift+R)."
           );
           console.error("RPC_SCHEMA_CACHE_ERROR", error);
           return;
         }
-
         throw error;
       }
 
@@ -199,6 +276,7 @@ const ContractorDashboard = () => {
       if (action === "delete") toast.success("Campanha excluída.");
 
       await fetchCampaigns();
+      await fetchMetrics();
     } catch (e: any) {
       console.error("CAMPAIGN_ACTION_ERROR", e);
       toast.error(e?.message || "Erro ao atualizar campanha.");
@@ -238,7 +316,13 @@ const ContractorDashboard = () => {
           </div>
         ) : (
           <>
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-3 gap-3">
+            {/* Stats principais */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="grid grid-cols-3 gap-3"
+            >
               {stats.map((stat) => (
                 <div key={stat.label} className="glass-card p-4 flex flex-col items-center text-center gap-2">
                   <stat.icon className={`w-5 h-5 ${stat.color}`} />
@@ -248,6 +332,70 @@ const ContractorDashboard = () => {
               ))}
             </motion.div>
 
+            {/* ✅ Métricas premium */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.13 }}
+              className="glass-card p-4"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-primary" />
+                  <p className="text-xs text-muted-foreground uppercase tracking-widest">Resultados</p>
+                </div>
+
+                <button
+                  onClick={fetchMetrics}
+                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {metricsLoading ? "Atualizando..." : "Atualizar"}
+                </button>
+              </div>
+
+              {metrics ? (
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl border border-border/50 bg-card/60 p-3">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-primary" />
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Candidaturas</span>
+                    </div>
+                    <div className="mt-1 text-lg font-bold text-foreground">{metrics.total_applications}</div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-card/60 p-3">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-accent" />
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Aprovadas</span>
+                    </div>
+                    <div className="mt-1 text-lg font-bold text-foreground">{metrics.accepted_applications}</div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-card/60 p-3">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-primary" />
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Taxa</span>
+                    </div>
+                    <div className="mt-1 text-lg font-bold text-foreground">{metrics.approval_rate}%</div>
+                  </div>
+
+                  <div className="col-span-3 mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Hourglass className="w-3 h-3 text-warning" /> Pendentes: <b className="text-foreground">{metrics.pending_applications}</b>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <XCircle className="w-3 h-3 text-muted-foreground" /> Rejeitadas: <b className="text-foreground">{metrics.rejected_applications}</b>
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Métricas indisponíveis no momento.
+                </p>
+              )}
+            </motion.div>
+
+            {/* CTA criar */}
             <motion.button
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -268,6 +416,7 @@ const ContractorDashboard = () => {
               </p>
             </motion.div>
 
+            {/* Tabs */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
               {tabs.map((t) => (
                 <button
@@ -284,6 +433,7 @@ const ContractorDashboard = () => {
               ))}
             </div>
 
+            {/* Lista */}
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">{bucketTitle}</p>
 
