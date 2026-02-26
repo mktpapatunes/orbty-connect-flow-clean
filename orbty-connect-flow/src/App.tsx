@@ -27,7 +27,7 @@ import ContractorProfile from "@/pages/profile/ContractorProfile";
 import InfluencerProfile from "@/pages/profile/InfluencerProfile";
 
 // ✅ NOVO: perfil público visual
-import PublicUserProfile from "@/pages/profile/PublicUserProfile";
+import PublicProfile from "@/pages/profile/PublicProfile";
 
 import History from "./pages/History";
 import CheckEmail from "./pages/CheckEmail";
@@ -171,7 +171,7 @@ const App = () => (
                 path="/u/:id"
                 element={
                   <ProtectedRoute>
-                    <PublicUserProfile />
+                    <PublicProfile />
                   </ProtectedRoute>
                 }
               />
