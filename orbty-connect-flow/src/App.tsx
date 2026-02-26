@@ -26,6 +26,9 @@ import ProfileRouter from "@/pages/profile/ProfileRouter";
 import ContractorProfile from "@/pages/profile/ContractorProfile";
 import InfluencerProfile from "@/pages/profile/InfluencerProfile";
 
+// ✅ NOVO: perfil público
+import PublicProfile from "@/pages/profile/PublicProfile";
+
 import History from "./pages/History";
 import CheckEmail from "./pages/CheckEmail";
 import NotFound from "./pages/NotFound";
@@ -83,7 +86,6 @@ const App = () => (
                 }
               />
 
-
               {/* Contractor flow */}
               <Route
                 path="/dashboard-contratante"
@@ -138,7 +140,17 @@ const App = () => (
                 }
               />
 
-              {/* Profile routes (NEW) */}
+              {/* ✅ Perfil público (visual/insights) */}
+              <Route
+                path="/u/:id"
+                element={
+                  <ProtectedRoute requireApproval={false}>
+                    <PublicProfile />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Profile routes (NEW / internos) */}
               <Route
                 path="/perfil"
                 element={

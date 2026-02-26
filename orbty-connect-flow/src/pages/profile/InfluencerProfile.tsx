@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import MobileLayout from "@/components/MobileLayout";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,11 +7,12 @@ import { updateMyInstagramStats } from "@/services/profile";
 import { updateMyAvatarWithUpload } from "@/services/profileAvatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Instagram, Users, MapPin, Save, X, Sparkles, Camera } from "lucide-react";
+import { Loader2, Instagram, Users, MapPin, Save, X, Sparkles, Camera, ExternalLink, Eye } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { useNavigate } from "react-router-dom";
 
 function GlassCard(props: { children: React.ReactNode; className?: string }) {
   return <div className={`glass-card p-5 ${props.className ?? ""}`}>{props.children}</div>;
@@ -29,7 +30,35 @@ function MetricCard(props: { label: string; value: React.ReactNode; icon?: React
   );
 }
 
+function buildInstagramLinks(handle?: string | null) {
+  const raw = (handle || "").trim().replace(/^@/, "");
+  if (!raw) return null;
+  return {
+    raw,
+    web: `https://instagram.com/${raw}`,
+    app: `instagram://user?username=${raw}`,
+  };
+}
+
+function openInstagram(handle?: string | null) {
+  const links = buildInstagramLinks(handle);
+  if (!links) return;
+
+  const opened = window.open(links.app, "_blank", "noopener,noreferrer");
+  if (!opened) window.open(links.web, "_blank", "noopener,noreferrer");
+  else {
+    setTimeout(() => {
+      try {
+        window.open(links.web, "_blank", "noopener,noreferrer");
+      } catch {
+        // ignore
+      }
+    }, 450);
+  }
+}
+
 export default function InfluencerProfile() {
+  const navigate = useNavigate();
   const { profile, userRole, approvalStatus, refreshProfile } = useAuth();
   const ctx = useMyProfileContext();
 
@@ -187,7 +216,6 @@ export default function InfluencerProfile() {
 
     setIgSaving(true);
     try {
-      // Agora que você já rodou os SQLs, isso deve funcionar sempre
       await updateMyInstagramStats({
         instagram_username: igForm.instagram_username,
         followers_count: igForm.followers_count,
@@ -197,10 +225,8 @@ export default function InfluencerProfile() {
       });
 
       toast.success("Métricas do Instagram atualizadas!");
-
       setIgOpen(false);
 
-      // Atualiza contexto premium (instagram snapshot) + profile local
       await ctx.refetch();
       await refreshProfile();
     } catch (err: any) {
@@ -227,6 +253,8 @@ export default function InfluencerProfile() {
       ? "—"
       : `${Number(instagram.audience_male_pct).toFixed(0)}%`;
 
+  const igHandle = (profile as any)?.instagram ?? null;
+
   return (
     <MobileLayout title="Meu perfil" showBack navType={navType}>
       <div className="px-6 py-6 space-y-6">
@@ -234,16 +262,20 @@ export default function InfluencerProfile() {
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-3">
+                {/* ✅ Avatar corrigido */}
                 <div className="relative">
-                  {(profile as any)?.avatar_url ? (
-                    <img
-                      src={(profile as any).avatar_url}
-                      alt="Avatar"
-                      className="w-12 h-12 rounded-full object-cover border border-primary/30"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full bg-white/5 border border-border/50" />
-                  )}
+                  <div className="w-12 h-12 rounded-full overflow-hidden border border-primary/30 bg-white/5">
+                    {(profile as any)?.avatar_url ? (
+                      <img
+                        src={(profile as any).avatar_url}
+                        alt="Avatar"
+                        className="w-full h-full object-cover block"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-full h-full" />
+                    )}
+                  </div>
 
                   <button
                     type="button"
@@ -273,9 +305,22 @@ export default function InfluencerProfile() {
                     <div className="text-lg font-semibold text-foreground">{profile?.name || "Creator"}</div>
                     {isVerifiedInfluencer && <VerifiedBadge size="sm" />}
                   </div>
+
+                  {/* ✅ @ clicável */}
                   <div className="text-sm text-muted-foreground flex items-center gap-2">
                     <Instagram className="w-4 h-4" />
-                    <span>{(profile as any)?.instagram || "Instagram não informado"}</span>
+                    {buildInstagramLinks(igHandle)?.raw ? (
+                      <button
+                        onClick={() => openInstagram(igHandle)}
+                        className="inline-flex items-center gap-1 text-primary hover:opacity-90 transition-opacity"
+                        title="Abrir Instagram"
+                      >
+                        <span>@{buildInstagramLinks(igHandle)!.raw}</span>
+                        <ExternalLink className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <span>Instagram não informado</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -286,13 +331,26 @@ export default function InfluencerProfile() {
               </div>
             </div>
 
-            <button
-              onClick={() => setIgOpen(true)}
-              className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
-            >
-              <Sparkles className="w-4 h-4 text-primary" />
-              Atualizar IG
-            </button>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => setIgOpen(true)}
+                className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
+              >
+                <Sparkles className="w-4 h-4 text-primary" />
+                Atualizar IG
+              </button>
+
+              {/* ✅ Ver perfil público */}
+              {profile?.id ? (
+                <button
+                  onClick={() => navigate(`/u/${profile.id}`)}
+                  className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
+                >
+                  <Eye className="w-4 h-4 text-primary" />
+                  Ver perfil público
+                </button>
+              ) : null}
+            </div>
           </div>
         </GlassCard>
 

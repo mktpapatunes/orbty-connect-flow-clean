@@ -21,11 +21,13 @@ import {
   X,
   Globe,
   Tag,
-  Package
+  Package,
+  Eye,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useNavigate } from "react-router-dom";
 
 function MetricCard(props: { label: string; value: React.ReactNode; icon?: React.ReactNode }) {
   return (
@@ -44,14 +46,13 @@ function GlassCard(props: { children: React.ReactNode; className?: string }) {
 }
 
 export default function ContractorProfile() {
+  const navigate = useNavigate();
   const { profile } = useAuth();
   const ctx = useMyProfileContext();
 
   const org = ctx.data?.organization;
 
-  // ----------------------------
   // Upload logo
-  // ----------------------------
   const logoRef = useRef<HTMLInputElement | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
 
@@ -93,9 +94,7 @@ export default function ContractorProfile() {
     }
   };
 
-  // ----------------------------
   // Métricas campanhas
-  // ----------------------------
   const [metrics, setMetrics] = useState<{
     total: number;
     active: number;
@@ -128,7 +127,7 @@ export default function ContractorProfile() {
         return;
       }
 
-      // fallback (se necessário)
+      // fallback
       try {
         const { data, error } = await supabase.rpc("get_my_campaigns" as any);
         if (!alive) return;
@@ -144,9 +143,7 @@ export default function ContractorProfile() {
         const total = notDeleted.length;
         const active = notDeleted.filter((c) => c.status === "active").length;
         const completed = notDeleted.filter((c) => c.status === "completed").length;
-        const closed = notDeleted.filter(
-          (c) => c.status === "closed_manual" || c.status === "closed_expired"
-        ).length;
+        const closed = notDeleted.filter((c) => c.status === "closed_manual" || c.status === "closed_expired").length;
         const draft = notDeleted.filter((c) => c.status === "draft").length;
         const deleted = list.length - notDeleted.length;
 
@@ -163,9 +160,7 @@ export default function ContractorProfile() {
     };
   }, [ctx.data?.organization_metrics]);
 
-  // ----------------------------
   // Modal Criar/Editar Negócio
-  // ----------------------------
   const [orgOpen, setOrgOpen] = useState(false);
   const [orgSaving, setOrgSaving] = useState(false);
 
@@ -179,7 +174,6 @@ export default function ContractorProfile() {
   });
 
   useEffect(() => {
-    // sempre que abrir modal, pré-preenche (se existir org)
     if (!orgOpen) return;
 
     setOrgForm({
@@ -203,7 +197,6 @@ export default function ContractorProfile() {
     setOrgSaving(true);
     try {
       if (!isEditingOrg) {
-        // cria org via RPC (cria membership owner automaticamente)
         await createMyOrganization({
           name: orgForm.name.trim(),
           region_city: orgForm.region_city.trim() || undefined,
@@ -215,7 +208,6 @@ export default function ContractorProfile() {
 
         toast.success("Negócio criado!");
       } else {
-        // update direto (RLS garante owner/admin)
         const { error } = await supabase
           .from("organizations")
           .update({
@@ -261,12 +253,16 @@ export default function ContractorProfile() {
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-3">
+                {/* ✅ Logo corrigido */}
                 {org?.logo_url ? (
-                  <img
-                    src={org.logo_url}
-                    alt="Logo"
-                    className="w-12 h-12 rounded-2xl object-cover border border-primary/20"
-                  />
+                  <div className="w-12 h-12 rounded-2xl overflow-hidden border border-primary/20 bg-white/5">
+                    <img
+                      src={org.logo_url}
+                      alt="Logo"
+                      className="w-full h-full object-cover block"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
                 ) : (
                   <div className="w-12 h-12 rounded-2xl bg-white/5 border border-border/50 flex items-center justify-center">
                     <Building2 className="w-5 h-5 text-muted-foreground" />
@@ -332,6 +328,17 @@ export default function ContractorProfile() {
                 Trocar logo
               </button>
 
+              {/* ✅ Ver perfil público */}
+              {profile?.id ? (
+                <button
+                  onClick={() => navigate(`/u/${profile.id}`)}
+                  className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
+                >
+                  <Eye className="w-4 h-4 text-primary" />
+                  Ver perfil público
+                </button>
+              ) : null}
+
               <input
                 ref={logoRef}
                 type="file"
@@ -351,32 +358,12 @@ export default function ContractorProfile() {
 
         {/* Métricas */}
         <div className="grid grid-cols-2 gap-3">
-          <MetricCard
-            label="Campanhas"
-            value={loadingMetrics ? "…" : metrics.total}
-            icon={<Megaphone className="w-4 h-4 text-primary" />}
-          />
-          <MetricCard
-            label="Ativas"
-            value={loadingMetrics ? "…" : metrics.active}
-            icon={<CircleDot className="w-4 h-4 text-accent" />}
-          />
-          <MetricCard
-            label="Concluídas"
-            value={loadingMetrics ? "…" : metrics.completed}
-            icon={<CheckCircle2 className="w-4 h-4 text-primary" />}
-          />
-          <MetricCard
-            label="Encerradas"
-            value={loadingMetrics ? "…" : metrics.closed}
-            icon={<FileText className="w-4 h-4 text-muted-foreground" />}
-          />
+          <MetricCard label="Campanhas" value={loadingMetrics ? "…" : metrics.total} icon={<Megaphone className="w-4 h-4 text-primary" />} />
+          <MetricCard label="Ativas" value={loadingMetrics ? "…" : metrics.active} icon={<CircleDot className="w-4 h-4 text-accent" />} />
+          <MetricCard label="Concluídas" value={loadingMetrics ? "…" : metrics.completed} icon={<CheckCircle2 className="w-4 h-4 text-primary" />} />
+          <MetricCard label="Encerradas" value={loadingMetrics ? "…" : metrics.closed} icon={<FileText className="w-4 h-4 text-muted-foreground" />} />
           <MetricCard label="Rascunhos" value={loadingMetrics ? "…" : metrics.draft} />
-          <MetricCard
-            label="Excluídas"
-            value={loadingMetrics ? "…" : metrics.deleted}
-            icon={<Trash2 className="w-4 h-4 text-destructive" />}
-          />
+          <MetricCard label="Excluídas" value={loadingMetrics ? "…" : metrics.deleted} icon={<Trash2 className="w-4 h-4 text-destructive" />} />
         </div>
 
         {/* Modal Criar/Editar negócio */}
@@ -385,9 +372,7 @@ export default function ContractorProfile() {
             <div className="absolute inset-0 bg-black/60" onClick={() => (orgSaving ? null : setOrgOpen(false))} />
             <div className="relative w-full md:max-w-md rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold text-foreground">
-                  {isEditingOrg ? "Editar negócio" : "Criar negócio"}
-                </div>
+                <div className="text-sm font-semibold text-foreground">{isEditingOrg ? "Editar negócio" : "Criar negócio"}</div>
                 <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => (orgSaving ? null : setOrgOpen(false))}>
                   <X className="w-4 h-4" />
                 </button>
@@ -396,63 +381,33 @@ export default function ContractorProfile() {
               <div className="mt-4 space-y-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Nome do negócio *</Label>
-                  <Input
-                    value={orgForm.name}
-                    onChange={(e) => setOrgForm((s) => ({ ...s, name: e.target.value }))}
-                    placeholder="Ex: Hamburgueria X"
-                    className="text-sm"
-                  />
+                  <Input value={orgForm.name} onChange={(e) => setOrgForm((s) => ({ ...s, name: e.target.value }))} placeholder="Ex: Hamburgueria X" className="text-sm" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Cidade</Label>
-                    <Input
-                      value={orgForm.region_city}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, region_city: e.target.value }))}
-                      placeholder="Ex: Goiânia"
-                      className="text-sm"
-                    />
+                    <Input value={orgForm.region_city} onChange={(e) => setOrgForm((s) => ({ ...s, region_city: e.target.value }))} placeholder="Ex: Goiânia" className="text-sm" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Estado</Label>
-                    <Input
-                      value={orgForm.region_state}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, region_state: e.target.value }))}
-                      placeholder="Ex: GO"
-                      className="text-sm"
-                    />
+                    <Input value={orgForm.region_state} onChange={(e) => setOrgForm((s) => ({ ...s, region_state: e.target.value }))} placeholder="Ex: GO" className="text-sm" />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Categoria</Label>
-                  <Input
-                    value={orgForm.business_category}
-                    onChange={(e) => setOrgForm((s) => ({ ...s, business_category: e.target.value }))}
-                    placeholder="Ex: Hamburgueria"
-                    className="text-sm"
-                  />
+                  <Input value={orgForm.business_category} onChange={(e) => setOrgForm((s) => ({ ...s, business_category: e.target.value }))} placeholder="Ex: Hamburgueria" className="text-sm" />
                 </div>
 
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Produto/Marca</Label>
-                  <Input
-                    value={orgForm.product_or_brand}
-                    onChange={(e) => setOrgForm((s) => ({ ...s, product_or_brand: e.target.value }))}
-                    placeholder="Ex: Smash Burger"
-                    className="text-sm"
-                  />
+                  <Input value={orgForm.product_or_brand} onChange={(e) => setOrgForm((s) => ({ ...s, product_or_brand: e.target.value }))} placeholder="Ex: Smash Burger" className="text-sm" />
                 </div>
 
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Site</Label>
-                  <Input
-                    value={orgForm.website_url}
-                    onChange={(e) => setOrgForm((s) => ({ ...s, website_url: e.target.value }))}
-                    placeholder="https://..."
-                    className="text-sm"
-                  />
+                  <Input value={orgForm.website_url} onChange={(e) => setOrgForm((s) => ({ ...s, website_url: e.target.value }))} placeholder="https://..." className="text-sm" />
                 </div>
 
                 <button
@@ -472,11 +427,7 @@ export default function ContractorProfile() {
           </div>
         )}
 
-        {ctx.error && (
-          <div className="text-xs text-muted-foreground">
-            Erro ao carregar contexto premium: {ctx.error}
-          </div>
-        )}
+        {ctx.error && <div className="text-xs text-muted-foreground">Erro ao carregar contexto premium: {ctx.error}</div>}
       </div>
     </MobileLayout>
   );
