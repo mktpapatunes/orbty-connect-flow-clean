@@ -15,6 +15,7 @@ import InfluencerRegistration from "./pages/registration/InfluencerRegistration"
 import PendingApproval from "./pages/PendingApproval";
 import RejectedStatus from "./pages/RejectedStatus";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import StorageCleanup from "./pages/admin/StorageCleanup";
 import ContractorDashboard from "./pages/contractor/Dashboard";
 import InfluencerDashboard from "./pages/influencer/Dashboard";
 import CreateCampaign from "./pages/campaign/CreateCampaign";
@@ -79,6 +80,16 @@ const App = () => (
                 element={
                   <ProtectedRoute adminOnly>
                     <AdminDashboard />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Admin tools (temporary) */}
+              <Route
+                path="/admin/storage-cleanup"
+                element={
+                  <ProtectedRoute adminOnly>
+                    <StorageCleanup />
                   </ProtectedRoute>
                 }
               />
