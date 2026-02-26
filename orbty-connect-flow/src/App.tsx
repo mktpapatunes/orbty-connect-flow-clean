@@ -26,8 +26,8 @@ import ProfileRouter from "@/pages/profile/ProfileRouter";
 import ContractorProfile from "@/pages/profile/ContractorProfile";
 import InfluencerProfile from "@/pages/profile/InfluencerProfile";
 
-// ✅ NOVO: perfil público
-import PublicProfile from "@/pages/profile/PublicProfile";
+// ✅ NOVO: perfil público visual
+import PublicUserProfile from "@/pages/profile/PublicUserProfile";
 
 import History from "./pages/History";
 import CheckEmail from "./pages/CheckEmail";
@@ -140,17 +140,7 @@ const App = () => (
                 }
               />
 
-              {/* ✅ Perfil público (visual/insights) */}
-              <Route
-                path="/u/:id"
-                element={
-                  <ProtectedRoute requireApproval={false}>
-                    <PublicProfile />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* Profile routes (NEW / internos) */}
+              {/* Profile routes (NEW) */}
               <Route
                 path="/perfil"
                 element={
@@ -172,6 +162,16 @@ const App = () => (
                 element={
                   <ProtectedRoute requiredRole="influencer">
                     <InfluencerProfile />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* ✅ PERFIL PÚBLICO VISUAL (qualquer usuário aprovado pode ver) */}
+              <Route
+                path="/u/:id"
+                element={
+                  <ProtectedRoute>
+                    <PublicUserProfile />
                   </ProtectedRoute>
                 }
               />
