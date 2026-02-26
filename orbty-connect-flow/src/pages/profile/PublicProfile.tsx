@@ -5,25 +5,21 @@ import VerifiedBadge from "@/components/VerifiedBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
+  ArrowLeft,
   Instagram,
   Loader2,
   MapPin,
   Users,
+  Sparkles,
   ExternalLink,
   BarChart3,
-  Sparkles,
-  Info,
-  ShieldCheck, // ✅ ADD
+  User as UserIcon,
 } from "lucide-react";
-import { PieChart, Pie, ResponsiveContainer, Tooltip, Cell } from "recharts";
 
-/**
- * ✅ AJUSTE AQUI se sua rota do "Meu perfil" for diferente.
- * Exemplos comuns: "/influencer-profile", "/perfil-influenciadora", "/meu-perfil"
- */
-const MY_PROFILE_ROUTE = "/perfil-influenciadora";
-
-type AudienceObj = Record<string, number>;
+type AudienceGender = { female?: number; male?: number };
+type AudienceAgeKey = "18-24" | "25-34" | "35-44" | "45-54" | "55-64" | "65+";
+type AudienceAge = Partial<Record<AudienceAgeKey, number>>;
+type AudienceCityRow = { city: string; pct: number };
 
 type ProfileRow = {
   id: string;
@@ -33,29 +29,25 @@ type ProfileRow = {
   neighborhood: string | null;
   bio: string | null;
   avatar_url: string | null;
+
   instagram: string | null;
   followers: string | null;
-
-  // pode ser string simples ("lifestyle") ou lista separada por vírgula
   content_style: string | null;
 
-  audience_gender: AudienceObj | null;
-  audience_age: AudienceObj | null;
-  audience_cities: AudienceObj | null;
+  audience_gender: AudienceGender | null;
+  audience_age: AudienceAge | null;
+  audience_cities: AudienceCityRow[] | null;
 
-  approval_status: string | null;
+  // opcional, só se existir
+  approval_status?: string | null;
 };
 
-const sum = (obj: AudienceObj) => Object.values(obj).reduce((a, b) => a + Number(b), 0);
+const clamp = (n: number, min = 0, max = 100) => Math.max(min, Math.min(max, n));
 
-const normalize = (obj: any): AudienceObj | null => {
-  if (!obj || typeof obj !== "object") return null;
-  const out: AudienceObj = {};
-  for (const [k, v] of Object.entries(obj)) {
-    const n = Number(v);
-    if (!Number.isNaN(n)) out[String(k)] = n;
-  }
-  return Object.keys(out).length ? out : null;
+const normalizeInstagram = (v?: string | null) => {
+  const raw = (v || "").trim();
+  if (!raw) return null;
+  return raw.startsWith("@") ? raw.slice(1) : raw;
 };
 
 const initials = (name?: string | null) => {
@@ -66,6 +58,52 @@ const initials = (name?: string | null) => {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 };
 
+const normalizeStyles = (raw?: string | null) =>
+  (raw || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+const sumObj = (obj: Record<string, number>) => Object.values(obj).reduce((a, b) => a + (Number(b) || 0), 0);
+
+function Donut(props: { pct: number; label: string; sub?: string }) {
+  const pct = clamp(props.pct, 0, 100);
+  // SVG donut simples (sem libs)
+  const size = 92;
+  const stroke = 10;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const dash = (pct / 100) * c;
+
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card/60 p-4 flex items-center gap-4">
+      <svg width={size} height={size} className="shrink-0">
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,0.12)" strokeWidth={stroke} fill="none" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke="rgba(59,130,246,0.85)"
+          strokeWidth={stroke}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${c - dash}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+        <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fill="white" fontSize="16" fontWeight="700">
+          {pct.toFixed(0)}%
+        </text>
+      </svg>
+
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-foreground">{props.label}</div>
+        {props.sub ? <div className="text-xs text-muted-foreground mt-1">{props.sub}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 export default function PublicProfile() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -73,233 +111,228 @@ export default function PublicProfile() {
 
   const isSelf = !!user?.id && !!id && user.id === id;
 
-  const backTo = useMemo(() => {
-    // ✅ garante que o botão voltar do topo funcione sempre
-    return userRole === "contractor" ? "/dashboard-contratante" : "/dashboard-influenciadora";
-  }, [userRole]);
-
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<ProfileRow | null>(null);
+
+  const backTo = userRole === "contractor" ? "/dashboard-contratante" : "/dashboard-influenciadora";
 
   useEffect(() => {
     let mounted = true;
 
-    const load = async () => {
+    const fetchWithFallback = async () => {
       if (!id) {
-        setProfile(null);
         setLoading(false);
+        setProfile(null);
         return;
       }
 
       setLoading(true);
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(
-          "id,name,city,state,neighborhood,bio,avatar_url,instagram,followers,content_style,audience_gender,audience_age,audience_cities,approval_status"
-        )
-        .eq("id", id)
-        .maybeSingle();
+      // tentativa “completa”
+      const selectFull =
+        "id, name, city, state, neighborhood, bio, avatar_url, instagram, followers, content_style, audience_gender, audience_age, audience_cities, approval_status";
+      const selectSafe =
+        "id, name, city, state, neighborhood, bio, avatar_url, instagram, followers, content_style, audience_gender, audience_age, audience_cities";
+
+      // 1) tenta com approval_status (se existir)
+      let data: any = null;
+
+      const first = await supabase.from("profiles").select(selectFull).eq("id", id).maybeSingle();
+
+      if (first.error) {
+        const msg = (first.error.message || "").toLowerCase();
+        const missingColumn = msg.includes("does not exist") || msg.includes("column") || msg.includes("42703");
+
+        if (!missingColumn) {
+          console.error("PUBLIC_PROFILE_FETCH_ERROR", first.error);
+          if (mounted) {
+            setProfile(null);
+            setLoading(false);
+          }
+          return;
+        }
+
+        // 2) fallback sem approval_status
+        const second = await supabase.from("profiles").select(selectSafe).eq("id", id).maybeSingle();
+        if (second.error) {
+          console.error("PUBLIC_PROFILE_FETCH_ERROR_2", second.error);
+          if (mounted) {
+            setProfile(null);
+            setLoading(false);
+          }
+          return;
+        }
+        data = second.data;
+      } else {
+        data = first.data;
+      }
 
       if (!mounted) return;
 
-      if (error) {
-        console.error("PUBLIC_PROFILE_FETCH_ERROR", error);
+      if (!data) {
         setProfile(null);
-      } else {
-        setProfile(
-          data
-            ? {
-                ...(data as any),
-                audience_gender: normalize((data as any).audience_gender),
-                audience_age: normalize((data as any).audience_age),
-                audience_cities: normalize((data as any).audience_cities),
-              }
-            : null
-        );
+        setLoading(false);
+        return;
       }
+
+      // normalize cities array
+      const cities: AudienceCityRow[] | null = Array.isArray((data as any).audience_cities)
+        ? (data as any).audience_cities
+            .map((r: any) => ({ city: String(r?.city ?? "").trim(), pct: clamp(Number(r?.pct ?? 0), 0, 100) }))
+            .filter((r: any) => r.city)
+            .slice(0, 6)
+        : null;
+
+      setProfile({
+        ...(data as any),
+        audience_cities: cities,
+      });
 
       setLoading(false);
     };
 
-    load();
+    fetchWithFallback();
+
     return () => {
       mounted = false;
     };
   }, [id]);
 
-  const isVerified = profile?.approval_status === "approved";
+  const igHandle = useMemo(() => normalizeInstagram(profile?.instagram), [profile?.instagram]);
 
-  const igHandle = useMemo(() => {
-    const raw = (profile?.instagram || "").trim();
-    if (!raw) return null;
-    return raw.replace(/^@/, "");
-  }, [profile?.instagram]);
+  const followersLabel = useMemo(() => {
+    const raw = String(profile?.followers ?? "").trim();
+    if (!raw) return "—";
+    const n = Number(raw.replace(/[^\d]/g, ""));
+    return Number.isFinite(n) && n > 0 ? n.toLocaleString("pt-BR") : raw;
+  }, [profile?.followers]);
+
+  const styles = useMemo(() => normalizeStyles(profile?.content_style ?? null), [profile?.content_style]);
+
+  const locationLabel = useMemo(() => {
+    if (!profile) return "";
+    const base = `${profile.city}, ${profile.state}`;
+    if (profile.neighborhood) return `${profile.neighborhood} · ${base}`;
+    return base;
+  }, [profile]);
 
   const openInstagram = () => {
     if (!igHandle) return;
-    window.open(`https://instagram.com/${igHandle}`, "_blank", "noopener,noreferrer");
+    window.open(`https://www.instagram.com/${igHandle}`, "_blank", "noopener,noreferrer");
   };
 
-  const openMaps = () => {
-    if (!profile) return;
-    const q = encodeURIComponent(`${profile.neighborhood ? profile.neighborhood + " · " : ""}${profile.city}, ${profile.state}`);
-    window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
-  };
+  const audienceGender = useMemo(() => {
+    const g = profile?.audience_gender;
+    if (!g) return null;
+    const female = typeof g.female === "number" ? clamp(g.female, 0, 100) : null;
+    const male = typeof g.male === "number" ? clamp(g.male, 0, 100) : null;
+    if (female === null && male === null) return null;
 
-  const contentStyles = useMemo(() => {
-    const raw = (profile?.content_style || "").trim();
-    if (!raw) return [];
-    // aceita "a,b,c" ou "a | b | c" ou só "lifestyle"
-    const parts = raw
-      .split(/[,|]/g)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    return parts.length ? parts.slice(0, 3) : [];
-  }, [profile?.content_style]);
+    // se só tiver um, deriva o outro
+    if (female !== null && male === null) return { female, male: 100 - female };
+    if (male !== null && female === null) return { male, female: 100 - male };
+    return { female: female!, male: male! };
+  }, [profile?.audience_gender]);
 
-  const PIE_COLORS = ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(var(--secondary))", "hsl(var(--muted-foreground))"];
+  const topAge = useMemo(() => {
+    const a = profile?.audience_age;
+    if (!a || typeof a !== "object") return null;
 
-  const renderDonut = (title: string, obj: AudienceObj | null) => {
-    if (!obj) {
-      return (
-        <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">{title}</div>
-          <p className="text-sm text-muted-foreground mt-2">Sem dados ainda.</p>
-        </div>
-      );
-    }
+    const entries = Object.entries(a as any)
+      .map(([k, v]) => ({ k, v: clamp(Number(v || 0), 0, 100) }))
+      .filter((x) => x.v > 0)
+      .sort((x, y) => y.v - x.v);
 
-    const total = sum(obj);
-    if (!total) {
-      return (
-        <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">{title}</div>
-          <p className="text-sm text-muted-foreground mt-2">Sem dados ainda.</p>
-        </div>
-      );
-    }
+    if (!entries.length) return null;
+    return entries.slice(0, 2);
+  }, [profile?.audience_age]);
 
-    const data = Object.entries(obj)
-      .map(([k, v]) => ({
-        name: k,
-        value: Number(v),
-      }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 6);
+  const topCities = useMemo(() => {
+    const c = profile?.audience_cities;
+    if (!Array.isArray(c) || !c.length) return null;
+    return c.slice(0, 5);
+  }, [profile?.audience_cities]);
 
-    return (
-      <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
-        <div className="text-xs uppercase tracking-widest text-muted-foreground">{title}</div>
+  const isVerifiedOrbty = useMemo(() => {
+    // prioridade: coluna approval_status, se existir
+    const s = String((profile as any)?.approval_status ?? "").toLowerCase();
+    if (s === "approved") return true;
 
-        <div className="mt-3 h-44">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={data} dataKey="value" nameKey="name" innerRadius={42} outerRadius={72}>
-                {data.map((_, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="mt-2 space-y-1">
-          {data.slice(0, 4).map((it) => {
-            const pct = ((it.value / total) * 100).toFixed(0);
-            return (
-              <div key={it.name} className="flex items-center justify-between text-xs text-muted-foreground">
-                <span className="truncate">{it.name}</span>
-                <span className="shrink-0">{pct}%</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
+    // se for o próprio usuário, usa o auth status (quando é ele vendo seu próprio público)
+    // (não quebra e dá consistência)
+    return false;
+  }, [profile]);
 
   return (
-    <MobileLayout title="Perfil público" showBack backTo={backTo} navType={userRole === "contractor" ? "contractor" : "influencer"} showNav={false} showHome={false}>
-      <div className="px-6 py-6 space-y-6">
+    <MobileLayout title="Perfil" showBack backTo={backTo} navType={userRole === "contractor" ? "contractor" : "influencer"} showNav={false} showHome={false}>
+      <div className="px-6 py-6 space-y-4">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Voltar
+        </button>
+
         {loading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="animate-spin w-6 h-6 text-primary" />
+          <div className="flex justify-center py-16">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
         ) : !profile ? (
-          <p className="text-center text-muted-foreground">Perfil não encontrado.</p>
+          <div className="py-10 text-center">
+            <p className="text-sm text-muted-foreground">Perfil não encontrado.</p>
+          </div>
         ) : (
           <>
-            {/* ✅ Se for o dono: mensagem + CTA pro painel correto */}
-            {isSelf && (
-              <div className="p-4 rounded-2xl border border-primary/20 bg-primary/5">
-                <div className="flex items-start gap-2">
-                  <Info className="w-4 h-4 text-primary mt-0.5" />
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground">
-                      Você está vendo seu perfil como o contratante vê.
-                    </p>
-                    <button
-                      onClick={() => navigate(MY_PROFILE_ROUTE)}
-                      className="mt-2 text-sm font-medium text-primary hover:underline"
-                    >
-                      Editar perfil completo
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ✅ Header (corrige o “A…” do nome) */}
-            <div className="glass-card p-5">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl overflow-hidden bg-white/5 border border-border/50 flex items-center justify-center shrink-0">
+            {/* HERO */}
+            <div className="glass-card p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 overflow-hidden flex items-center justify-center shrink-0">
                   {profile.avatar_url ? (
-                    <img src={profile.avatar_url} className="w-full h-full object-cover" alt={profile.name} />
+                    <img src={profile.avatar_url} alt={profile.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   ) : (
                     <span className="text-primary font-bold">{initials(profile.name)}</span>
                   )}
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <h2 className="text-lg font-bold text-foreground truncate min-w-0 flex-1">
-                      {profile.name}
-                    </h2>
-                    {isVerified && <VerifiedBadge size="sm" />}
-                    {isVerified && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full border border-primary/20 bg-primary/5 text-primary inline-flex items-center gap-1 shrink-0">
-                        <ShieldCheck className="w-3 h-3" />
-                        Verificado Orbty
-                      </span>
-                    )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-lg font-bold text-foreground break-words leading-tight">{profile.name}</h2>
+                    {(isVerifiedOrbty || (isSelf && userRole === "influencer")) ? <VerifiedBadge size="sm" /> : null}
                   </div>
 
-                  <div className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-                    <MapPin className="w-4 h-4 shrink-0" />
-                    <span className="truncate">
-                      {profile.neighborhood ? `${profile.neighborhood} · ` : ""}
-                      {profile.city}, {profile.state}
-                    </span>
+                  <div className="mt-1 text-xs text-muted-foreground inline-flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span className="truncate">{locationLabel}</span>
                   </div>
 
                   {profile.bio ? (
-                    <p className="mt-3 text-sm text-foreground/75 leading-relaxed">
-                      {profile.bio}
-                    </p>
+                    <p className="mt-3 text-sm text-foreground/75 leading-relaxed">{profile.bio}</p>
                   ) : null}
+
+                  {/* Se for o próprio usuário, CTA pra abrir perfil completo */}
+                  {isSelf && (
+                    <button
+                      type="button"
+                      onClick={() => navigate("/perfil-influenciadora")}
+                      className="mt-3 inline-flex items-center gap-2 text-xs px-3 py-2 rounded-xl border border-border/50 bg-card/60 text-muted-foreground hover:text-foreground transition"
+                    >
+                      <UserIcon className="w-4 h-4" />
+                      Abrir meu perfil
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* ✅ Cards rápidos */}
+            {/* QUICK CARDS */}
             <div className="grid grid-cols-3 gap-3">
               <button
                 type="button"
                 onClick={openInstagram}
                 disabled={!igHandle}
-                className={`p-4 rounded-2xl border text-left transition ${
+                className={`rounded-2xl border p-3 text-left transition ${
                   igHandle ? "border-border/50 bg-card/60 hover:bg-card/80" : "border-border/30 bg-card/40 opacity-70"
                 }`}
               >
@@ -307,88 +340,85 @@ export default function PublicProfile() {
                   <Instagram className="w-4 h-4 text-primary" />
                   <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
                 </div>
-                <div className="text-xs mt-2 text-muted-foreground uppercase tracking-widest">Instagram</div>
-                <div className="text-sm font-semibold text-foreground truncate">{igHandle ? `@${igHandle}` : "—"}</div>
+                <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Instagram</p>
+                <p className="text-sm font-semibold text-foreground truncate">{igHandle ? `@${igHandle}` : "—"}</p>
               </button>
 
-              <button
-                type="button"
-                onClick={openMaps}
-                className="p-4 rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 text-left transition"
-              >
+              <div className="rounded-2xl border border-border/50 bg-card/60 p-3 text-left">
                 <div className="flex items-center justify-between">
-                  <MapPin className="w-4 h-4 text-primary" />
-                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+                  <Users className="w-4 h-4 text-primary" />
+                  <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
+                    público
+                  </span>
                 </div>
-                <div className="text-xs mt-2 text-muted-foreground uppercase tracking-widest">Localização</div>
-                <div className="text-sm font-semibold text-foreground truncate">{profile.city}</div>
-              </button>
+                <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Seguidores</p>
+                <p className="text-sm font-semibold text-foreground truncate">{followersLabel}</p>
+              </div>
 
-              <div className="p-4 rounded-2xl border border-border/50 bg-card/60 text-left">
-                <Users className="w-4 h-4 text-primary" />
-                <div className="text-xs mt-2 text-muted-foreground uppercase tracking-widest">Seguidores</div>
-                <div className="text-sm font-semibold text-foreground truncate">{profile.followers || "—"}</div>
+              <div className="rounded-2xl border border-border/50 bg-card/60 p-3 text-left">
+                <div className="flex items-center justify-between">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
+                    estilos
+                  </span>
+                </div>
+                <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Conteúdo</p>
+                <p className="text-sm font-semibold text-foreground truncate">{styles.length ? styles.join(", ") : "—"}</p>
               </div>
             </div>
 
-            {/* ✅ Estilos (até 3 chips) */}
-            <div className="glass-card p-5">
+            {/* AUDIÊNCIA PREMIUM */}
+            <div className="glass-card p-4">
               <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="w-4 h-4 text-primary" />
-                <span className="text-xs uppercase tracking-widest text-muted-foreground">Estilo de conteúdo</span>
-              </div>
-
-              {contentStyles.length ? (
-                <div className="flex flex-wrap gap-2">
-                  {contentStyles.map((s) => (
-                    <span
-                      key={s}
-                      className="text-xs px-3 py-2 rounded-full border border-border/50 bg-card/60 text-foreground"
-                    >
-                      {s}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Não informado.</p>
-              )}
-            </div>
-
-            {/* ✅ Audiência (donuts) + cidades */}
-            <div className="glass-card p-5 space-y-4">
-              <div className="flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-primary" />
-                <span className="text-xs uppercase tracking-widest text-muted-foreground">Audiência</span>
+                <p className="text-xs text-muted-foreground uppercase tracking-widest">Audiência</p>
               </div>
 
-              <div className="grid grid-cols-1 gap-3">
-                {renderDonut("Gênero", profile.audience_gender)}
-                {renderDonut("Faixa etária", profile.audience_age)}
-              </div>
+              {!audienceGender && !topAge && !topCities ? (
+                <p className="text-sm text-muted-foreground">Sem dados de audiência por enquanto.</p>
+              ) : (
+                <div className="space-y-3">
+                  {/* Donuts gênero */}
+                  {audienceGender && (
+                    <div className="grid grid-cols-1 gap-3">
+                      <Donut pct={audienceGender.female ?? 0} label="Feminino" sub="Distribuição por gênero" />
+                      <Donut pct={audienceGender.male ?? 0} label="Masculino" sub="Distribuição por gênero" />
+                    </div>
+                  )}
 
-              <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
-                <div className="text-xs uppercase tracking-widest text-muted-foreground">Principais cidades</div>
+                  {/* idade */}
+                  {topAge && (
+                    <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                      <div className="text-xs text-muted-foreground uppercase tracking-widest mb-3">Faixa etária (top)</div>
+                      <div className="space-y-2">
+                        {topAge.map((x) => (
+                          <div key={x.k} className="flex items-center justify-between text-sm">
+                            <span className="text-foreground font-medium">{x.k}</span>
+                            <span className="text-muted-foreground">{x.v.toFixed(0)}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-                {!profile.audience_cities ? (
-                  <p className="text-sm text-muted-foreground mt-2">Sem dados ainda.</p>
-                ) : (
-                  <div className="mt-3 space-y-2">
-                    {Object.entries(profile.audience_cities)
-                      .sort((a, b) => b[1] - a[1])
-                      .slice(0, 6)
-                      .map(([city, pct]) => (
-                        <div key={city} className="flex items-center justify-between text-sm">
-                          <span className="text-foreground truncate">{city}</span>
-                          <span className="text-muted-foreground shrink-0">{pct}%</span>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-
-              <p className="text-[11px] text-muted-foreground">
-                * Audiência é informada pela creator (por enquanto). Em breve será validada via integração Meta.
-              </p>
+                  {/* cidades */}
+                  {topCities && (
+                    <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                      <div className="text-xs text-muted-foreground uppercase tracking-widest mb-3">Principais cidades</div>
+                      <div className="flex flex-wrap gap-2">
+                        {topCities.map((r, idx) => (
+                          <span
+                            key={`${r.city}-${idx}`}
+                            className="text-xs px-3 py-1.5 rounded-full border border-border/50 bg-white/5 text-muted-foreground"
+                          >
+                            {r.city} · {Number(r.pct ?? 0).toFixed(0)}%
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </>
         )}

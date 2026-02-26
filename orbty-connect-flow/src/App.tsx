@@ -1,3 +1,5 @@
+// src/App.tsx
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -26,7 +28,10 @@ import ProfileRouter from "@/pages/profile/ProfileRouter";
 import ContractorProfile from "@/pages/profile/ContractorProfile";
 import InfluencerProfile from "@/pages/profile/InfluencerProfile";
 
-// ✅ NOVO: perfil público visual
+// ✅ NOVO: Dados pessoais (privado) do influencer
+import InfluencerPersonalData from "@/pages/profile/InfluencerPersonalData";
+
+// ✅ Perfil público (visão de terceiros)
 import PublicProfile from "@/pages/profile/PublicProfile";
 
 import History from "./pages/History";
@@ -149,6 +154,7 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+
               <Route
                 path="/perfil-contratante"
                 element={
@@ -157,6 +163,8 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+
+              {/* ✅ PERFIL COMPLETO do influencer (usuário logado) */}
               <Route
                 path="/perfil-influenciadora"
                 element={
@@ -166,7 +174,17 @@ const App = () => (
                 }
               />
 
-              {/* ✅ PERFIL PÚBLICO VISUAL (qualquer usuário aprovado pode ver) */}
+              {/* ✅ DADOS PESSOAIS (privado) do influencer */}
+              <Route
+                path="/perfil-influenciadora/dados-pessoais"
+                element={
+                  <ProtectedRoute requiredRole="influencer">
+                    <InfluencerPersonalData />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* ✅ PERFIL PÚBLICO (visão de terceiros) */}
               <Route
                 path="/u/:id"
                 element={
