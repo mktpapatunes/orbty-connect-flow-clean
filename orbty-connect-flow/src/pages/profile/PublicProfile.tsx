@@ -147,7 +147,7 @@ const PublicProfile = () => {
 
       // ✅ Campos públicos (+ alguns extras caso existam)
       const select =
-        "id, name, city, state, neighborhood, bio, avatar_url, instagram, followers, content_style, audience_gender, audience_age, audience_cities, gender, age, approval_status, role";
+  "id, name, city, state, neighborhood, bio, avatar_url, instagram, followers, content_style, audience_gender, audience_age, audience_cities, gender, age, approval_status";
 
       const { data, error } = await supabase.from("profiles").select(select).eq("id", id).maybeSingle();
 
