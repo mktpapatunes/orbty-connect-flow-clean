@@ -126,6 +126,7 @@ const CampaignView = () => {
   const [metrics, setMetrics] = useState<CampaignMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
 
+  // ✅ DEFINIÇÕES CRÍTICAS (pra não quebrar a tela)
   const isContractor = userRole === "contractor";
   const influencerAccepted = applicationStatus === "accepted";
 
@@ -499,9 +500,7 @@ const CampaignView = () => {
     const q = normalizeSearch(searchTerm);
     if (!q) return arr;
 
-    const scored = arr
-      .map((e) => ({ e, score: scoreEventForQuery(e, q) }))
-      .filter((x) => x.score > 0);
+    const scored = arr.map((e) => ({ e, score: scoreEventForQuery(e, q) })).filter((x) => x.score > 0);
 
     scored.sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
@@ -513,20 +512,11 @@ const CampaignView = () => {
     return scored.map((x) => x.e);
   }, [baseFilteredByType, searchTerm]);
 
-  const suggestions = useMemo(
-    () => buildSuggestions(baseFilteredByType, normalizeSearch(searchTerm)),
-    [baseFilteredByType, searchTerm]
-  );
+  const suggestions = useMemo(() => buildSuggestions(baseFilteredByType, normalizeSearch(searchTerm)), [baseFilteredByType, searchTerm]);
 
-  const topMatches = useMemo(
-    () => (isSearchMode ? filteredTimeline.slice(0, 3) : []),
-    [filteredTimeline, isSearchMode]
-  );
+  const topMatches = useMemo(() => (isSearchMode ? filteredTimeline.slice(0, 3) : []), [filteredTimeline, isSearchMode]);
 
-  const resultsCount = useMemo(
-    () => (isSearchMode ? filteredTimeline.length : (timeline || []).length),
-    [filteredTimeline, isSearchMode, timeline]
-  );
+  const resultsCount = useMemo(() => (isSearchMode ? filteredTimeline.length : (timeline || []).length), [filteredTimeline, isSearchMode, timeline]);
 
   /* =========================
      Cluster (desliga em busca)
@@ -540,9 +530,7 @@ const CampaignView = () => {
     const items: TimelineItem[] = [];
 
     const isClusterable = (t: CampaignTimelineRow) =>
-      t.event_type === "application.submitted" ||
-      t.event_type === "application.accepted" ||
-      t.event_type === "application.rejected";
+      t.event_type === "application.submitted" || t.event_type === "application.accepted" || t.event_type === "application.rejected";
 
     let i = 0;
     while (i < events.length) {
@@ -554,10 +542,7 @@ const CampaignView = () => {
         continue;
       }
 
-      const clusterType = current.event_type as
-        | "application.submitted"
-        | "application.accepted"
-        | "application.rejected";
+      const clusterType = current.event_type as "application.submitted" | "application.accepted" | "application.rejected";
       const day = dayKeyLocal(current.created_at);
 
       const cluster: CampaignTimelineRow[] = [current];
@@ -569,11 +554,7 @@ const CampaignView = () => {
         if (next.event_type !== clusterType) break;
         if (dayKeyLocal(next.created_at) !== day) break;
 
-        if (
-          (clusterType === "application.accepted" || clusterType === "application.rejected") &&
-          current.actor_id &&
-          next.actor_id
-        ) {
+        if ((clusterType === "application.accepted" || clusterType === "application.rejected") && current.actor_id && next.actor_id) {
           if (current.actor_id !== next.actor_id) break;
         }
 
@@ -617,10 +598,7 @@ const CampaignView = () => {
     });
   }, [timelineItems, isSearchMode]);
 
-  const clusterTitle = (
-    type: "application.submitted" | "application.accepted" | "application.rejected",
-    count: number
-  ) => {
+  const clusterTitle = (type: "application.submitted" | "application.accepted" | "application.rejected", count: number) => {
     if (type === "application.submitted") return `${count} novas candidaturas`;
     if (type === "application.accepted") return `${count} creators aprovados`;
     if (type === "application.rejected") return `${count} creators recusados`;
@@ -628,10 +606,8 @@ const CampaignView = () => {
   };
 
   const clusterAccent = (type: "application.submitted" | "application.accepted" | "application.rejected") => {
-    if (type === "application.accepted")
-      return { bg: "bg-accent/10", text: "text-accent", border: "border-accent/25" };
-    if (type === "application.rejected")
-      return { bg: "bg-destructive/10", text: "text-destructive", border: "border-destructive/25" };
+    if (type === "application.accepted") return { bg: "bg-accent/10", text: "text-accent", border: "border-accent/25" };
+    if (type === "application.rejected") return { bg: "bg-destructive/10", text: "text-destructive", border: "border-destructive/25" };
     return { bg: "bg-primary/10", text: "text-primary", border: "border-primary/25" };
   };
 
@@ -674,9 +650,7 @@ const CampaignView = () => {
       if (error) {
         const msg = (error.message || "").toLowerCase();
         const looksMissing =
-          msg.includes("could not find the function") ||
-          msg.includes("does not exist") ||
-          msg.includes("schema cache");
+          msg.includes("could not find the function") || msg.includes("does not exist") || msg.includes("schema cache");
 
         if (!looksMissing) console.error("GET_CAMPAIGN_TIMELINE_ERROR", error);
 
@@ -700,9 +674,7 @@ const CampaignView = () => {
       if (error) {
         const msg = (error.message || "").toLowerCase();
         const missing =
-          msg.includes("could not find the function") ||
-          msg.includes("does not exist") ||
-          msg.includes("schema cache");
+          msg.includes("could not find the function") || msg.includes("does not exist") || msg.includes("schema cache");
 
         if (!missing) console.error("CAMPAIGN_METRICS_ERROR", error);
 
@@ -756,12 +728,9 @@ const CampaignView = () => {
 
           setCampaign((campaignData ?? null) as unknown as PublicCampaignFeed);
 
-          const { data: applicantData, error: applicantsError } = await supabase.rpc(
-            "get_campaign_applicants" as any,
-            {
-              p_campaign_id: id,
-            }
-          );
+          const { data: applicantData, error: applicantsError } = await supabase.rpc("get_campaign_applicants" as any, {
+            p_campaign_id: id,
+          });
 
           if (applicantsError) console.error("CAMPAIGNVIEW_APPLICANTS_ERROR", applicantsError);
 
@@ -854,12 +823,9 @@ const CampaignView = () => {
     } else {
       toast.success(decision === "accepted" ? "Influenciadora aprovada!" : "Candidatura recusada.");
 
-      const { data: applicantData, error: applicantsError } = await supabase.rpc(
-        "get_campaign_applicants" as any,
-        {
-          p_campaign_id: id,
-        }
-      );
+      const { data: applicantData, error: applicantsError } = await supabase.rpc("get_campaign_applicants" as any, {
+        p_campaign_id: id,
+      });
 
       if (applicantsError) console.error("CAMPAIGNVIEW_APPLICANTS_REFRESH_ERROR", applicantsError);
 
@@ -889,15 +855,7 @@ const CampaignView = () => {
 
   if (isLoading) {
     return (
-      <MobileLayout
-        title="Campanha"
-        showBack
-        backTo={backTo}
-        navType={navType}
-        showNav={false}
-        showHome
-        homeRoute={backTo}
-      >
+      <MobileLayout title="Campanha" showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
         <div className="flex justify-center py-16">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
@@ -907,15 +865,7 @@ const CampaignView = () => {
 
   if (!campaign) {
     return (
-      <MobileLayout
-        title="Campanha"
-        showBack
-        backTo={backTo}
-        navType={navType}
-        showNav={false}
-        showHome
-        homeRoute={backTo}
-      >
+      <MobileLayout title="Campanha" showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
         <div className="px-6 py-16 text-center">
           <p className="text-muted-foreground">Campanha não encontrada.</p>
         </div>
@@ -937,25 +887,13 @@ const CampaignView = () => {
   ];
 
   return (
-    <MobileLayout
-      title={campaign.title}
-      showBack
-      backTo={backTo}
-      navType={navType}
-      showNav={false}
-      showHome
-      homeRoute={backTo}
-    >
+    <MobileLayout title={campaign.title} showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
       <div className="px-6 py-6 space-y-4">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium capitalize">
-              {campaign.type}
-            </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium">
-              {(campaign as any)?.status || "—"}
-            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium capitalize">{campaign.type}</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium">{(campaign as any)?.status || "—"}</span>
 
             {!isContractor && showUrgent && urgencyLabel && (
               <span className="text-[10px] px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning font-medium flex items-center gap-1">
@@ -974,9 +912,7 @@ const CampaignView = () => {
             <button
               onClick={() => setTabWithUrl("details")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all ${
-                tab === "details"
-                  ? "bg-primary/10 text-primary border border-primary/30"
-                  : "bg-card text-muted-foreground border border-border/50"
+                tab === "details" ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
               }`}
             >
               Detalhes
@@ -985,9 +921,7 @@ const CampaignView = () => {
             <button
               onClick={() => setTabWithUrl("applicants")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
-                tab === "applicants"
-                  ? "bg-primary/10 text-primary border border-primary/30"
-                  : "bg-card text-muted-foreground border border-border/50"
+                tab === "applicants" ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
               }`}
             >
               <Users className="w-3.5 h-3.5" />
@@ -997,9 +931,7 @@ const CampaignView = () => {
             <button
               onClick={() => setTabWithUrl("history")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
-                tab === "history"
-                  ? "bg-primary/10 text-primary border border-primary/30"
-                  : "bg-card text-muted-foreground border border-border/50"
+                tab === "history" ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
               }`}
             >
               <History className="w-3.5 h-3.5" />
@@ -1009,9 +941,7 @@ const CampaignView = () => {
             <button
               onClick={() => setTabWithUrl("files")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
-                tab === "files"
-                  ? "bg-primary/10 text-primary border border-primary/30"
-                  : "bg-card text-muted-foreground border border-border/50"
+                tab === "files" ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
               }`}
             >
               <Paperclip className="w-3.5 h-3.5" />
@@ -1026,9 +956,7 @@ const CampaignView = () => {
             <button
               onClick={() => setTabWithUrl("details")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all ${
-                tab === "details"
-                  ? "bg-primary/10 text-primary border border-primary/30"
-                  : "bg-card text-muted-foreground border border-border/50"
+                tab === "details" ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
               }`}
             >
               Detalhes
@@ -1037,9 +965,7 @@ const CampaignView = () => {
             <button
               onClick={() => setTabWithUrl("files")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
-                tab === "files"
-                  ? "bg-primary/10 text-primary border border-primary/30"
-                  : "bg-card text-muted-foreground border border-border/50"
+                tab === "files" ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
               }`}
             >
               <Paperclip className="w-3.5 h-3.5" />
@@ -1050,11 +976,7 @@ const CampaignView = () => {
 
         {/* Files tab */}
         {tab === "files" && (
-          <CampaignFilesTab
-            campaignId={String(id)}
-            role={isContractor ? "contractor" : "influencer"}
-            influencerAccepted={!!influencerAccepted}
-          />
+          <CampaignFilesTab campaignId={String(id)} role={isContractor ? "contractor" : "influencer"} influencerAccepted={!!influencerAccepted} />
         )}
 
         {/* Details tab */}
@@ -1074,37 +996,22 @@ const CampaignView = () => {
             </div>
 
             {/* Datas destacadas */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="grid grid-cols-2 gap-3"
-            >
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-border/50 bg-card/60 p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Calendar className="w-4 h-4 text-accent" />
                   <p className="text-xs text-muted-foreground uppercase tracking-wider">Data do evento</p>
                 </div>
-                <p className="text-sm font-semibold text-foreground">
-                  {campaign.campaign_date ? formatDateBR(campaign.campaign_date) : "A definir"}
-                </p>
+                <p className="text-sm font-semibold text-foreground">{campaign.campaign_date ? formatDateBR(campaign.campaign_date) : "A definir"}</p>
               </div>
 
               <div
                 className={`rounded-xl border p-4 ${
-                  expired
-                    ? "border-destructive/30 bg-destructive/5"
-                    : showUrgent
-                    ? "border-warning/30 bg-warning/10"
-                    : "border-border/50 bg-card/60"
+                  expired ? "border-destructive/30 bg-destructive/5" : showUrgent ? "border-warning/30 bg-warning/10" : "border-border/50 bg-card/60"
                 }`}
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <Clock
-                    className={`w-4 h-4 ${
-                      expired ? "text-destructive" : showUrgent ? "text-warning" : "text-warning"
-                    }`}
-                  />
+                  <Clock className={`w-4 h-4 ${expired ? "text-destructive" : showUrgent ? "text-warning" : "text-warning"}`} />
                   <p className="text-xs text-muted-foreground uppercase tracking-wider">Prazo candidatura</p>
                 </div>
                 <p className={`text-sm font-semibold ${expired ? "text-destructive" : "text-foreground"}`}>
@@ -1121,10 +1028,7 @@ const CampaignView = () => {
                     <BarChart3 className="w-4 h-4 text-primary" />
                     <p className="text-xs text-muted-foreground uppercase tracking-widest">Métricas</p>
                   </div>
-                  <button
-                    onClick={fetchMetrics}
-                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                  >
+                  <button onClick={fetchMetrics} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
                     {metricsLoading ? "Atualizando..." : "Atualizar"}
                   </button>
                 </div>
@@ -1146,12 +1050,10 @@ const CampaignView = () => {
 
                     <div className="col-span-3 flex items-center gap-3 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
-                        <Hourglass className="w-3 h-3 text-warning" /> Pendentes:{" "}
-                        <b className="text-foreground">{metrics.pending_applications}</b>
+                        <Hourglass className="w-3 h-3 text-warning" /> Pendentes: <b className="text-foreground">{metrics.pending_applications}</b>
                       </span>
                       <span className="flex items-center gap-1">
-                        <XCircle className="w-3 h-3 text-muted-foreground" /> Rejeitadas:{" "}
-                        <b className="text-foreground">{metrics.rejected_applications}</b>
+                        <XCircle className="w-3 h-3 text-muted-foreground" /> Rejeitadas: <b className="text-foreground">{metrics.rejected_applications}</b>
                       </span>
                     </div>
                   </div>
@@ -1174,13 +1076,8 @@ const CampaignView = () => {
             {!isContractor && influencerAccepted && (
               <div className="glass-card p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm text-muted-foreground">
-                    Você pode acessar **Arquivos** para ver briefing/arte e enviar comprovantes.
-                  </div>
-                  <button
-                    onClick={() => setTabWithUrl("files")}
-                    className="px-3 py-2 rounded-xl text-xs font-medium border border-primary/30 bg-primary/10 text-primary"
-                  >
+                  <div className="text-sm text-muted-foreground">Você pode acessar **Arquivos** para ver briefing/arte e enviar comprovantes.</div>
+                  <button onClick={() => setTabWithUrl("files")} className="px-3 py-2 rounded-xl text-xs font-medium border border-primary/30 bg-primary/10 text-primary">
                     Abrir arquivos
                   </button>
                 </div>
@@ -1199,19 +1096,9 @@ const CampaignView = () => {
               </div>
             ) : (
               applicants.map((app) => (
-                <motion.div
-                  key={app.application_id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="glass-card p-4 space-y-3"
-                >
+                <motion.div key={app.application_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-4 space-y-3">
                   {/* ✅ Header clicável → perfil público */}
-                  <button
-                    type="button"
-                    onClick={() => goToPublicProfile((app as any)?.influencer_id)}
-                    className="w-full text-left"
-                    title="Ver perfil público"
-                  >
+                  <button type="button" onClick={() => goToPublicProfile((app as any).influencer_id ?? null)} className="w-full text-left" title="Ver perfil público">
                     <div className="flex items-start gap-3">
                       <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                         <UserIcon className="w-5 h-5 text-primary" />
@@ -1220,9 +1107,7 @@ const CampaignView = () => {
                       <div className="flex-1 min-w-0">
                         <h4 className="font-semibold text-foreground text-sm truncate">{app.influencer_name}</h4>
                         <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-                          {app.influencer_instagram && (
-                            <span className="truncate">@{app.influencer_instagram.replace("@", "")}</span>
-                          )}
+                          {app.influencer_instagram && <span className="truncate">@{app.influencer_instagram.replace("@", "")}</span>}
                           <span className="flex items-center gap-0.5 truncate">
                             <MapPin className="w-3 h-3" />
                             {app.influencer_city}, {app.influencer_state}
@@ -1251,11 +1136,7 @@ const CampaignView = () => {
                         disabled={updatingId === app.application_id}
                         className="flex-[2] py-2.5 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-xs glow-blue flex items-center justify-center gap-1.5 disabled:opacity-50"
                       >
-                        {updatingId === app.application_id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                        )}
+                        {updatingId === app.application_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                         Aprovar
                       </button>
                     </div>
@@ -1289,16 +1170,11 @@ const CampaignView = () => {
                   <History className="w-4 h-4 text-primary" />
                   <div>
                     <p className="text-xs text-muted-foreground uppercase tracking-widest">Linha do tempo</p>
-                    <p className="text-xs text-muted-foreground">
-                      {isSearchMode ? "Resultados por relevância" : "Eventos e decisões"}
-                    </p>
+                    <p className="text-xs text-muted-foreground">{isSearchMode ? "Resultados por relevância" : "Eventos e decisões"}</p>
                   </div>
                 </div>
 
-                <button
-                  onClick={fetchTimeline}
-                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                >
+                <button onClick={fetchTimeline} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
                   {timelineLoading ? "Atualizando..." : "Atualizar"}
                 </button>
               </div>
@@ -1314,9 +1190,7 @@ const CampaignView = () => {
                     key={f.key}
                     onClick={() => setHistoryFilter(f.key)}
                     className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-                      historyFilter === f.key
-                        ? "bg-primary/10 text-primary border border-primary/30"
-                        : "bg-card text-muted-foreground border border-border/50"
+                      historyFilter === f.key ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
                     }`}
                   >
                     {f.label}
@@ -1342,11 +1216,7 @@ const CampaignView = () => {
                     className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
                   />
                   {searchRaw.trim() && (
-                    <button
-                      onClick={clearSearch}
-                      className="text-muted-foreground hover:text-foreground transition-colors"
-                      title="Limpar"
-                    >
+                    <button onClick={clearSearch} className="text-muted-foreground hover:text-foreground transition-colors" title="Limpar">
                       <X className="w-4 h-4" />
                     </button>
                   )}
@@ -1375,9 +1245,7 @@ const CampaignView = () => {
                     <button
                       onClick={() => setOnlyTop((v) => !v)}
                       className={`px-3 py-2 rounded-xl text-xs font-medium border bg-card/60 transition-colors flex items-center gap-1.5 ${
-                        onlyTop
-                          ? "border-primary/30 text-primary"
-                          : "border-border/50 text-muted-foreground hover:text-foreground"
+                        onlyTop ? "border-primary/30 text-primary" : "border-border/50 text-muted-foreground hover:text-foreground"
                       }`}
                       title="Alternar Top matches"
                     >
@@ -1393,9 +1261,7 @@ const CampaignView = () => {
 
                 {isSearchMode && suggestions.length > 0 && (
                   <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-1">
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-widest shrink-0">
-                      Sugestões
-                    </span>
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-widest shrink-0">Sugestões</span>
 
                     {suggestions.map((s) => (
                       <button
@@ -1426,10 +1292,7 @@ const CampaignView = () => {
                     const sub = timelineSubFor(ev);
 
                     return (
-                      <div
-                        key={`top-${ev.event_id}`}
-                        className="rounded-xl border border-border/50 bg-card/60 px-3 py-2 flex items-start gap-2"
-                      >
+                      <div key={`top-${ev.event_id}`} className="rounded-xl border border-border/50 bg-card/60 px-3 py-2 flex items-start gap-2">
                         <Icon className="w-4 h-4 text-primary mt-0.5" />
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-foreground">{highlight(title, searchTerm)}</p>
@@ -1471,9 +1334,7 @@ const CampaignView = () => {
                     return (
                       <div key={item.key} className="pt-2 pb-1 sticky top-0 z-10">
                         <div className="flex items-center gap-3 bg-background/80 backdrop-blur-xl py-1">
-                          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">
-                            {item.label}
-                          </span>
+                          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">{item.label}</span>
                           <div className="h-px flex-1 bg-border/40" />
                         </div>
                       </div>
@@ -1485,25 +1346,18 @@ const CampaignView = () => {
                     const Icon = timelineIconFor(ev);
 
                     const isPositive =
-                      ev.event_type === "application.accepted" ||
-                      (ev.event_type === "campaign.status_changed" && ev.to_status === "completed");
+                      ev.event_type === "application.accepted" || (ev.event_type === "campaign.status_changed" && ev.to_status === "completed");
 
                     const isNegative =
                       ev.event_type === "application.rejected" ||
-                      (ev.event_type === "campaign.status_changed" &&
-                        (ev.to_status === "deleted" || ev.to_status === "closed_expired"));
+                      (ev.event_type === "campaign.status_changed" && (ev.to_status === "deleted" || ev.to_status === "closed_expired"));
 
                     const avatarName = ev.event_type === "application.submitted" ? ev.influencer_name : ev.actor_name;
 
                     const titleRaw = timelineTitleFor(ev);
 
                     return (
-                      <motion.div
-                        key={ev.event_id}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="glass-card p-4"
-                      >
+                      <motion.div key={ev.event_id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-4">
                         <div className="flex items-start gap-3">
                           <div
                             className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
@@ -1515,25 +1369,15 @@ const CampaignView = () => {
                             }`}
                             title={avatarName || ""}
                           >
-                            <span
-                              className={`text-xs font-bold ${
-                                isPositive ? "text-accent" : isNegative ? "text-destructive" : "text-primary"
-                              }`}
-                            >
+                            <span className={`text-xs font-bold ${isPositive ? "text-accent" : isNegative ? "text-destructive" : "text-primary"}`}>
                               {getInitials(avatarName)}
                             </span>
                           </div>
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <Icon
-                                className={`w-4 h-4 ${
-                                  isPositive ? "text-accent" : isNegative ? "text-destructive" : "text-primary"
-                                }`}
-                              />
-                              <p className="text-sm font-semibold text-foreground">
-                                {isSearchMode ? highlight(titleRaw, searchTerm) : titleRaw}
-                              </p>
+                              <Icon className={`w-4 h-4 ${isPositive ? "text-accent" : isNegative ? "text-destructive" : "text-primary"}`} />
+                              <p className="text-sm font-semibold text-foreground">{isSearchMode ? highlight(titleRaw, searchTerm) : titleRaw}</p>
                             </div>
 
                             <p className="text-xs text-muted-foreground mt-1">{timelineSubFor(ev)}</p>
@@ -1554,18 +1398,10 @@ const CampaignView = () => {
                                 <span className="truncate">
                                   {isSearchMode
                                     ? highlight(
-                                        `${ev.influencer_name || "Creator"}${
-                                          normalizeAt(ev.influencer_instagram)
-                                            ? ` · ${normalizeAt(ev.influencer_instagram)}`
-                                            : ""
-                                        }`,
+                                        `${ev.influencer_name || "Creator"}${normalizeAt(ev.influencer_instagram) ? ` · ${normalizeAt(ev.influencer_instagram)}` : ""}`,
                                         searchTerm
                                       )
-                                    : `${ev.influencer_name || "Creator"}${
-                                        normalizeAt(ev.influencer_instagram)
-                                          ? ` · ${normalizeAt(ev.influencer_instagram)}`
-                                          : ""
-                                      }`}
+                                    : `${ev.influencer_name || "Creator"}${normalizeAt(ev.influencer_instagram) ? ` · ${normalizeAt(ev.influencer_instagram)}` : ""}`}
                                 </span>
                               </button>
                             )}
@@ -1590,16 +1426,9 @@ const CampaignView = () => {
                   const byText = showBy ? (actorName ? ` · por ${actorName}` : " · por contratante") : "";
 
                   return (
-                    <motion.div
-                      key={key}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="glass-card p-4"
-                    >
+                    <motion.div key={key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-4">
                       <div className="flex items-start gap-3">
-                        <div
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${accent.bg} ${accent.border}`}
-                        >
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${accent.bg} ${accent.border}`}>
                           <span className={`text-xs font-bold ${accent.text}`}>{avatarText}</span>
                         </div>
 
@@ -1637,9 +1466,7 @@ const CampaignView = () => {
                                       onClick={() => goToPublicProfile(ev.influencer_id)}
                                       disabled={!ev.influencer_id}
                                       className={`w-full text-left flex items-center justify-between gap-3 rounded-xl border bg-card/60 px-3 py-2 ${
-                                        ev.influencer_id
-                                          ? "border-border/50 hover:bg-card/80 transition"
-                                          : "border-border/30 cursor-default"
+                                        ev.influencer_id ? "border-border/50 hover:bg-card/80 transition" : "border-border/30 cursor-default"
                                       }`}
                                       title={ev.influencer_id ? "Ver perfil público" : ""}
                                     >
