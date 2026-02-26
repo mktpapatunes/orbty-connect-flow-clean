@@ -1,10 +1,7 @@
-// src/pages/profile/InfluencerProfile.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import MobileLayout from "@/components/MobileLayout";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { useAuth } from "@/contexts/AuthContext";
-import { useMyProfileContext } from "@/hooks/useMyProfileContext";
-import { updateMyInstagramStats } from "@/services/profile";
 import { updateMyAvatarWithUpload } from "@/services/profileAvatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -18,26 +15,24 @@ import {
   Sparkles,
   Camera,
   ExternalLink,
-  Pencil,
-  Shield,
+  UserRound,
+  Lock,
+  BarChart3,
+  Plus,
+  Trash2,
 } from "lucide-react";
-
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useNavigate } from "react-router-dom";
 
-/* =========================
-   UI helpers
-========================= */
-
 function GlassCard(props: { children: React.ReactNode; className?: string }) {
   return <div className={`glass-card p-5 ${props.className ?? ""}`}>{props.children}</div>;
 }
 
-function MetricCard(props: { label: string; value: React.ReactNode; icon?: React.ReactNode; className?: string }) {
+function MetricCard(props: { label: string; value: React.ReactNode; icon?: React.ReactNode }) {
   return (
-    <div className={`rounded-2xl border border-border/50 bg-white/5 p-4 backdrop-blur ${props.className ?? ""}`}>
+    <div className="rounded-2xl border border-border/50 bg-white/5 p-4 backdrop-blur">
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs text-muted-foreground">{props.label}</div>
         {props.icon}
@@ -74,130 +69,48 @@ function openInstagram(handle?: string | null) {
   }
 }
 
-function initials(name?: string | null) {
-  const n = (name || "").trim();
-  if (!n) return "U";
-  const parts = n.split(/\s+/).filter(Boolean);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-}
+// ====== Audience model (editável manualmente por enquanto) ======
+type AudienceGender = { female: number; male: number };
+type AudienceAgeKey = "18-24" | "25-34" | "35-44" | "45-54" | "55-64" | "65+";
+type AudienceAge = Record<AudienceAgeKey, number>;
+type AudienceCityRow = { city: string; pct: number };
 
-function clamp(n: number, min = 0, max = 100) {
-  return Math.max(min, Math.min(max, n));
-}
+const AGE_KEYS: AudienceAgeKey[] = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
 
-/** Donut simples via SVG (sem lib) */
-function DonutChart(props: {
-  value: number; // 0..100
-  label: string;
-  sublabel?: string;
-  captionLeft?: string;
-  captionRight?: string;
-}) {
-  const v = clamp(props.value, 0, 100);
+const clamp = (n: number, min = 0, max = 100) => Math.max(min, Math.min(max, n));
+const sumObj = (obj: Record<string, number>) => Object.values(obj).reduce((a, b) => a + (Number(b) || 0), 0);
 
-  // SVG circle params
-  const size = 96;
-  const stroke = 10;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const dash = (v / 100) * c;
+const normalizeStyles = (raw?: string | null) => {
+  const s = (raw || "").trim();
+  if (!s) return [];
+  return s
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+};
 
-  return (
-    <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
-      <div className="flex items-center justify-between">
-        <div className="text-xs text-muted-foreground">{props.label}</div>
-        <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-          donut
-        </div>
-      </div>
-
-      <div className="mt-3 flex items-center gap-4">
-        <div className="relative w-[96px] h-[96px]">
-          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-            <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={r}
-              fill="none"
-              stroke="rgba(255,255,255,0.08)"
-              strokeWidth={stroke}
-            />
-            <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={r}
-              fill="none"
-              stroke="rgba(59,130,246,0.85)"
-              strokeWidth={stroke}
-              strokeLinecap="round"
-              strokeDasharray={`${dash} ${c - dash}`}
-              transform={`rotate(-90 ${size / 2} ${size / 2})`}
-            />
-          </svg>
-
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="text-lg font-semibold text-foreground">{Math.round(v)}%</div>
-            {props.sublabel ? <div className="text-[10px] text-muted-foreground -mt-1">{props.sublabel}</div> : null}
-          </div>
-        </div>
-
-        <div className="min-w-0 flex-1">
-          {(props.captionLeft || props.captionRight) && (
-            <div className="text-xs text-muted-foreground space-y-1">
-              {props.captionLeft ? <div>{props.captionLeft}</div> : null}
-              {props.captionRight ? <div>{props.captionRight}</div> : null}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* =========================
-   Types (mínimos)
-========================= */
-
-type AudienceGenderObj = { female?: number; male?: number } | null;
-
-type AudienceAgeObj = Record<string, number> | null; // ex: {"18-24": 30, "25-34": 40}
-
-type AudienceCitiesObj = Record<string, number> | null; // ex: {"São Paulo": 50, "Rio": 20}
-
-const AGE_BUCKETS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"] as const;
-
-function parseObjectNumbers(v: any): Record<string, number> | null {
-  if (!v || typeof v !== "object") return null;
-  const out: Record<string, number> = {};
-  for (const [k, val] of Object.entries(v)) {
-    const num = Number(val);
-    if (!Number.isNaN(num)) out[String(k)] = num;
-  }
-  return Object.keys(out).length ? out : null;
-}
-
-function topKeys(obj: Record<string, number> | null | undefined, top = 3) {
-  if (!obj) return [];
-  return Object.entries(obj)
-    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
-    .slice(0, top)
-    .map(([k]) => k);
-}
-
-function sumObj(obj: Record<string, number> | null | undefined) {
-  if (!obj) return 0;
-  return Object.values(obj).reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
-}
-
-/* =========================
-   Page
-========================= */
+const stylesCatalog = [
+  "Lifestyle",
+  "Moda",
+  "Beleza",
+  "Educação",
+  "Fitness",
+  "Saúde",
+  "Gastronomia",
+  "Viagem",
+  "Entretenimento",
+  "Tecnologia",
+  "Negócios",
+  "Maternidade",
+  "Pets",
+  "Games",
+  "Finanças",
+];
 
 export default function InfluencerProfile() {
   const navigate = useNavigate();
   const { profile, userRole, approvalStatus, refreshProfile } = useAuth();
-  const ctx = useMyProfileContext();
 
   const isVerifiedInfluencer = userRole === "influencer" && approvalStatus === "approved";
 
@@ -224,7 +137,6 @@ export default function InfluencerProfile() {
       await updateMyAvatarWithUpload(file);
       toast.success("Foto atualizada!");
       await refreshProfile();
-      await ctx.refetch();
     } catch (e: any) {
       toast.error(e?.message || "Erro ao atualizar foto.");
     } finally {
@@ -233,81 +145,10 @@ export default function InfluencerProfile() {
     }
   };
 
-  // Instagram stats (ctx preferencial)
-  const fallbackFollowers = useMemo(() => {
-    const raw = (profile as any)?.followers as string | undefined;
-    if (!raw) return null;
-    const onlyDigits = raw.replace(/[^\d]/g, "");
-    if (!onlyDigits) return null;
-    const n = Number(onlyDigits);
-    return Number.isFinite(n) ? n : null;
-  }, [profile]);
-
-  const fallbackGender = useMemo(() => {
-    const ag = (profile as any)?.audience_gender as AudienceGenderObj;
-    const female = typeof ag?.female === "number" ? ag.female : 50;
-    const male = typeof ag?.male === "number" ? ag.male : 50;
-    return { female, male };
-  }, [profile]);
-
-  const instagram = useMemo(() => {
-    const rpcIg = (ctx.data as any)?.instagram;
-    if (rpcIg) return rpcIg;
-
-    return {
-      platform: "instagram",
-      source: "self_reported",
-      instagram_username: (profile as any)?.instagram ?? null,
-      followers_count: fallbackFollowers,
-      audience_female_pct: fallbackGender.female,
-      audience_male_pct: fallbackGender.male,
-      audience_region: null,
-      collected_at: null,
-    };
-  }, [ctx.data, profile, fallbackFollowers, fallbackGender]);
-
-  // ✅ Audience extra (para o perfil completo, parecido com o público)
-  // Preferência: campos do profiles (se você já criou) -> fallback ctx -> fallback vazio
-  const audienceCities = useMemo<AudienceCitiesObj>(() => {
-    const fromProfile = parseObjectNumbers((profile as any)?.audience_cities);
-    if (fromProfile) return fromProfile;
-
-    const fromCtx = parseObjectNumbers((ctx.data as any)?.audience_cities);
-    return fromCtx || null;
-  }, [profile, ctx.data]);
-
-  const audienceAge = useMemo<AudienceAgeObj>(() => {
-    const fromProfile = parseObjectNumbers((profile as any)?.audience_age);
-    if (fromProfile) return fromProfile;
-
-    const fromCtx = parseObjectNumbers((ctx.data as any)?.audience_age);
-    return fromCtx || null;
-  }, [profile, ctx.data]);
-
-  const topCities = useMemo(() => topKeys(audienceCities, 4), [audienceCities]);
-  const topAges = useMemo(() => {
-    const merged: Record<string, number> = {};
-    // garantir buckets fixos quando existir algo
-    for (const k of AGE_BUCKETS) merged[k] = 0;
-
-    if (audienceAge) {
-      for (const [k, v] of Object.entries(audienceAge)) {
-        merged[k] = (merged[k] ?? 0) + (Number.isFinite(v) ? v : 0);
-      }
-    }
-
-    const total = sumObj(merged);
-    if (total <= 0) return topKeys(audienceAge, 3); // fallback se vier só alguns buckets
-
-    return Object.entries(merged)
-      .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
-      .slice(0, 3)
-      .map(([k]) => k);
-  }, [audienceAge]);
-
-  // Orbty metrics (sucesso)
-  const [orbtyAccepted, setOrbtyAccepted] = useState(0);
-  const [orbtyTotal, setOrbtyTotal] = useState(0);
+  // ======================
+  // Load performance (Orbty)
+  // ======================
+  const [orbtyStats, setOrbtyStats] = useState({ total: 0, accepted: 0, pending: 0, rejected: 0 });
   const [loadingOrbty, setLoadingOrbty] = useState(true);
 
   useEffect(() => {
@@ -316,17 +157,6 @@ export default function InfluencerProfile() {
     (async () => {
       if (!profile?.id) return;
       setLoadingOrbty(true);
-
-      const rpcMetrics = (ctx.data as any)?.influencer_metrics;
-      if (rpcMetrics) {
-        if (!alive) return;
-        const total = Number(rpcMetrics.total_applications ?? 0);
-        const accepted = Number(rpcMetrics.accepted_applications ?? 0);
-        setOrbtyTotal(total);
-        setOrbtyAccepted(accepted);
-        setLoadingOrbty(false);
-        return;
-      }
 
       const { data, error } = await supabase
         .from("campaign_applications")
@@ -344,182 +174,252 @@ export default function InfluencerProfile() {
       const list = data ?? [];
       const total = list.length;
       const accepted = list.filter((x: any) => x.status === "accepted").length;
+      const pending = list.filter((x: any) => x.status === "pending").length;
+      const rejected = list.filter((x: any) => x.status === "rejected").length;
 
-      setOrbtyTotal(total);
-      setOrbtyAccepted(accepted);
+      setOrbtyStats({ total, accepted, pending, rejected });
       setLoadingOrbty(false);
     })();
 
     return () => {
       alive = false;
     };
-  }, [profile?.id, ctx.data]);
+  }, [profile?.id]);
 
-  // Modal: Atualizar IG (mantém o que você já tinha)
-  const [igOpen, setIgOpen] = useState(false);
-  const [igSaving, setIgSaving] = useState(false);
+  // ======================
+  // Edit modal (Tudo em 1)
+  // ======================
+  const [editOpen, setEditOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const [igForm, setIgForm] = useState(() => ({
-    instagram_username: (profile as any)?.instagram ?? "",
-    followers_count: instagram?.followers_count ?? 0,
-    audience_female_pct: Number(instagram?.audience_female_pct ?? 50), // ✅ feminino
-    audience_male_pct: Number(instagram?.audience_male_pct ?? 50), // ✅ masculino (fica sincronizado)
-    audience_region: instagram?.audience_region ?? "",
-  }));
+  const initialFromProfile = useMemo(() => {
+    const p: any = profile ?? {};
+    const audGenderRaw = p.audience_gender ?? null;
+    const audAgeRaw = p.audience_age ?? null;
+    const audCitiesRaw = p.audience_cities ?? null;
 
-  useEffect(() => {
-    if (!igOpen) return;
-    setIgForm({
-      instagram_username: (profile as any)?.instagram ?? "",
-      followers_count: instagram?.followers_count ?? 0,
-      audience_female_pct: Number(instagram?.audience_female_pct ?? 50),
-      audience_male_pct: Number(instagram?.audience_male_pct ?? 50),
-      audience_region: instagram?.audience_region ?? "",
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [igOpen]);
+    const gender: AudienceGender = {
+      female: clamp(Number(audGenderRaw?.female ?? 50), 0, 100),
+      male: clamp(Number(audGenderRaw?.male ?? 50), 0, 100),
+    };
 
-  const handleSaveIg = async () => {
-    const female = clamp(Number(igForm.audience_female_pct ?? 0), 0, 100);
-    const male = clamp(Number(igForm.audience_male_pct ?? 0), 0, 100);
-
-    // normaliza pra 100 (se usuário mexer manualmente no futuro)
-    const total = female + male;
-    const nf = total > 0 ? (female / total) * 100 : 50;
-    const nm = total > 0 ? (male / total) * 100 : 50;
-
-    if (igForm.followers_count < 0) {
-      toast.error("Seguidores inválido.");
-      return;
+    // se vier incoerente, normaliza
+    const totalG = gender.female + gender.male;
+    if (totalG !== 100) {
+      const f = clamp(gender.female, 0, 100);
+      gender.female = f;
+      gender.male = 100 - f;
     }
 
-    setIgSaving(true);
+    const age: AudienceAge = {
+      "18-24": clamp(Number(audAgeRaw?.["18-24"] ?? 0), 0, 100),
+      "25-34": clamp(Number(audAgeRaw?.["25-34"] ?? 0), 0, 100),
+      "35-44": clamp(Number(audAgeRaw?.["35-44"] ?? 0), 0, 100),
+      "45-54": clamp(Number(audAgeRaw?.["45-54"] ?? 0), 0, 100),
+      "55-64": clamp(Number(audAgeRaw?.["55-64"] ?? 0), 0, 100),
+      "65+": clamp(Number(audAgeRaw?.["65+"] ?? 0), 0, 100),
+    };
+
+    const cities: AudienceCityRow[] = Array.isArray(audCitiesRaw)
+      ? audCitiesRaw
+          .map((r: any) => ({
+            city: String(r?.city ?? "").trim(),
+            pct: clamp(Number(r?.pct ?? 0), 0, 100),
+          }))
+          .filter((r: AudienceCityRow) => r.city)
+          .slice(0, 6)
+      : [];
+
+    return {
+      instagram: String(p.instagram ?? ""),
+      followers: String(p.followers ?? ""),
+      bio: String(p.bio ?? ""),
+      neighborhood: String(p.neighborhood ?? ""),
+      contentStyles: normalizeStyles(p.content_style),
+      audienceGender: gender,
+      audienceAge: age,
+      audienceCities: cities.length ? cities : [{ city: "", pct: 0 }],
+    };
+  }, [profile]);
+
+  const [form, setForm] = useState(initialFromProfile);
+
+  // só reseta ao abrir modal (não perde foco enquanto digita)
+  useEffect(() => {
+    if (editOpen) setForm(initialFromProfile);
+  }, [editOpen, initialFromProfile]);
+
+  const handleToggleStyle = (style: string) => {
+    setForm((s) => {
+      const has = s.contentStyles.includes(style);
+      if (has) return { ...s, contentStyles: s.contentStyles.filter((x) => x !== style) };
+      if (s.contentStyles.length >= 3) {
+        toast.error("Você pode escolher até 3 estilos.");
+        return s;
+      }
+      return { ...s, contentStyles: [...s.contentStyles, style] };
+    });
+  };
+
+  const setAudienceFemale = (female: number) => {
+    const f = clamp(Math.round(female), 0, 100);
+    setForm((s) => ({
+      ...s,
+      audienceGender: { female: f, male: 100 - f },
+    }));
+  };
+
+  const handleSaveAll = async () => {
+    if (!profile?.id) return;
+
+    // followers como string (igual você já usa)
+    const followers = (form.followers || "").trim();
+
+    // audience age: se quiser, pode “normalizar” pra somar 100, mas por enquanto deixo livre
+    const ageTotal = sumObj(form.audienceAge);
+    if (ageTotal > 0 && ageTotal < 50) {
+      // só um guard leve, evita salvar algo muito estranho
+      // (não bloqueio, só aviso)
+      toast.message("Dica: sua distribuição etária parece baixa. Você pode ajustar depois.");
+    }
+
+    const cleanCities = (form.audienceCities || [])
+      .map((r) => ({ city: (r.city || "").trim(), pct: clamp(Number(r.pct || 0), 0, 100) }))
+      .filter((r) => r.city)
+      .slice(0, 6);
+
+    setSaving(true);
     try {
-      await updateMyInstagramStats({
-        instagram_username: igForm.instagram_username,
-        followers_count: igForm.followers_count,
-        audience_female_pct: nf,
-        audience_male_pct: nm,
-        audience_region: igForm.audience_region || undefined,
-      });
+      const payload: any = {
+        instagram: form.instagram.trim() || null,
+        followers: followers || null,
+        bio: form.bio.trim() || null,
+        neighborhood: form.neighborhood.trim() || null,
+        content_style: form.contentStyles.length ? form.contentStyles.join(", ") : null,
 
-      toast.success("Métricas do Instagram atualizadas!");
-      setIgOpen(false);
+        // público (manual por enquanto, depois integra Meta)
+        audience_gender: form.audienceGender,
+        audience_age: form.audienceAge,
+        audience_cities: cleanCities.length ? cleanCities : null,
+      };
 
-      await ctx.refetch();
+      const { error } = await supabase.from("profiles").update(payload).eq("id", profile.id);
+      if (error) throw error;
+
+      toast.success("Perfil atualizado!");
+      setEditOpen(false);
       await refreshProfile();
-    } catch (err: any) {
-      toast.error(err?.message || "Erro ao salvar métricas.");
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao salvar perfil.");
     } finally {
-      setIgSaving(false);
+      setSaving(false);
     }
   };
 
-  const navType = "influencer";
-
-  const followersLabel =
-    instagram?.followers_count === null || instagram?.followers_count === undefined
-      ? "—"
-      : Number(instagram.followers_count).toLocaleString("pt-BR");
-
+  // Labels
   const igHandle = (profile as any)?.instagram ?? null;
-  const igRaw = buildInstagramLinks(igHandle)?.raw ?? null;
+  const followersLabel = useMemo(() => {
+    const raw = String((profile as any)?.followers ?? "").trim();
+    if (!raw) return "—";
+    const n = Number(raw.replace(/[^\d]/g, ""));
+    return Number.isFinite(n) && n > 0 ? n.toLocaleString("pt-BR") : raw;
+  }, [profile]);
 
-  const locationLabel = profile ? `${profile.city}, ${profile.state}` : "—";
+  const stylesLabel = useMemo(() => {
+    const arr = normalizeStyles((profile as any)?.content_style ?? null);
+    return arr.length ? arr.join(", ") : "—";
+  }, [profile]);
 
-  const femalePct = Number(instagram?.audience_female_pct ?? 50);
-  const malePct = Number(instagram?.audience_male_pct ?? (100 - femalePct));
-
-  const successRate = useMemo(() => {
-    if (!orbtyTotal) return 0;
-    return (orbtyAccepted / orbtyTotal) * 100;
-  }, [orbtyAccepted, orbtyTotal]);
+  const navType = "influencer";
+  const backTo = "/dashboard-influenciadora";
 
   return (
-    <MobileLayout title="Meu perfil" showBack navType={navType}>
+    <MobileLayout title="Meu perfil" showBack backTo={backTo} navType={navType}>
       <div className="px-6 py-6 space-y-6">
-        {/* HERO (igual vibe do perfil público) */}
-        <GlassCard className="p-5">
+        {/* Header premium */}
+        <GlassCard>
           <div className="flex items-start justify-between gap-4">
-            {/* avatar + infos */}
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="relative shrink-0">
-                <div className="w-14 h-14 rounded-2xl overflow-hidden border border-primary/20 bg-white/5 flex items-center justify-center">
-                  {(profile as any)?.avatar_url ? (
-                    <img
-                      src={(profile as any).avatar_url}
-                      alt="Avatar"
-                      className="w-full h-full object-cover block"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <span className="text-primary font-bold">{initials(profile?.name)}</span>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handlePickAvatar}
-                  disabled={avatarUploading}
-                  className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-primary flex items-center justify-center disabled:opacity-60"
-                  title="Alterar foto"
-                >
-                  {avatarUploading ? (
-                    <Loader2 className="w-4 h-4 text-primary-foreground animate-spin" />
-                  ) : (
-                    <Camera className="w-4 h-4 text-primary-foreground" />
-                  )}
-                </button>
-
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => handleAvatarFile(e.target.files?.[0])}
-                />
-              </div>
-
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  {/* ✅ Nome sem truncar agressivo */}
-                  <div className="text-lg font-semibold text-foreground break-words leading-tight">
-                    {profile?.name || "Creator"}
+            <div className="space-y-2 min-w-0">
+              <div className="flex items-center gap-3">
+                {/* Avatar */}
+                <div className="relative shrink-0">
+                  <div className="w-12 h-12 rounded-full overflow-hidden border border-primary/30 bg-white/5">
+                    {(profile as any)?.avatar_url ? (
+                      <img
+                        src={(profile as any).avatar_url}
+                        alt="Avatar"
+                        className="w-full h-full object-cover block"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-full h-full" />
+                    )}
                   </div>
-                  {isVerifiedInfluencer && <VerifiedBadge size="sm" />}
+
+                  <button
+                    type="button"
+                    onClick={handlePickAvatar}
+                    disabled={avatarUploading}
+                    className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-primary flex items-center justify-center disabled:opacity-60"
+                    title="Alterar foto"
+                  >
+                    {avatarUploading ? (
+                      <Loader2 className="w-3.5 h-3.5 text-primary-foreground animate-spin" />
+                    ) : (
+                      <Camera className="w-3.5 h-3.5 text-primary-foreground" />
+                    )}
+                  </button>
+
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleAvatarFile(e.target.files?.[0])}
+                  />
                 </div>
 
-                {/* Instagram clicável */}
-                <div className="mt-1 text-sm text-muted-foreground flex items-center gap-2">
-                  <Instagram className="w-4 h-4" />
-                  {igRaw ? (
-                    <button
-                      onClick={() => openInstagram(igHandle)}
-                      className="inline-flex items-center gap-1 text-primary hover:opacity-90 transition-opacity"
-                      title="Abrir Instagram"
-                    >
-                      <span>@{igRaw}</span>
-                      <ExternalLink className="w-4 h-4" />
-                    </button>
-                  ) : (
-                    <span>Instagram não informado</span>
-                  )}
-                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* ✅ sem truncate (corrige G... e mantém layout) */}
+                    <div className="text-lg font-semibold text-foreground break-words leading-tight">
+                      {profile?.name || "Creator"}
+                    </div>
+                    {isVerifiedInfluencer && <VerifiedBadge size="sm" />}
+                  </div>
 
-                <div className="mt-1 text-sm text-muted-foreground flex items-center gap-2">
-                  <MapPin className="w-4 h-4" />
-                  <span className="truncate">{locationLabel}</span>
+                  {/* @ */}
+                  <div className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Instagram className="w-4 h-4" />
+                    {buildInstagramLinks(igHandle)?.raw ? (
+                      <button
+                        onClick={() => openInstagram(igHandle)}
+                        className="inline-flex items-center gap-1 text-primary hover:opacity-90 transition-opacity"
+                        title="Abrir Instagram"
+                      >
+                        <span>@{buildInstagramLinks(igHandle)!.raw}</span>
+                        <ExternalLink className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <span>Instagram não informado</span>
+                    )}
+                  </div>
+
+                  <div className="text-sm text-muted-foreground flex items-center gap-2">
+                    <MapPin className="w-4 h-4" />
+                    <span>{profile ? `${profile.city}, ${profile.state}` : "—"}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* ações */}
+            {/* Ações (não quebram layout) */}
             <div className="flex flex-col gap-2 shrink-0">
               <button
-                onClick={() => navigate("/perfil-influenciadora/editar")}
+                onClick={() => setEditOpen(true)}
                 className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
               >
-                <Pencil className="w-4 h-4 text-primary" />
+                <Sparkles className="w-4 h-4 text-primary" />
                 Editar perfil
               </button>
 
@@ -527,153 +427,73 @@ export default function InfluencerProfile() {
                 onClick={() => navigate("/perfil-influenciadora/dados-pessoais")}
                 className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
               >
-                <Shield className="w-4 h-4 text-primary" />
+                <Lock className="w-4 h-4 text-primary" />
                 Dados pessoais
               </button>
-
-              <button
-                onClick={() => setIgOpen(true)}
-                className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
-              >
-                <Sparkles className="w-4 h-4 text-primary" />
-                Atualizar IG
-              </button>
             </div>
           </div>
         </GlassCard>
 
-        {/* QUICK CARDS (mesma lógica do público) */}
-        <div className="grid grid-cols-3 gap-3">
-          <button
-            type="button"
-            onClick={() => openInstagram(igHandle)}
-            disabled={!igRaw}
-            className={`rounded-2xl border p-3 text-left transition ${
-              igRaw ? "border-border/50 bg-white/5 hover:bg-white/10" : "border-border/30 bg-white/5 opacity-60"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <Instagram className="w-4 h-4 text-primary" />
-              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-            </div>
-            <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Instagram</p>
-            <p className="text-sm font-semibold text-foreground truncate">{igRaw ? `@${igRaw}` : "—"}</p>
-          </button>
-
-          <div className="rounded-2xl border border-border/50 bg-white/5 p-3 text-left">
-            <div className="flex items-center justify-between">
-              <Users className="w-4 h-4 text-primary" />
-              <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-                público
-              </span>
-            </div>
-            <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Seguidores</p>
-            <p className="text-sm font-semibold text-foreground truncate">{followersLabel}</p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              const q = encodeURIComponent(locationLabel);
-              window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
-            }}
-            className="rounded-2xl border border-border/50 bg-white/5 hover:bg-white/10 p-3 text-left transition"
-          >
-            <div className="flex items-center justify-between">
-              <MapPin className="w-4 h-4 text-primary" />
-              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-            </div>
-            <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Localização</p>
-            <p className="text-sm font-semibold text-foreground truncate">{profile?.city || "—"}</p>
-          </button>
+        {/* Cards principais */}
+        <div className="grid grid-cols-2 gap-3">
+          <MetricCard label="Seguidores" value={followersLabel} icon={<Users className="w-4 h-4 text-primary" />} />
+          <MetricCard label="Estilos" value={stylesLabel} icon={<Sparkles className="w-4 h-4 text-primary" />} />
         </div>
 
-        {/* AUDIÊNCIA (premium) */}
-        <GlassCard className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold text-foreground">Audiência</div>
-              <div className="text-xs text-muted-foreground">Dados informados por você (por enquanto)</div>
-            </div>
-            <button
-              onClick={() => navigate("/perfil-influenciadora/editar")}
-              className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground"
-              title="Editar audiência no editar perfil"
-            >
-              Editar
-            </button>
+        {/* Audiência (aparece no perfil do dono também — mas é o “painel completo”) */}
+        <GlassCard className="space-y-3">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-primary" />
+            <div className="text-sm font-semibold text-foreground">Audiência (manual por enquanto)</div>
           </div>
 
-          {/* Donuts: Gênero */}
-          <div className="grid grid-cols-1 gap-3">
-            <DonutChart
-              value={femalePct}
-              label="Gênero"
-              sublabel="Feminino"
-              captionLeft={`Feminino: ${Math.round(femalePct)}%`}
-              captionRight={`Masculino: ${Math.round(malePct)}%`}
-            />
-          </div>
+          {(() => {
+            const p: any = profile ?? {};
+            const g = p.audience_gender ?? null;
+            const a = p.audience_age ?? null;
+            const c = p.audience_cities ?? null;
 
-          {/* Top Faixas etárias (chips) */}
-          <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-muted-foreground">Faixa etária (Top)</div>
-              <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-                top
-              </div>
-            </div>
+            const female = typeof g?.female === "number" ? g.female : null;
+            const male = typeof g?.male === "number" ? g.male : null;
 
-            {topAges.length === 0 ? (
-              <div className="mt-3 text-sm text-muted-foreground">Sem dados de faixa etária.</div>
-            ) : (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {topAges.map((age) => (
-                  <span
-                    key={age}
-                    className="text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground"
-                  >
-                    {age}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+            const topCities = Array.isArray(c) ? c.slice(0, 3) : [];
+            const ageTotal = a && typeof a === "object" ? sumObj(a) : 0;
 
-          {/* Top Cidades (somente nomes) */}
-          <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-muted-foreground">Principais cidades</div>
-              <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-                top
+            return (
+              <div className="grid grid-cols-2 gap-3">
+                <MetricCard label="Público feminino" value={female === null ? "—" : `${female.toFixed(0)}%`} />
+                <MetricCard label="Público masculino" value={male === null ? "—" : `${male.toFixed(0)}%`} />
+                <div className="col-span-2 rounded-2xl border border-border/50 bg-white/5 p-4">
+                  <div className="text-xs text-muted-foreground mb-2">Faixa etária</div>
+                  <div className="text-sm text-foreground/80">
+                    {ageTotal > 0 ? "Distribuição cadastrada" : "—"}
+                  </div>
+                </div>
+                <div className="col-span-2 rounded-2xl border border-border/50 bg-white/5 p-4">
+                  <div className="text-xs text-muted-foreground mb-2">Principais cidades</div>
+                  {topCities.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {topCities.map((r: any, idx: number) => (
+                        <span
+                          key={`${r.city}-${idx}`}
+                          className="text-xs px-3 py-1.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground"
+                        >
+                          {r.city} · {Number(r.pct ?? 0).toFixed(0)}%
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-foreground/80">—</div>
+                  )}
+                </div>
               </div>
-            </div>
-
-            {topCities.length === 0 ? (
-              <div className="mt-3 text-sm text-muted-foreground">Sem dados de cidades.</div>
-            ) : (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {topCities.map((city) => (
-                  <span
-                    key={city}
-                    className="text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground"
-                  >
-                    {city}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+            );
+          })()}
         </GlassCard>
 
-        {/* PERFORMANCE ORBTY (somente sucesso) */}
+        {/* Performance Orbty */}
         <GlassCard className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold text-foreground">Performance na Orbty</div>
-              <div className="text-xs text-muted-foreground">Participações com sucesso</div>
-            </div>
-          </div>
+          <div className="text-sm font-semibold text-foreground">Performance na Orbty</div>
 
           {loadingOrbty ? (
             <div className="flex justify-center py-2">
@@ -681,120 +501,246 @@ export default function InfluencerProfile() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              <MetricCard label="Aceites" value={orbtyAccepted} />
-              <MetricCard label="Taxa de sucesso" value={`${Math.round(successRate)}%`} />
+              <MetricCard label="Candidaturas" value={orbtyStats.total} />
+              <MetricCard label="Aceites" value={orbtyStats.accepted} />
+              <MetricCard label="Pendentes" value={orbtyStats.pending} />
+              <MetricCard label="Rejeitadas" value={orbtyStats.rejected} />
             </div>
           )}
         </GlassCard>
 
-        {/* Modal Atualizar IG (mantido) */}
-        {igOpen && (
+        {/* ========= Modal Editar Perfil (tudo em 1) ========= */}
+        {editOpen && (
           <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-            <div className="absolute inset-0 bg-black/60" onClick={() => (igSaving ? null : setIgOpen(false))} />
-            <div className="relative w-full md:max-w-md rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5">
+            <div className="absolute inset-0 bg-black/60" onClick={() => (saving ? null : setEditOpen(false))} />
+            <div className="relative w-full md:max-w-lg rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5 max-h-[85vh] overflow-auto">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold text-foreground">Atualizar métricas do Instagram</div>
-                <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => (igSaving ? null : setIgOpen(false))}>
+                <div className="text-sm font-semibold text-foreground">Editar perfil</div>
+                <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => (saving ? null : setEditOpen(false))}>
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="mt-4 space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">@instagram</Label>
-                  <Input
-                    value={igForm.instagram_username}
-                    onChange={(e) => setIgForm((s) => ({ ...s, instagram_username: e.target.value }))}
-                    placeholder="@seuinstagram"
-                    className="text-sm"
-                  />
-                </div>
+              <div className="mt-4 space-y-6">
+                {/* Básico */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-widest">
+                    <UserRound className="w-4 h-4 text-primary" />
+                    Informações
+                  </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Seguidores</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={igForm.followers_count}
-                    onChange={(e) => setIgForm((s) => ({ ...s, followers_count: Number(e.target.value || 0) }))}
-                    className="text-sm"
-                  />
-                </div>
-
-                {/* ✅ agora 2 campos (feminino e masculino) */}
-                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Feminino (%)</Label>
+                    <Label className="text-xs text-muted-foreground">@instagram</Label>
                     <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={igForm.audience_female_pct}
-                      onChange={(e) => setIgForm((s) => ({ ...s, audience_female_pct: Number(e.target.value || 0) }))}
+                      value={form.instagram}
+                      onChange={(e) => setForm((s) => ({ ...s, instagram: e.target.value }))}
+                      placeholder="@seuinstagram"
                       className="text-sm"
                     />
                   </div>
+
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Masculino (%)</Label>
+                    <Label className="text-xs text-muted-foreground">Seguidores</Label>
                     <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={igForm.audience_male_pct}
-                      onChange={(e) => setIgForm((s) => ({ ...s, audience_male_pct: Number(e.target.value || 0) }))}
+                      value={form.followers}
+                      onChange={(e) => setForm((s) => ({ ...s, followers: e.target.value }))}
+                      placeholder="Ex: 12000"
+                      className="text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Bio</Label>
+                    <Input
+                      value={form.bio}
+                      onChange={(e) => setForm((s) => ({ ...s, bio: e.target.value }))}
+                      placeholder="Descreva seu conteúdo..."
+                      className="text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Bairro</Label>
+                    <Input
+                      value={form.neighborhood}
+                      onChange={(e) => setForm((s) => ({ ...s, neighborhood: e.target.value }))}
+                      placeholder="Ex: Pinheiros"
                       className="text-sm"
                     />
                   </div>
                 </div>
 
-                {/* slider opcional: controla feminino e ajusta masculino automático */}
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Ajuste rápido (Feminino)</Label>
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Feminino: {clamp(Number(igForm.audience_female_pct || 0), 0, 100)}%</span>
-                    <span>Masculino: {clamp(Number(igForm.audience_male_pct || 0), 0, 100)}%</span>
+                {/* Estilos (até 3) */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-widest">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      Estilos (até 3)
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">{form.contentStyles.length}/3</div>
                   </div>
-                  <Slider
-                    value={[clamp(Number(igForm.audience_female_pct || 0), 0, 100)]}
-                    onValueChange={(v) => {
-                      const female = clamp(v[0], 0, 100);
-                      const male = clamp(100 - female, 0, 100);
-                      setIgForm((s) => ({ ...s, audience_female_pct: female, audience_male_pct: male }));
-                    }}
-                    min={0}
-                    max={100}
-                    step={1}
-                  />
+
+                  <div className="flex flex-wrap gap-2">
+                    {stylesCatalog.map((s) => {
+                      const active = form.contentStyles.includes(s);
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => handleToggleStyle(s)}
+                          className={`text-xs px-3 py-2 rounded-full border transition ${
+                            active
+                              ? "border-primary/30 bg-primary/10 text-primary"
+                              : "border-border/50 bg-white/5 text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Região do público</Label>
-                  <Input
-                    value={igForm.audience_region}
-                    onChange={(e) => setIgForm((s) => ({ ...s, audience_region: e.target.value }))}
-                    placeholder="Ex: São Paulo - SP"
-                    className="text-sm"
-                  />
+                {/* Audiência */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-widest">
+                    <BarChart3 className="w-4 h-4 text-primary" />
+                    Audiência
+                  </div>
+
+                  {/* Gênero */}
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Gênero (masculino / feminino)</Label>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Feminino: {form.audienceGender.female}%</span>
+                      <span>Masculino: {form.audienceGender.male}%</span>
+                    </div>
+                    <Slider
+                      value={[form.audienceGender.female]}
+                      onValueChange={(v) => setAudienceFemale(v[0])}
+                      min={0}
+                      max={100}
+                      step={1}
+                    />
+                  </div>
+
+                  {/* Faixa etária fixa */}
+                  <div className="space-y-3">
+                    <Label className="text-xs text-muted-foreground">Faixa etária (0–100)</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {AGE_KEYS.map((k) => (
+                        <div key={k} className="rounded-2xl border border-border/50 bg-white/5 p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs text-muted-foreground">{k}</div>
+                            <div className="text-xs text-foreground font-medium">{form.audienceAge[k]}%</div>
+                          </div>
+                          <div className="mt-2">
+                            <Slider
+                              value={[form.audienceAge[k]]}
+                              onValueChange={(v) =>
+                                setForm((s) => ({
+                                  ...s,
+                                  audienceAge: { ...s.audienceAge, [k]: clamp(v[0], 0, 100) },
+                                }))
+                              }
+                              min={0}
+                              max={100}
+                              step={1}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      * Por enquanto editável manualmente. Futuro: integração Meta.
+                    </div>
+                  </div>
+
+                  {/* Cidades */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label className="text-xs text-muted-foreground">Principais cidades (até 6)</Label>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((s) => {
+                            if (s.audienceCities.length >= 6) return s;
+                            return { ...s, audienceCities: [...s.audienceCities, { city: "", pct: 0 }] };
+                          })
+                        }
+                        className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Adicionar
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {form.audienceCities.map((row, idx) => (
+                        <div key={idx} className="rounded-2xl border border-border/50 bg-white/5 p-3">
+                          <div className="grid grid-cols-5 gap-2 items-center">
+                            <div className="col-span-3">
+                              <Input
+                                value={row.city}
+                                onChange={(e) =>
+                                  setForm((s) => {
+                                    const next = [...s.audienceCities];
+                                    next[idx] = { ...next[idx], city: e.target.value };
+                                    return { ...s, audienceCities: next };
+                                  })
+                                }
+                                placeholder="Cidade"
+                                className="text-sm"
+                              />
+                            </div>
+                            <div className="col-span-1">
+                              <Input
+                                value={String(row.pct)}
+                                onChange={(e) =>
+                                  setForm((s) => {
+                                    const next = [...s.audienceCities];
+                                    next[idx] = { ...next[idx], pct: clamp(Number(e.target.value || 0), 0, 100) };
+                                    return { ...s, audienceCities: next };
+                                  })
+                                }
+                                placeholder="%"
+                                className="text-sm"
+                              />
+                            </div>
+                            <div className="col-span-1 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setForm((s) => ({
+                                    ...s,
+                                    audienceCities: s.audienceCities.filter((_, i) => i !== idx),
+                                  }))
+                                }
+                                className="p-2 rounded-xl border border-border/50 bg-white/5 text-muted-foreground hover:text-foreground"
+                                title="Remover"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 <button
-                  onClick={handleSaveIg}
-                  disabled={igSaving}
+                  onClick={handleSaveAll}
+                  disabled={saving}
                   className="w-full py-3 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue flex items-center justify-center gap-2 disabled:opacity-60"
                 >
-                  {igSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {igSaving ? "Salvando..." : "Salvar"}
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  {saving ? "Salvando..." : "Salvar alterações"}
                 </button>
-
-                <div className="text-xs text-muted-foreground">
-                  * Por enquanto, as métricas são informadas por você. No futuro, elas poderão ser verificadas via integração Meta.
-                </div>
               </div>
             </div>
           </div>
         )}
-
-        {ctx.error && <div className="text-xs text-muted-foreground">Erro ao carregar contexto premium: {ctx.error}</div>}
       </div>
     </MobileLayout>
   );
