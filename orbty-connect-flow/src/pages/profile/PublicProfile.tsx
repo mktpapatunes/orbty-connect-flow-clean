@@ -1,16 +1,9 @@
-// src/pages/profile/PublicProfile.tsx
-// ✅ ARQUIVO COMPLETO — perfil público premium + modo editar (somente self)
-// - Audience editável (por enquanto) com donut charts (Recharts)
-// - Audience: Cidades, Gênero, Faixa etária
-// - Selo Verificado Orbty (approval_status === "approved")
-// - Compatível com audience_gender antigo (objeto simples) e novo (objeto estruturado)
-
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
+import VerifiedBadge from "@/components/VerifiedBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { toast } from "sonner";
 import {
   ArrowLeft,
   Instagram,
@@ -19,33 +12,15 @@ import {
   Users,
   User as UserIcon,
   Sparkles,
-  BadgeCheck,
   BarChart3,
   ExternalLink,
-  Pencil,
-  Save,
-  X,
-  Plus,
-  Trash2,
   ShieldCheck,
+  Building2,
 } from "lucide-react";
 
-import {
-  PieChart,
-  Pie,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  Legend,
-} from "recharts";
+import { PieChart, Pie, ResponsiveContainer, Tooltip, Cell } from "recharts";
 
-type AudienceMap = Record<string, number>;
-
-type AudienceStructured = {
-  gender: AudienceMap | null;
-  age: AudienceMap | null;
-  cities: AudienceMap | null;
-};
+type AudienceObj = Record<string, number>;
 
 type ProfileRow = {
   id: string;
@@ -62,17 +37,17 @@ type ProfileRow = {
 
   content_style: string | null;
 
-  // no banco está como Json (usamos esse mesmo campo para armazenar o estruturado)
-  audience_gender: any | null;
+  // audiência editável (salva em profiles pelo painel)
+  audience_gender: AudienceObj | null; // { female: 60, male: 40 } (ou qualquer chave)
+  audience_age: AudienceObj | null; // { "18-24": 30, ... }
+  audience_cities: AudienceObj | null; // { "São Paulo": 40, "Rio": 20, ... }
 
   gender: string | null;
   age: number | null;
 
-  approval_status?: "pending" | "approved" | "rejected" | string;
-
-  // ⚠️ privados (só mostrar se for o próprio usuário)
-  email?: string;
-  phone?: string;
+  // opcional (se você tiver)
+  approval_status?: string | null;
+  role?: string | null;
 };
 
 const clamp = (n: number, min = 0, max = 100) => Math.max(min, Math.min(max, n));
@@ -97,127 +72,117 @@ const initials = (name?: string | null) => {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 };
 
-const sum = (obj: Record<string, number>) => Object.values(obj).reduce((a, b) => a + b, 0);
-
-const parseAudienceMap = (obj: any): AudienceMap | null => {
+const normalizeAudienceObj = (obj: any): AudienceObj | null => {
   if (!obj || typeof obj !== "object") return null;
-  const out: AudienceMap = {};
+  const out: AudienceObj = {};
   for (const [k, v] of Object.entries(obj)) {
     const num = Number(v);
-    if (!Number.isNaN(num)) out[String(k)] = num;
+    if (!Number.isNaN(num) && num >= 0) out[String(k)] = num;
   }
   return Object.keys(out).length ? out : null;
 };
 
-/**
- * Compatibilidade:
- * - Se audience_gender vier como objeto simples { feminino: 70, masculino: 30 } => assume gender
- * - Se vier como { gender: {...}, age: {...}, cities: {...} } => usa estruturado
- */
-const parseAudienceStructured = (raw: any): AudienceStructured => {
-  if (!raw || typeof raw !== "object") return { gender: null, age: null, cities: null };
+const sum = (obj: Record<string, number>) => Object.values(obj).reduce((a, b) => a + b, 0);
 
-  const hasStructuredKeys =
-    Object.prototype.hasOwnProperty.call(raw, "gender") ||
-    Object.prototype.hasOwnProperty.call(raw, "age") ||
-    Object.prototype.hasOwnProperty.call(raw, "cities");
+function toPieData(obj: AudienceObj, limit = 6) {
+  const total = sum(obj);
+  if (!total) return { total: 0, data: [] as { name: string; value: number; pct: number }[] };
 
-  if (hasStructuredKeys) {
-    return {
-      gender: parseAudienceMap(raw.gender),
-      age: parseAudienceMap(raw.age),
-      cities: parseAudienceMap(raw.cities),
-    };
+  const items = Object.entries(obj)
+    .map(([k, v]) => ({ name: k, value: Number(v), pct: clamp((Number(v) / total) * 100) }))
+    .sort((a, b) => b.pct - a.pct);
+
+  const head = items.slice(0, limit);
+  const rest = items.slice(limit);
+
+  if (rest.length) {
+    const restPct = rest.reduce((acc, x) => acc + x.pct, 0);
+    head.push({ name: "Outros", value: rest.reduce((acc, x) => acc + x.value, 0), pct: clamp(restPct) });
   }
 
-  // fallback: formato antigo = mapa simples => trata como gender
-  return {
-    gender: parseAudienceMap(raw),
-    age: null,
-    cities: null,
-  };
-};
+  return { total, data: head };
+}
 
-const toPieData = (m: AudienceMap, maxItems = 6) => {
-  const total = sum(m);
-  if (!total) return [];
-  const items = Object.entries(m)
-    .map(([name, value]) => ({ name, value: Number(value) || 0 }))
-    .filter((x) => x.value > 0)
-    .sort((a, b) => b.value - a.value);
+function prettifyGenderKey(k: string) {
+  const n = (k || "").toLowerCase();
+  if (n === "female" || n === "feminino" || n === "women") return "Feminino";
+  if (n === "male" || n === "masculino" || n === "men") return "Masculino";
+  return k;
+}
 
-  const head = items.slice(0, maxItems);
-  const tail = items.slice(maxItems);
-  const other = tail.reduce((acc, cur) => acc + cur.value, 0);
+function contentStylesArray(raw?: string | null) {
+  const s = (raw || "").trim();
+  if (!s) return [];
+  return s
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
 
-  if (other > 0) head.push({ name: "Outros", value: other });
-
-  return head;
-};
-
-// paleta simples com CSS vars (fica ok em tema escuro/claro)
-const PIE_COLORS = [
-  "hsl(var(--primary))",
-  "hsl(var(--accent))",
-  "hsl(var(--secondary))",
-  "hsl(var(--muted-foreground))",
-  "hsl(var(--ring))",
-  "hsl(var(--border))",
-  "hsl(var(--primary) / 0.6)",
-  "hsl(var(--accent) / 0.6)",
-];
-
-const CONTENT_STYLE_OPTIONS = [
-  "Lifestyle",
-  "Moda",
-  "Beleza",
-  "Fitness",
-  "Gastronomia",
-  "Viagem",
-  "Tecnologia",
-  "Maternidade",
-  "Pets",
-  "Música",
-  "Humor",
-  "Negócios",
-  "Educação",
-  "Games",
-  "Fotografia",
-  "Skincare",
-  "Decoração",
-  "Esportes",
-];
-
-type AudienceKey = "cities" | "gender" | "age";
-
-const labelForAudienceKey = (k: AudienceKey) => {
-  if (k === "cities") return "Principais cidades";
-  if (k === "gender") return "Gênero";
-  return "Faixa etária";
-};
-
-const placeholderKeyForAudience = (k: AudienceKey) => {
-  if (k === "cities") return "Ex: São Paulo";
-  if (k === "gender") return "Ex: Feminino";
-  return "Ex: 18–24";
-};
+function openExternal(url: string) {
+  window.open(url, "_blank", "noopener,noreferrer");
+}
 
 const PublicProfile = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, userRole, approvalStatus } = useAuth();
 
   const isSelf = !!user?.id && !!id && user.id === id;
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
   const [profile, setProfile] = useState<ProfileRow | null>(null);
 
-  // edição
-  const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState<ProfileRow | null>(null);
-  const [audDraft, setAudDraft] = useState<AudienceStructured>({ gender: null, age: null, cities: null });
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchProfile = async () => {
+      if (!id) {
+        setLoading(false);
+        setProfile(null);
+        return;
+      }
+
+      setLoading(true);
+
+      // ✅ Campos públicos (+ alguns extras caso existam)
+      const select =
+        "id, name, city, state, neighborhood, bio, avatar_url, instagram, followers, content_style, audience_gender, audience_age, audience_cities, gender, age, approval_status, role";
+
+      const { data, error } = await supabase.from("profiles").select(select).eq("id", id).maybeSingle();
+
+      if (!mounted) return;
+
+      if (error) {
+        console.error("PUBLIC_PROFILE_FETCH_ERROR", error);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
+      const row = (data as any) ?? null;
+      if (!row) {
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
+      setProfile({
+        ...row,
+        audience_gender: normalizeAudienceObj(row.audience_gender),
+        audience_age: normalizeAudienceObj(row.audience_age),
+        audience_cities: normalizeAudienceObj(row.audience_cities),
+      });
+
+      setLoading(false);
+    };
+
+    fetchProfile();
+
+    return () => {
+      mounted = false;
+    };
+  }, [id]);
 
   const igHandle = useMemo(() => normalizeInstagram(profile?.instagram), [profile?.instagram]);
   const followers = useMemo(() => formatFollowers(profile?.followers), [profile?.followers]);
@@ -229,357 +194,87 @@ const PublicProfile = () => {
     return base;
   }, [profile]);
 
-  const isVerifiedOrbty = useMemo(() => {
-    const s = (profile as any)?.approval_status;
-    return String(s) === "approved";
-  }, [profile]);
+  // ✅ verificado (prioridade: auth self / fallback: approval_status da tabela)
+  const isVerified = useMemo(() => {
+    if (isSelf && userRole === "influencer") return approvalStatus === "approved";
+    const st = String((profile as any)?.approval_status ?? "").toLowerCase();
+    return st === "approved";
+  }, [isSelf, userRole, approvalStatus, profile]);
+
+  const styles = useMemo(() => contentStylesArray(profile?.content_style), [profile?.content_style]);
 
   const openInstagram = () => {
-    const handle = isEditing ? normalizeInstagram(draft?.instagram) : igHandle;
-    if (!handle) return;
-    window.open(`https://www.instagram.com/${handle}`, "_blank", "noopener,noreferrer");
+    if (!igHandle) return;
+    openExternal(`https://www.instagram.com/${igHandle}`);
   };
 
   const openMaps = () => {
-    const p = isEditing ? draft : profile;
-    if (!p) return;
-    const base = `${p.city}, ${p.state}`;
-    const loc = p.neighborhood ? `${p.neighborhood} · ${base}` : base;
-    const q = encodeURIComponent(loc);
-    window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
-  };
-
-  const audienceStructured = useMemo(() => parseAudienceStructured(profile?.audience_gender), [profile?.audience_gender]);
-
-  const audiencePies = useMemo(() => {
-    const src = isEditing ? audDraft : audienceStructured;
-
-    const mk = (m: AudienceMap | null) => {
-      if (!m) return null;
-      const total = sum(m);
-      if (total <= 0) return null;
-      return { total, data: toPieData(m, 6) };
-    };
-
-    return {
-      cities: mk(src.cities || null),
-      gender: mk(src.gender || null),
-      age: mk(src.age || null),
-    };
-  }, [audienceStructured, isEditing, audDraft]);
-
-  const fetchProfile = useCallback(async () => {
-    if (!id) {
-      setLoading(false);
-      setProfile(null);
-      return;
-    }
-
-    setLoading(true);
-
-    // ✅ Campos públicos (e privados só se for o próprio usuário)
-    const baseSelect =
-      "id, name, city, state, neighborhood, bio, avatar_url, instagram, followers, content_style, audience_gender, gender, age, approval_status";
-    const selfExtra = ", email, phone";
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(isSelf ? baseSelect + selfExtra : baseSelect)
-      .eq("id", id)
-      .maybeSingle();
-
-    if (error) {
-      console.error("PUBLIC_PROFILE_FETCH_ERROR", error);
-      setProfile(null);
-      setLoading(false);
-      return;
-    }
-
-    const row = (data as any) ?? null;
-    setProfile(row);
-    setLoading(false);
-  }, [id, isSelf]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    (async () => {
-      if (!mounted) return;
-      await fetchProfile();
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [fetchProfile]);
-
-  const startEdit = () => {
     if (!profile) return;
-    setDraft({ ...profile });
-    setAudDraft(parseAudienceStructured(profile.audience_gender));
-    setIsEditing(true);
+    const q = encodeURIComponent(locationLabel || `${profile.city}, ${profile.state}`);
+    openExternal(`https://www.google.com/maps/search/?api=1&query=${q}`);
   };
 
-  const cancelEdit = () => {
-    setIsEditing(false);
-    setDraft(null);
-    setAudDraft({ gender: null, age: null, cities: null });
-  };
+  const genderPie = useMemo(() => {
+    const ag = profile?.audience_gender;
+    if (!ag) return null;
 
-  const updateDraft = <K extends keyof ProfileRow>(key: K, value: ProfileRow[K]) => {
-    setDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
-  };
+    // normaliza nomes bonitos
+    const mapped: AudienceObj = {};
+    for (const [k, v] of Object.entries(ag)) mapped[prettifyGenderKey(k)] = Number(v);
 
-  const updateAudienceItem = (section: AudienceKey, key: string, value: number) => {
-    setAudDraft((prev) => {
-      const current = prev[section] ? { ...(prev[section] as AudienceMap) } : {};
-      if (!key.trim()) return prev;
-      current[key.trim()] = Number.isFinite(value) ? value : 0;
-      return { ...prev, [section]: current };
-    });
-  };
+    const { data } = toPieData(mapped, 4);
+    return data.length ? data : null;
+  }, [profile?.audience_gender]);
 
-  const removeAudienceItem = (section: AudienceKey, key: string) => {
-    setAudDraft((prev) => {
-      const current = prev[section] ? { ...(prev[section] as AudienceMap) } : {};
-      delete current[key];
-      return { ...prev, [section]: Object.keys(current).length ? current : null };
-    });
-  };
+  const agePie = useMemo(() => {
+    const aa = profile?.audience_age;
+    if (!aa) return null;
+    const { data } = toPieData(aa, 6);
+    return data.length ? data : null;
+  }, [profile?.audience_age]);
 
-  const addAudienceEmpty = (section: AudienceKey) => {
-    // adiciona um placeholder editável
-    const placeholderKey = placeholderKeyForAudience(section);
-    setAudDraft((prev) => {
-      const current = prev[section] ? { ...(prev[section] as AudienceMap) } : {};
-      let k = placeholderKey;
-      let i = 2;
-      while (Object.prototype.hasOwnProperty.call(current, k)) {
-        k = `${placeholderKey} ${i++}`;
-      }
-      current[k] = 0;
-      return { ...prev, [section]: current };
-    });
-  };
+  const topCities = useMemo(() => {
+    const ac = profile?.audience_cities;
+    if (!ac) return null;
 
-  const saveProfile = async () => {
-    if (!draft || !id) return;
+    const total = sum(ac);
+    if (!total) return null;
 
-    if (!draft.name?.trim()) {
-      toast.error("Nome é obrigatório.");
-      return;
-    }
-    if (!draft.city?.trim() || !draft.state?.trim()) {
-      toast.error("Cidade e Estado são obrigatórios.");
-      return;
-    }
+    return Object.entries(ac)
+      .map(([k, v]) => ({ name: k, pct: clamp((Number(v) / total) * 100) }))
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, 6);
+  }, [profile?.audience_cities]);
 
-    setSaving(true);
-    try {
-      // grava audiência estruturada no mesmo campo audience_gender (Json)
-      const audience_payload = {
-        gender: audDraft.gender ?? null,
-        age: audDraft.age ?? null,
-        cities: audDraft.cities ?? null,
-      };
-
-      const payload: any = {
-        name: draft.name.trim(),
-        city: draft.city.trim(),
-        state: draft.state.trim(),
-        neighborhood: (draft.neighborhood || "").trim() || null,
-        bio: (draft.bio || "").trim() || null,
-        avatar_url: (draft.avatar_url || "").trim() || null,
-        instagram: (draft.instagram || "").trim() || null,
-        followers: (draft.followers || "").trim() || null,
-        content_style: draft.content_style || null,
-        gender: draft.gender || null,
-        age: typeof draft.age === "number" ? draft.age : draft.age ? Number(draft.age) : null,
-        audience_gender: audience_payload,
-      };
-
-      // privados: só atualiza se self
-      if (isSelf) {
-        payload.email = (draft.email || "").trim() || payload.email;
-        payload.phone = (draft.phone || "").trim() || payload.phone;
-      }
-
-      const { error } = await supabase.from("profiles").update(payload).eq("id", id);
-
-      if (error) {
-        console.error("PUBLIC_PROFILE_SAVE_ERROR", error);
-        toast.error("Erro ao salvar perfil.");
-        return;
-      }
-
-      toast.success("Perfil atualizado!");
-      setIsEditing(false);
-      setDraft(null);
-      await fetchProfile();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const renderDonut = (title: string, pie: { total: number; data: { name: string; value: number }[] } | null) => {
-    return (
-      <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
-        <div className="flex items-center justify-between gap-3 mb-2">
-          <p className="text-xs text-muted-foreground uppercase tracking-widest">{title}</p>
-          <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-            {pie ? `${pie.total}` : "—"}
-          </span>
-        </div>
-
-        {!pie ? (
-          <p className="text-sm text-muted-foreground">Sem dados.</p>
-        ) : (
-          <div className="h-44">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pie.data}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius={48}
-                  outerRadius={70}
-                  paddingAngle={2}
-                >
-                  {pie.data.map((_, idx) => (
-                    <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderAudienceEditor = (section: AudienceKey) => {
-    const map = (audDraft[section] || {}) as AudienceMap;
-
-    const entries = Object.entries(map);
-    const has = entries.length > 0;
-
-    return (
-      <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground uppercase tracking-widest">{labelForAudienceKey(section)}</p>
-
-          <button
-            type="button"
-            onClick={() => addAudienceEmpty(section)}
-            className="inline-flex items-center gap-2 text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition"
-          >
-            <Plus className="w-4 h-4" />
-            Adicionar
-          </button>
-        </div>
-
-        {!has ? (
-          <p className="mt-3 text-sm text-muted-foreground">
-            Sem dados. Clique em <b>Adicionar</b> para preencher (temporário até integração Meta).
-          </p>
-        ) : (
-          <div className="mt-3 space-y-2">
-            {entries.map(([k, v]) => (
-              <div key={k} className="flex items-center gap-2">
-                <input
-                  value={k}
-                  onChange={(e) => {
-                    const newKey = e.target.value;
-                    // rename key: remove old add new
-                    setAudDraft((prev) => {
-                      const current = prev[section] ? { ...(prev[section] as AudienceMap) } : {};
-                      const val = current[k];
-                      delete current[k];
-                      if (newKey.trim()) current[newKey.trim()] = val ?? 0;
-                      return { ...prev, [section]: Object.keys(current).length ? current : null };
-                    });
-                  }}
-                  className="flex-1 rounded-xl border border-border/50 bg-background/40 px-3 py-2 text-sm text-foreground focus:outline-none"
-                  placeholder={placeholderKeyForAudience(section)}
-                />
-                <input
-                  type="number"
-                  value={Number(v)}
-                  onChange={(e) => updateAudienceItem(section, k, Number(e.target.value))}
-                  className="w-24 rounded-xl border border-border/50 bg-background/40 px-3 py-2 text-sm text-foreground focus:outline-none"
-                  placeholder="0"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeAudienceItem(section, k)}
-                  className="rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition p-2 text-muted-foreground hover:text-foreground"
-                  title="Remover"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-            <p className="text-[11px] text-muted-foreground mt-2">
-              Dica: preencha valores absolutos (ex.: 1200) ou percentuais (ex.: 65). O gráfico mostra proporção.
-            </p>
-          </div>
-        )}
-      </div>
-    );
-  };
+  // paleta por CSS vars (fica alinhado ao tema)
+  const PIE_COLORS = [
+    "hsl(var(--primary))",
+    "hsl(var(--accent))",
+    "hsl(var(--secondary))",
+    "hsl(var(--muted-foreground))",
+    "hsl(var(--destructive))",
+    "hsl(var(--foreground))",
+  ];
 
   return (
-    <MobileLayout title="Perfil" showBack backTo="#" navType="contractor" showNav={false} showHome={false}>
+    <MobileLayout
+      title="Perfil público"
+      showBack
+      backTo="#"
+      navType="contractor"
+      showNav={false}
+      showHome={false}
+    >
       <div className="px-6 py-6 space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Voltar
-          </button>
-
-          {/* ✅ CTA editar (somente self) */}
-          {isSelf && !loading && profile && !isEditing && (
-            <button
-              type="button"
-              onClick={startEdit}
-              className="inline-flex items-center gap-2 text-xs px-3 py-2 rounded-xl border border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 transition"
-              title="Editar perfil"
-            >
-              <Pencil className="w-4 h-4" />
-              Editar
-            </button>
-          )}
-
-          {/* ✅ Ações de edição */}
-          {isSelf && isEditing && (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={cancelEdit}
-                disabled={saving}
-                className="inline-flex items-center gap-2 text-xs px-3 py-2 rounded-xl border border-border/50 bg-card/60 hover:bg-card/80 transition disabled:opacity-60"
-              >
-                <X className="w-4 h-4" />
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={saveProfile}
-                disabled={saving}
-                className="inline-flex items-center gap-2 text-xs px-3 py-2 rounded-xl border border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 transition disabled:opacity-60"
-              >
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Salvar
-              </button>
-            </div>
-          )}
-        </div>
+        {/* Voltar (extra, além do showBack) */}
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Voltar
+        </button>
 
         {loading ? (
           <div className="flex justify-center py-16">
@@ -592,99 +287,53 @@ const PublicProfile = () => {
         ) : (
           <>
             {/* =========================
-               HERO / HEADER
+               HERO / HEADER (premium)
             ========================= */}
             <div className="glass-card p-4">
               <div className="flex items-start gap-3">
-                <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 overflow-hidden flex items-center justify-center shrink-0">
-                  {(isEditing ? draft?.avatar_url : profile.avatar_url) ? (
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 overflow-hidden flex items-center justify-center shrink-0">
+                  {profile.avatar_url ? (
                     <img
-                      src={(isEditing ? draft?.avatar_url : profile.avatar_url) as string}
-                      alt={isEditing ? draft?.name || "" : profile.name}
+                      src={profile.avatar_url}
+                      alt={profile.name}
                       className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <span className="text-primary font-bold">
-                      {initials(isEditing ? draft?.name : profile.name)}
-                    </span>
+                    <span className="text-primary font-bold">{initials(profile.name)}</span>
                   )}
                 </div>
 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    {!isEditing ? (
-                      <h2 className="text-lg font-bold text-foreground truncate">{profile.name}</h2>
-                    ) : (
-                      <input
-                        value={draft?.name ?? ""}
-                        onChange={(e) => updateDraft("name", e.target.value)}
-                        className="w-full rounded-xl border border-border/50 bg-background/40 px-3 py-2 text-sm text-foreground focus:outline-none"
-                        placeholder="Seu nome"
-                      />
-                    )}
+                    <h2 className="text-lg font-bold text-foreground truncate">{profile.name}</h2>
 
-                    {/* ✅ Selo verificado Orbty */}
-                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground inline-flex items-center gap-1">
-                      {isVerifiedOrbty ? (
-                        <>
-                          <ShieldCheck className="w-3 h-3 text-primary" />
-                          Verificado Orbty
-                        </>
-                      ) : (
-                        <>
-                          <BadgeCheck className="w-3 h-3" />
-                          Perfil público
-                        </>
-                      )}
-                    </span>
+                    {isVerified ? (
+                      <span className="inline-flex items-center gap-2 text-[10px] px-2 py-0.5 rounded-full border border-primary/25 bg-primary/10 text-primary">
+                        <ShieldCheck className="w-3 h-3" />
+                        Verificado Orbty
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-2 text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
+                        <UserIcon className="w-3 h-3" />
+                        Perfil público
+                      </span>
+                    )}
                   </div>
 
-                  <div className="mt-2 text-xs text-muted-foreground inline-flex items-center gap-1 w-full">
+                  <div className="mt-1 text-xs text-muted-foreground inline-flex items-center gap-1 min-w-0">
                     <MapPin className="w-3.5 h-3.5 shrink-0" />
-                    {!isEditing ? (
-                      <span className="truncate">{locationLabel}</span>
-                    ) : (
-                      <div className="flex-1 grid grid-cols-2 gap-2">
-                        <input
-                          value={draft?.city ?? ""}
-                          onChange={(e) => updateDraft("city", e.target.value)}
-                          className="rounded-xl border border-border/50 bg-background/40 px-3 py-2 text-sm text-foreground focus:outline-none"
-                          placeholder="Cidade"
-                        />
-                        <input
-                          value={draft?.state ?? ""}
-                          onChange={(e) => updateDraft("state", e.target.value)}
-                          className="rounded-xl border border-border/50 bg-background/40 px-3 py-2 text-sm text-foreground focus:outline-none"
-                          placeholder="UF"
-                        />
-                        <input
-                          value={draft?.neighborhood ?? ""}
-                          onChange={(e) => updateDraft("neighborhood", e.target.value)}
-                          className="col-span-2 rounded-xl border border-border/50 bg-background/40 px-3 py-2 text-sm text-foreground focus:outline-none"
-                          placeholder="Bairro (opcional)"
-                        />
-                      </div>
-                    )}
+                    <span className="truncate">{locationLabel}</span>
                   </div>
 
-                  {!isEditing ? (
-                    profile.bio ? (
-                      <p className="mt-3 text-sm text-foreground/75 leading-relaxed">{profile.bio}</p>
-                    ) : null
-                  ) : (
-                    <div className="mt-3 space-y-2">
-                      <textarea
-                        value={draft?.bio ?? ""}
-                        onChange={(e) => updateDraft("bio", e.target.value)}
-                        className="w-full min-h-[84px] rounded-xl border border-border/50 bg-background/40 px-3 py-2 text-sm text-foreground focus:outline-none"
-                        placeholder="Bio (opcional)"
-                      />
-                      <input
-                        value={draft?.avatar_url ?? ""}
-                        onChange={(e) => updateDraft("avatar_url", e.target.value)}
-                        className="w-full rounded-xl border border-border/50 bg-background/40 px-3 py-2 text-sm text-foreground focus:outline-none"
-                        placeholder="URL do avatar (opcional)"
-                      />
+                  {profile.bio && (
+                    <p className="mt-3 text-sm text-foreground/75 leading-relaxed">{profile.bio}</p>
+                  )}
+
+                  {/* (Opcional) Se quiser o badge real do componente */}
+                  {isVerified && (
+                    <div className="mt-3">
+                      <VerifiedBadge size="sm" />
                     </div>
                   )}
                 </div>
@@ -692,17 +341,15 @@ const PublicProfile = () => {
             </div>
 
             {/* =========================
-               QUICK CARDS (clicáveis)
+               QUICK CARDS (100% clicáveis)
             ========================= */}
             <div className="grid grid-cols-3 gap-3">
               <button
                 type="button"
                 onClick={openInstagram}
-                disabled={!normalizeInstagram(isEditing ? draft?.instagram : profile.instagram)}
+                disabled={!igHandle}
                 className={`rounded-2xl border p-3 text-left transition ${
-                  normalizeInstagram(isEditing ? draft?.instagram : profile.instagram)
-                    ? "border-border/50 bg-card/60 hover:bg-card/80"
-                    : "border-border/30 bg-card/40 opacity-70"
+                  igHandle ? "border-border/50 bg-card/60 hover:bg-card/80" : "border-border/30 bg-card/40 opacity-70"
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -710,16 +357,7 @@ const PublicProfile = () => {
                   <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
                 </div>
                 <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Instagram</p>
-                {!isEditing ? (
-                  <p className="text-sm font-semibold text-foreground truncate">{igHandle ? `@${igHandle}` : "—"}</p>
-                ) : (
-                  <input
-                    value={draft?.instagram ?? ""}
-                    onChange={(e) => updateDraft("instagram", e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-border/50 bg-background/40 px-2 py-1.5 text-sm text-foreground focus:outline-none"
-                    placeholder="@usuario"
-                  />
-                )}
+                <p className="text-sm font-semibold text-foreground truncate">{igHandle ? `@${igHandle}` : "—"}</p>
               </button>
 
               <button
@@ -732,9 +370,7 @@ const PublicProfile = () => {
                   <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
                 </div>
                 <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Localização</p>
-                <p className="text-sm font-semibold text-foreground truncate">
-                  {(isEditing ? draft?.city : profile.city) || "—"}
-                </p>
+                <p className="text-sm font-semibold text-foreground truncate">{profile.city}</p>
               </button>
 
               <div className="rounded-2xl border border-border/50 bg-card/60 p-3 text-left">
@@ -745,170 +381,193 @@ const PublicProfile = () => {
                   </span>
                 </div>
                 <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Seguidores</p>
-                {!isEditing ? (
-                  <p className="text-sm font-semibold text-foreground truncate">{followers || "—"}</p>
-                ) : (
-                  <input
-                    value={draft?.followers ?? ""}
-                    onChange={(e) => updateDraft("followers", e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-border/50 bg-background/40 px-2 py-1.5 text-sm text-foreground focus:outline-none"
-                    placeholder="Ex: 12.5k"
-                  />
-                )}
+                <p className="text-sm font-semibold text-foreground truncate">{followers || "—"}</p>
               </div>
             </div>
 
             {/* =========================
-               INFO + (privado self)
-            ========================= */}
-            <div className="glass-card p-4 space-y-4">
-              <div className="flex items-center gap-2">
-                <UserIcon className="w-4 h-4 text-primary" />
-                <p className="text-xs text-muted-foreground uppercase tracking-widest">Informações</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-border/50 bg-card/60 p-3">
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Gênero</p>
-                  {!isEditing ? (
-                    <p className="text-sm font-semibold text-foreground">{profile.gender || "—"}</p>
-                  ) : (
-                    <input
-                      value={draft?.gender ?? ""}
-                      onChange={(e) => updateDraft("gender", e.target.value)}
-                      className="mt-1 w-full rounded-xl border border-border/50 bg-background/40 px-2 py-1.5 text-sm text-foreground focus:outline-none"
-                      placeholder="Ex: Feminino"
-                    />
-                  )}
-                </div>
-
-                <div className="rounded-2xl border border-border/50 bg-card/60 p-3">
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Idade</p>
-                  {!isEditing ? (
-                    <p className="text-sm font-semibold text-foreground">{profile.age ?? "—"}</p>
-                  ) : (
-                    <input
-                      type="number"
-                      value={draft?.age ?? ""}
-                      onChange={(e) => updateDraft("age", e.target.value as any)}
-                      className="mt-1 w-full rounded-xl border border-border/50 bg-background/40 px-2 py-1.5 text-sm text-foreground focus:outline-none"
-                      placeholder="Ex: 24"
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* ⚠️ Privado — só se for o próprio usuário */}
-              {isSelf && (
-                <div className="rounded-2xl border border-border/50 bg-card/60 p-3">
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Seus contatos (privado)</p>
-                  {!isEditing ? (
-                    <p className="text-sm text-foreground/80 mt-1">
-                      {profile.email ? <span className="block">Email: {profile.email}</span> : null}
-                      {profile.phone ? <span className="block">Telefone: {profile.phone}</span> : null}
-                      {!profile.email && !profile.phone ? "—" : null}
-                    </p>
-                  ) : (
-                    <div className="mt-2 grid grid-cols-1 gap-2">
-                      <input
-                        value={draft?.email ?? ""}
-                        onChange={(e) => updateDraft("email", e.target.value)}
-                        className="w-full rounded-xl border border-border/50 bg-background/40 px-3 py-2 text-sm text-foreground focus:outline-none"
-                        placeholder="Email (privado)"
-                      />
-                      <input
-                        value={draft?.phone ?? ""}
-                        onChange={(e) => updateDraft("phone", e.target.value)}
-                        className="w-full rounded-xl border border-border/50 bg-background/40 px-3 py-2 text-sm text-foreground focus:outline-none"
-                        placeholder="Telefone (privado)"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* =========================
-               ESTILO DE CONTEÚDO (categorias)
+               ESTILOS (chips)
             ========================= */}
             <div className="glass-card p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className="w-4 h-4 text-primary" />
-                <p className="text-xs text-muted-foreground uppercase tracking-widest">Estilo de conteúdo</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-widest">Estilos</p>
               </div>
 
-              {!isEditing ? (
-                profile.content_style ? (
-                  <div className="inline-flex items-center gap-2 text-xs px-3 py-2 rounded-full border border-border/50 bg-card/60 text-foreground">
-                    {profile.content_style}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Não informado.</p>
-                )
-              ) : (
-                <div className="grid grid-cols-1 gap-2">
-                  <select
-                    value={draft?.content_style ?? ""}
-                    onChange={(e) => updateDraft("content_style", e.target.value || null)}
-                    className="w-full rounded-xl border border-border/50 bg-background/40 px-3 py-2 text-sm text-foreground focus:outline-none"
-                  >
-                    <option value="">Selecione uma categoria</option>
-                    {CONTENT_STYLE_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
-
-                  <p className="text-[11px] text-muted-foreground">
-                    (Você pode expandir a lista quando quiser. Por enquanto mantive 1 categoria por perfil para bater com o campo
-                    `content_style` como string.)
-                  </p>
+              {styles.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {styles.slice(0, 6).map((s) => (
+                    <span
+                      key={s}
+                      className="inline-flex items-center gap-2 text-xs px-3 py-2 rounded-full border border-border/50 bg-card/60 text-foreground"
+                    >
+                      {s}
+                    </span>
+                  ))}
                 </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Não informado.</p>
               )}
             </div>
 
             {/* =========================
-               AUDIÊNCIA (somente público) + edição (self)
+               AUDIÊNCIA (somente no público)
+               Donuts/pizza + top cidades
             ========================= */}
             <div className="glass-card p-4 space-y-4">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-primary" />
-                <div className="flex-1">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-primary" />
                   <p className="text-xs text-muted-foreground uppercase tracking-widest">Audiência</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {isSelf
-                      ? "Editável por enquanto (até integrar com Meta)."
-                      : "Principais insights do público deste creator."}
-                  </p>
                 </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-                  apenas público
+                <span className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
+                  dados declarados
                 </span>
               </div>
 
-              {/* Donuts */}
-              <div className="grid grid-cols-1 gap-3">
-                {renderDonut("Cidades", audiencePies.cities)}
-                {renderDonut("Gênero", audiencePies.gender)}
-                {renderDonut("Faixa etária", audiencePies.age)}
+              {!genderPie && !agePie && !topCities ? (
+                <p className="text-sm text-muted-foreground">Sem dados de audiência por enquanto.</p>
+              ) : (
+                <div className="space-y-4">
+                  {/* Donuts */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Gênero */}
+                    <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Gênero</p>
+
+                      {genderPie ? (
+                        <div className="h-44">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={genderPie}
+                                dataKey="pct"
+                                nameKey="name"
+                                innerRadius={42}
+                                outerRadius={62}
+                                paddingAngle={2}
+                              >
+                                {genderPie.map((_, i) => (
+                                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                formatter={(value: any, name: any) => [`${Number(value).toFixed(0)}%`, name]}
+                                contentStyle={{
+                                  background: "rgba(0,0,0,0.8)",
+                                  border: "1px solid rgba(255,255,255,0.08)",
+                                  borderRadius: 12,
+                                  color: "white",
+                                }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Não informado.</p>
+                      )}
+
+                      {genderPie && (
+                        <div className="mt-2 space-y-1">
+                          {genderPie.map((it, idx) => (
+                            <div key={it.name} className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">{it.name}</span>
+                              <span className="text-foreground font-medium">{it.pct.toFixed(0)}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Idade */}
+                    <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Faixa etária</p>
+
+                      {agePie ? (
+                        <div className="h-44">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={agePie}
+                                dataKey="pct"
+                                nameKey="name"
+                                innerRadius={42}
+                                outerRadius={62}
+                                paddingAngle={2}
+                              >
+                                {agePie.map((_, i) => (
+                                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                formatter={(value: any, name: any) => [`${Number(value).toFixed(0)}%`, name]}
+                                contentStyle={{
+                                  background: "rgba(0,0,0,0.8)",
+                                  border: "1px solid rgba(255,255,255,0.08)",
+                                  borderRadius: 12,
+                                  color: "white",
+                                }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Não informado.</p>
+                      )}
+
+                      {agePie && (
+                        <div className="mt-2 space-y-1">
+                          {agePie.slice(0, 4).map((it) => (
+                            <div key={it.name} className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">{it.name}</span>
+                              <span className="text-foreground font-medium">{it.pct.toFixed(0)}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Top cidades */}
+                  <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Principais localizações</p>
+                      <span className="text-[10px] text-muted-foreground">Top cidades</span>
+                    </div>
+
+                    {!topCities ? (
+                      <p className="text-sm text-muted-foreground mt-2">Não informado.</p>
+                    ) : (
+                      <div className="mt-3 space-y-2">
+                        {topCities.map((c) => (
+                          <div key={c.name} className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-foreground font-medium truncate">{c.name}</span>
+                              <span className="text-muted-foreground">{c.pct.toFixed(0)}%</span>
+                            </div>
+                            <div className="h-2 rounded-full bg-border/40 overflow-hidden">
+                              <div className="h-full rounded-full bg-primary/60" style={{ width: `${clamp(c.pct)}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* (Opcional) bloco confiança / credibilidade */}
+            <div className="glass-card p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Building2 className="w-4 h-4 text-primary" />
+                <h4 className="font-semibold text-foreground text-sm">Credibilidade</h4>
               </div>
-
-              {/* Editor (somente self + edit mode) */}
-              {isSelf && isEditing && (
-                <div className="space-y-3">
-                  {renderAudienceEditor("cities")}
-                  {renderAudienceEditor("gender")}
-                  {renderAudienceEditor("age")}
-                </div>
-              )}
-
-              {/* Hint quando vazio */}
-              {!isEditing && !audiencePies.cities && !audiencePies.gender && !audiencePies.age && (
-                <div className="rounded-2xl border border-border/50 bg-card/60 p-3 text-sm text-muted-foreground">
-                  Ainda não há dados de audiência. {isSelf ? "Clique em Editar para preencher temporariamente." : null}
-                </div>
-              )}
+              <p className="text-sm text-muted-foreground">
+                {isVerified
+                  ? "Este creator foi verificado pela Orbty."
+                  : "Creator ainda não verificado pela Orbty (verificação em andamento)."}
+              </p>
             </div>
           </>
         )}

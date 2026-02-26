@@ -1,9 +1,8 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import MobileLayout from "@/components/MobileLayout";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMyProfileContext } from "@/hooks/useMyProfileContext";
-import { updateMyInstagramStats } from "@/services/profile";
 import { updateMyAvatarWithUpload } from "@/services/profileAvatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -20,13 +19,11 @@ import {
   Eye,
   Pencil,
   BarChart3,
-  Plus,
-  Trash2,
+  User as UserIcon,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { useNavigate } from "react-router-dom";
 
 function GlassCard(props: { children: React.ReactNode; className?: string }) {
@@ -44,6 +41,32 @@ function MetricCard(props: { label: string; value: React.ReactNode; icon?: React
     </div>
   );
 }
+
+type AudienceObj = Record<string, number>;
+
+const AGE_BUCKETS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"] as const;
+
+const CONTENT_STYLES = [
+  "Lifestyle",
+  "Moda",
+  "Beleza",
+  "Fitness",
+  "Saúde",
+  "Alimentação",
+  "Gastronomia",
+  "Viagem",
+  "Maternidade",
+  "Negócios",
+  "Tecnologia",
+  "Games",
+  "Entretenimento",
+  "Humor",
+  "Educação",
+  "Fotografia",
+  "Esportes",
+  "Pets",
+  "Arte",
+] as const;
 
 function buildInstagramLinks(handle?: string | null) {
   const raw = (handle || "").trim().replace(/^@/, "");
@@ -72,89 +95,51 @@ function openInstagram(handle?: string | null) {
   }
 }
 
-/** ---------------------------
- *  Audience helpers (SYNC)
- *  Campo usado: profiles.audience_gender (Json)
- *  Novo formato:
- *  { gender: {...}, age: {...}, cities: {...} }
- *  Compatível com legado: { female: 60, male: 40 } ou { Feminino: 60, Masculino: 40 }
- * --------------------------- */
+function safeNum(v: any, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
 
-type AudienceMap = Record<string, number>;
-type AudienceStructured = { gender: AudienceMap | null; age: AudienceMap | null; cities: AudienceMap | null };
-
-const parseAudienceMap = (obj: any): AudienceMap | null => {
-  if (!obj || typeof obj !== "object") return null;
-  const out: AudienceMap = {};
+function normalizeAudienceObj(obj: any): AudienceObj {
+  if (!obj || typeof obj !== "object") return {};
+  const out: AudienceObj = {};
   for (const [k, v] of Object.entries(obj)) {
-    const num = Number(v);
-    if (!Number.isNaN(num)) out[String(k)] = num;
+    const n = Number(v);
+    if (Number.isFinite(n) && n >= 0) out[String(k)] = n;
   }
-  return Object.keys(out).length ? out : null;
-};
+  return out;
+}
 
-const parseAudienceStructured = (raw: any): AudienceStructured => {
-  if (!raw || typeof raw !== "object") return { gender: null, age: null, cities: null };
+function clamp(n: number, min = 0, max = 100) {
+  return Math.max(min, Math.min(max, n));
+}
 
-  const hasStructured =
-    Object.prototype.hasOwnProperty.call(raw, "gender") ||
-    Object.prototype.hasOwnProperty.call(raw, "age") ||
-    Object.prototype.hasOwnProperty.call(raw, "cities");
+function sumObj(obj: AudienceObj) {
+  return Object.values(obj).reduce((a, b) => a + b, 0);
+}
 
-  if (hasStructured) {
-    return {
-      gender: parseAudienceMap((raw as any).gender),
-      age: parseAudienceMap((raw as any).age),
-      cities: parseAudienceMap((raw as any).cities),
-    };
-  }
+/**
+ * Normaliza para % quando o usuário preenche qualquer coisa
+ * - se soma 0 -> retorna tudo 0
+ * - caso contrário, escala para 100 mantendo proporções
+ */
+function normalizeTo100(obj: AudienceObj): AudienceObj {
+  const cleaned: AudienceObj = {};
+  for (const [k, v] of Object.entries(obj)) cleaned[k] = Math.max(0, safeNum(v, 0));
+  const total = sumObj(cleaned);
+  if (total <= 0) return cleaned;
 
-  // legado (ex.: { female: 60, male: 40 })
-  const maybeFemale = (raw as any).female;
-  const maybeMale = (raw as any).male;
-  if (typeof maybeFemale === "number" || typeof maybeMale === "number") {
-    const female = typeof maybeFemale === "number" ? maybeFemale : 50;
-    const male = typeof maybeMale === "number" ? maybeMale : 50;
-    return { gender: { Feminino: female, Masculino: male }, age: null, cities: null };
-  }
+  const scaled: AudienceObj = {};
+  for (const [k, v] of Object.entries(cleaned)) scaled[k] = (v / total) * 100;
+  return scaled;
+}
 
-  // legado genérico (objeto simples => assume gender)
-  return { gender: parseAudienceMap(raw), age: null, cities: null };
-};
-
-const mergeGenderIntoAudience = (existing: any, femalePct: number, malePct: number) => {
-  const prev = parseAudienceStructured(existing);
-  const next: AudienceStructured = {
-    ...prev,
-    gender: { Feminino: femalePct, Masculino: malePct },
-  };
-  return {
-    gender: next.gender ?? null,
-    age: next.age ?? null,
-    cities: next.cities ?? null,
-  };
-};
-
-const CONTENT_STYLE_OPTIONS = [
-  "Lifestyle",
-  "Moda",
-  "Beleza",
-  "Fitness",
-  "Gastronomia",
-  "Viagem",
-  "Tecnologia",
-  "Maternidade",
-  "Pets",
-  "Música",
-  "Humor",
-  "Negócios",
-  "Educação",
-  "Games",
-  "Fotografia",
-  "Skincare",
-  "Decoração",
-  "Esportes",
-];
+function topKey(obj: AudienceObj) {
+  const entries = Object.entries(obj);
+  if (!entries.length) return null;
+  entries.sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
+  return entries[0]?.[0] ?? null;
+}
 
 export default function InfluencerProfile() {
   const navigate = useNavigate();
@@ -195,58 +180,13 @@ export default function InfluencerProfile() {
     }
   };
 
-  const fallbackFollowers = useMemo(() => {
-    const raw = (profile as any)?.followers as string | undefined;
-    if (!raw) return null;
-    const onlyDigits = raw.replace(/[^\d]/g, "");
-    if (!onlyDigits) return null;
-    const n = Number(onlyDigits);
-    return Number.isFinite(n) ? n : null;
-  }, [profile]);
-
-  const fallbackAudience = useMemo(() => {
-    const ag = (profile as any)?.audience_gender;
-    const parsed = parseAudienceStructured(ag);
-    const g = parsed.gender;
-    // tenta pegar valores do formato novo (Feminino/Masculino), ou fallback 50/50
-    const female =
-      typeof (g as any)?.Feminino === "number"
-        ? (g as any).Feminino
-        : typeof (ag as any)?.female === "number"
-          ? (ag as any).female
-          : 50;
-    const male =
-      typeof (g as any)?.Masculino === "number"
-        ? (g as any).Masculino
-        : typeof (ag as any)?.male === "number"
-          ? (ag as any).male
-          : 50;
-    return { female, male };
-  }, [profile]);
-
-  const instagram = useMemo(() => {
-    const rpcIg = ctx.data?.instagram;
-    if (rpcIg) return rpcIg;
-
-    return {
-      platform: "instagram",
-      source: "self_reported",
-      instagram_username: (profile as any)?.instagram ?? null,
-      followers_count: fallbackFollowers,
-      audience_female_pct: fallbackAudience.female,
-      audience_male_pct: fallbackAudience.male,
-      audience_region: null,
-      collected_at: null,
-    };
-  }, [ctx.data, profile, fallbackFollowers, fallbackAudience]);
-
-  const [orbtyStats, setOrbtyStats] = useState<{
-    total: number;
-    accepted: number;
-    pending: number;
-    rejected: number;
-  }>({ total: 0, accepted: 0, pending: 0, rejected: 0 });
-
+  // ======== Métricas Orbty (mantém como estava) ========
+  const [orbtyStats, setOrbtyStats] = useState<{ total: number; accepted: number; pending: number; rejected: number }>({
+    total: 0,
+    accepted: 0,
+    pending: 0,
+    rejected: 0,
+  });
   const [loadingOrbty, setLoadingOrbty] = useState(true);
 
   useEffect(() => {
@@ -269,10 +209,7 @@ export default function InfluencerProfile() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("campaign_applications")
-        .select("status")
-        .eq("influencer_id", profile.id);
+      const { data, error } = await supabase.from("campaign_applications").select("status").eq("influencer_id", profile.id);
 
       if (!alive) return;
 
@@ -297,86 +234,33 @@ export default function InfluencerProfile() {
     };
   }, [profile?.id, ctx.data?.influencer_metrics]);
 
-  // ---------------------------
-  // Modal IG (mantém)
-  // ---------------------------
-  const [igOpen, setIgOpen] = useState(false);
-  const [igSaving, setIgSaving] = useState(false);
+  // ======== Valores atuais (do profiles) ========
+  const igHandle = (profile as any)?.instagram ?? null;
 
-  const [igForm, setIgForm] = useState(() => ({
-    instagram_username: (profile as any)?.instagram ?? "",
-    followers_count: instagram?.followers_count ?? 0,
-    audience_female_pct: Number(instagram?.audience_female_pct ?? 50),
-    audience_region: instagram?.audience_region ?? "",
-  }));
+  const followersCount = useMemo(() => {
+    const raw = (profile as any)?.followers as string | undefined;
+    if (!raw) return null;
+    const onlyDigits = raw.replace(/[^\d]/g, "");
+    if (!onlyDigits) return null;
+    const n = Number(onlyDigits);
+    return Number.isFinite(n) ? n : null;
+  }, [profile]);
 
-  useEffect(() => {
-    setIgForm({
-      instagram_username: (profile as any)?.instagram ?? "",
-      followers_count: instagram?.followers_count ?? 0,
-      audience_female_pct: Number(instagram?.audience_female_pct ?? 50),
-      audience_region: instagram?.audience_region ?? "",
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [igOpen]);
+  const audienceGenderCurrent = useMemo(() => normalizeAudienceObj((profile as any)?.audience_gender), [profile]);
+  const audienceAgeCurrent = useMemo(() => normalizeAudienceObj((profile as any)?.audience_age), [profile]);
+  const audienceCitiesCurrent = useMemo(() => normalizeAudienceObj((profile as any)?.audience_cities), [profile]);
 
-  const handleSaveIg = async () => {
-    const female = igForm.audience_female_pct;
-    const male = 100 - female;
+  const contentStyleCurrent = useMemo(() => {
+    const raw = String((profile as any)?.content_style ?? "").trim();
+    if (!raw) return [] as string[];
+    // armazenamos como "A, B, C"
+    return raw.split(",").map((s) => s.trim()).filter(Boolean);
+  }, [profile]);
 
-    if (igForm.followers_count < 0) {
-      toast.error("Seguidores inválido.");
-      return;
-    }
+  const followersLabel =
+    followersCount === null || followersCount === undefined ? "—" : Number(followersCount).toLocaleString("pt-BR");
 
-    setIgSaving(true);
-    try {
-      // 1) salva métricas via serviço (como já faz)
-      await updateMyInstagramStats({
-        instagram_username: igForm.instagram_username,
-        followers_count: igForm.followers_count,
-        audience_female_pct: female,
-        audience_male_pct: male,
-        audience_region: igForm.audience_region || undefined,
-      });
-
-      // 2) garante sync no profiles.audience_gender SEM apagar cities/age
-      //    (merge do gender)
-      if (profile?.id) {
-        const existing = (profile as any)?.audience_gender ?? null;
-        const merged = mergeGenderIntoAudience(existing, female, male);
-
-        const { error } = await supabase
-          .from("profiles")
-          .update({
-            instagram: igForm.instagram_username || null,
-            followers: String(igForm.followers_count ?? "") || null,
-            audience_gender: merged,
-          })
-          .eq("id", profile.id);
-
-        if (error) {
-          console.error("SYNC_AUDIENCE_GENDER_ERROR", error);
-          // não falha o fluxo, mas avisa
-          toast.message("Salvou IG, mas não sincronizou audiência do perfil.", { description: "Verifique permissões/RLS." });
-        }
-      }
-
-      toast.success("Métricas do Instagram atualizadas!");
-      setIgOpen(false);
-
-      await ctx.refetch();
-      await refreshProfile();
-    } catch (err: any) {
-      toast.error(err?.message || "Erro ao salvar métricas.");
-    } finally {
-      setIgSaving(false);
-    }
-  };
-
-  // ---------------------------
-  // Modal Editar Perfil (dados básicos)
-  // ---------------------------
+  // ======== Modal EDITAR PERFIL (tudo em um lugar) ========
   const [editOpen, setEditOpen] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
 
@@ -386,226 +270,186 @@ export default function InfluencerProfile() {
     state: (profile as any)?.state ?? "",
     neighborhood: (profile as any)?.neighborhood ?? "",
     bio: (profile as any)?.bio ?? "",
-    content_style: (profile as any)?.content_style ?? "",
     instagram: (profile as any)?.instagram ?? "",
+    followers: followersCount ?? 0,
+
+    // estilos (até 3)
+    content_styles: contentStyleCurrent.slice(0, 3),
+
+    // audiência
+    gender_female: safeNum(audienceGenderCurrent.female, 50),
+    gender_male: safeNum(audienceGenderCurrent.male, 50),
+
+    // idade
+    audience_age: {
+      "18-24": safeNum(audienceAgeCurrent["18-24"], 0),
+      "25-34": safeNum(audienceAgeCurrent["25-34"], 0),
+      "35-44": safeNum(audienceAgeCurrent["35-44"], 0),
+      "45-54": safeNum(audienceAgeCurrent["45-54"], 0),
+      "55-64": safeNum(audienceAgeCurrent["55-64"], 0),
+      "65+": safeNum(audienceAgeCurrent["65+"], 0),
+    } as AudienceObj,
+
+    // top cidades (3)
+    city_1: topKey(audienceCitiesCurrent) ?? "",
+    city_1_pct: safeNum(audienceCitiesCurrent[topKey(audienceCitiesCurrent) ?? ""], 0),
+
+    city_2: "",
+    city_2_pct: 0,
+
+    city_3: "",
+    city_3_pct: 0,
   }));
 
+  // inicializa o form APENAS ao abrir (para não perder foco digitando)
   useEffect(() => {
     if (!editOpen) return;
+
+    const citiesSorted = Object.entries(audienceCitiesCurrent)
+      .map(([k, v]) => ({ k, v: safeNum(v, 0) }))
+      .sort((a, b) => b.v - a.v);
+
+    const c1 = citiesSorted[0]?.k ?? "";
+    const c2 = citiesSorted[1]?.k ?? "";
+    const c3 = citiesSorted[2]?.k ?? "";
+
     setEditForm({
       name: (profile as any)?.name ?? "",
       city: (profile as any)?.city ?? "",
       state: (profile as any)?.state ?? "",
       neighborhood: (profile as any)?.neighborhood ?? "",
       bio: (profile as any)?.bio ?? "",
-      content_style: (profile as any)?.content_style ?? "",
       instagram: (profile as any)?.instagram ?? "",
+      followers: followersCount ?? 0,
+      content_styles: contentStyleCurrent.slice(0, 3),
+      gender_female: clamp(safeNum(audienceGenderCurrent.female, 50), 0, 100),
+      gender_male: clamp(safeNum(audienceGenderCurrent.male, 50), 0, 100),
+      audience_age: {
+        "18-24": safeNum(audienceAgeCurrent["18-24"], 0),
+        "25-34": safeNum(audienceAgeCurrent["25-34"], 0),
+        "35-44": safeNum(audienceAgeCurrent["35-44"], 0),
+        "45-54": safeNum(audienceAgeCurrent["45-54"], 0),
+        "55-64": safeNum(audienceAgeCurrent["55-64"], 0),
+        "65+": safeNum(audienceAgeCurrent["65+"], 0),
+      },
+      city_1: c1,
+      city_1_pct: citiesSorted[0]?.v ?? 0,
+      city_2: c2,
+      city_2_pct: citiesSorted[1]?.v ?? 0,
+      city_3: c3,
+      city_3_pct: citiesSorted[2]?.v ?? 0,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editOpen]);
 
-  const handleSaveProfileBasics = async () => {
+  const toggleStyle = (style: string) => {
+    setEditForm((prev) => {
+      const exists = prev.content_styles.includes(style);
+      if (exists) {
+        return { ...prev, content_styles: prev.content_styles.filter((s) => s !== style) };
+      }
+      if (prev.content_styles.length >= 3) {
+        toast.error("Você pode escolher no máximo 3 estilos.");
+        return prev;
+      }
+      return { ...prev, content_styles: [...prev.content_styles, style] };
+    });
+  };
+
+  const buildCitiesObjFromForm = useCallback((): AudienceObj => {
+    const obj: AudienceObj = {};
+    const push = (name: string, pct: number) => {
+      const key = (name || "").trim();
+      const val = Math.max(0, safeNum(pct, 0));
+      if (!key) return;
+      obj[key] = val;
+    };
+
+    push(editForm.city_1, editForm.city_1_pct);
+    push(editForm.city_2, editForm.city_2_pct);
+    push(editForm.city_3, editForm.city_3_pct);
+
+    // normaliza para 100 (opcional) — deixa proporcional.
+    return normalizeTo100(obj);
+  }, [editForm.city_1, editForm.city_1_pct, editForm.city_2, editForm.city_2_pct, editForm.city_3, editForm.city_3_pct]);
+
+  const handleSaveProfile = async () => {
     if (!profile?.id) return;
 
-    if (!editForm.name.trim()) return toast.error("Nome é obrigatório.");
-    if (!editForm.city.trim() || !editForm.state.trim()) return toast.error("Cidade e Estado são obrigatórios.");
+    const name = editForm.name.trim();
+    const city = editForm.city.trim();
+    const state = editForm.state.trim();
+
+    if (!name) return toast.error("Nome é obrigatório.");
+    if (!city) return toast.error("Cidade é obrigatória.");
+    if (!state) return toast.error("Estado é obrigatório.");
+
+    const female = clamp(safeNum(editForm.gender_female, 0), 0, 100);
+    const male = clamp(safeNum(editForm.gender_male, 0), 0, 100);
+
+    // Se somar diferente de 100, normaliza mantendo proporção.
+    const genderTotal = female + male;
+    const genderObj =
+      genderTotal <= 0
+        ? { female: 0, male: 0 }
+        : { female: (female / genderTotal) * 100, male: (male / genderTotal) * 100 };
+
+    const ageObj = normalizeTo100(editForm.audience_age || {});
+    const citiesObj = buildCitiesObjFromForm();
+
+    const contentStyleStr = (editForm.content_styles || []).slice(0, 3).join(", ");
 
     setEditSaving(true);
     try {
+      // salva em profiles (fonte da verdade do perfil público)
       const { error } = await supabase
         .from("profiles")
         .update({
-          name: editForm.name.trim(),
-          city: editForm.city.trim(),
-          state: editForm.state.trim(),
+          name,
+          city,
+          state,
           neighborhood: editForm.neighborhood.trim() || null,
           bio: editForm.bio.trim() || null,
-          content_style: editForm.content_style || null,
           instagram: editForm.instagram.trim() || null,
-        })
+          followers: String(Math.max(0, safeNum(editForm.followers, 0))) || null,
+          content_style: contentStyleStr || null,
+
+          audience_gender: genderObj,
+          audience_age: ageObj,
+          audience_cities: citiesObj,
+        } as any)
         .eq("id", profile.id);
 
       if (error) throw error;
 
       toast.success("Perfil atualizado!");
       setEditOpen(false);
-      await ctx.refetch();
+
       await refreshProfile();
+      await ctx.refetch();
     } catch (e: any) {
-      console.error("SAVE_PROFILE_BASICS_ERROR", e);
+      console.error("SAVE_PROFILE_ERROR", e);
       toast.error(e?.message || "Erro ao salvar perfil.");
     } finally {
       setEditSaving(false);
     }
   };
 
-  // ---------------------------
-  // Modal Editar Audiência Pública (cities/gender/age)
-  // ---------------------------
-  type AudienceKey = "cities" | "gender" | "age";
-  const [audOpen, setAudOpen] = useState(false);
-  const [audSaving, setAudSaving] = useState(false);
-
-  const [audDraft, setAudDraft] = useState<AudienceStructured>(() => parseAudienceStructured((profile as any)?.audience_gender));
-
-  useEffect(() => {
-    if (!audOpen) return;
-    setAudDraft(parseAudienceStructured((profile as any)?.audience_gender));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audOpen]);
-
-  const addAudItem = (k: AudienceKey) => {
-    const placeholders: Record<AudienceKey, string> = {
-      cities: "Ex: São Paulo",
-      gender: "Ex: Feminino",
-      age: "Ex: 18–24",
-    };
-
-    setAudDraft((prev) => {
-      const current = prev[k] ? { ...(prev[k] as AudienceMap) } : {};
-      let key = placeholders[k];
-      let i = 2;
-      while (Object.prototype.hasOwnProperty.call(current, key)) key = `${placeholders[k]} ${i++}`;
-      current[key] = 0;
-      return { ...prev, [k]: current };
-    });
-  };
-
-  const renameAudKey = (k: AudienceKey, oldKey: string, newKey: string) => {
-    setAudDraft((prev) => {
-      const current = prev[k] ? { ...(prev[k] as AudienceMap) } : {};
-      const val = current[oldKey];
-      delete current[oldKey];
-      if (newKey.trim()) current[newKey.trim()] = Number(val ?? 0);
-      return { ...prev, [k]: Object.keys(current).length ? current : null };
-    });
-  };
-
-  const setAudValue = (k: AudienceKey, key: string, value: number) => {
-    setAudDraft((prev) => {
-      const current = prev[k] ? { ...(prev[k] as AudienceMap) } : {};
-      current[key] = Number.isFinite(value) ? value : 0;
-      return { ...prev, [k]: current };
-    });
-  };
-
-  const removeAudItem = (k: AudienceKey, key: string) => {
-    setAudDraft((prev) => {
-      const current = prev[k] ? { ...(prev[k] as AudienceMap) } : {};
-      delete current[key];
-      return { ...prev, [k]: Object.keys(current).length ? current : null };
-    });
-  };
-
-  const saveAudiencePublic = async () => {
-    if (!profile?.id) return;
-
-    setAudSaving(true);
-    try {
-      const payload = {
-        gender: audDraft.gender ?? null,
-        age: audDraft.age ?? null,
-        cities: audDraft.cities ?? null,
-      };
-
-      const { error } = await supabase.from("profiles").update({ audience_gender: payload }).eq("id", profile.id);
-
-      if (error) throw error;
-
-      toast.success("Audiência pública atualizada!");
-      setAudOpen(false);
-      await ctx.refetch();
-      await refreshProfile();
-    } catch (e: any) {
-      console.error("SAVE_AUDIENCE_PUBLIC_ERROR", e);
-      toast.error(e?.message || "Erro ao salvar audiência.");
-    } finally {
-      setAudSaving(false);
-    }
-  };
-
-  const renderAudSection = (k: AudienceKey, title: string) => {
-    const map = (audDraft[k] || {}) as AudienceMap;
-    const entries = Object.entries(map);
-
-    return (
-      <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-semibold text-foreground">{title}</div>
-          <button
-            type="button"
-            onClick={() => addAudItem(k)}
-            className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4 text-primary" />
-            Adicionar
-          </button>
-        </div>
-
-        {entries.length === 0 ? (
-          <div className="text-xs text-muted-foreground mt-2">Sem dados. Adicione itens para aparecer no perfil público.</div>
-        ) : (
-          <div className="mt-3 space-y-2">
-            {entries.map(([key, value]) => (
-              <div key={key} className="flex items-center gap-2">
-                <Input
-                  value={key}
-                  onChange={(e) => renameAudKey(k, key, e.target.value)}
-                  className="text-sm"
-                />
-                <Input
-                  type="number"
-                  value={Number(value)}
-                  onChange={(e) => setAudValue(k, key, Number(e.target.value || 0))}
-                  className="text-sm w-28"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeAudItem(k, key)}
-                  className="p-2 rounded-xl hover:bg-white/5 text-muted-foreground hover:text-foreground transition"
-                  title="Remover"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-            <div className="text-[11px] text-muted-foreground">
-              Pode ser % ou valor absoluto. O público exibirá como proporção em gráfico (donut).
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
+  // ======== UI helpers ========
   const navType = "influencer";
 
-  const followersLabel =
-    instagram?.followers_count === null || instagram?.followers_count === undefined
-      ? "—"
-      : Number(instagram.followers_count).toLocaleString("pt-BR");
-
-  const femaleLabel =
-    instagram?.audience_female_pct === null || instagram?.audience_female_pct === undefined
-      ? "—"
-      : `${Number(instagram.audience_female_pct).toFixed(0)}%`;
-
-  const maleLabel =
-    instagram?.audience_male_pct === null || instagram?.audience_male_pct === undefined
-      ? "—"
-      : `${Number(instagram.audience_male_pct).toFixed(0)}%`;
-
-  const igHandle = (profile as any)?.instagram ?? null;
+  const locationLabel = profile ? `${profile.city}, ${profile.state}` : "—";
 
   return (
     <MobileLayout title="Meu perfil" showBack navType={navType}>
       <div className="px-6 py-6 space-y-6">
+        {/* Header premium (layout corrigido: botões não estouram) */}
         <GlassCard className="p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-3">
-                {/* ✅ Avatar */}
-                <div className="relative">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3 min-w-0">
+                {/* Avatar */}
+                <div className="relative shrink-0">
                   <div className="w-12 h-12 rounded-full overflow-hidden border border-primary/30 bg-white/5">
                     {(profile as any)?.avatar_url ? (
                       <img
@@ -642,87 +486,79 @@ export default function InfluencerProfile() {
                   />
                 </div>
 
-                <div>
-                  <div className="flex items-center gap-2">
-                    <div className="text-lg font-semibold text-foreground">{profile?.name || "Creator"}</div>
+                {/* Infos */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="text-lg font-semibold text-foreground truncate">
+                      {profile?.name || "Creator"}
+                    </div>
                     {isVerifiedInfluencer && <VerifiedBadge size="sm" />}
                   </div>
 
-                  {/* ✅ @ clicável */}
-                  <div className="text-sm text-muted-foreground flex items-center gap-2">
-                    <Instagram className="w-4 h-4" />
+                  <div className="mt-1 text-sm text-muted-foreground flex items-center gap-2">
+                    <Instagram className="w-4 h-4 shrink-0" />
                     {buildInstagramLinks(igHandle)?.raw ? (
                       <button
+                        type="button"
                         onClick={() => openInstagram(igHandle)}
-                        className="inline-flex items-center gap-1 text-primary hover:opacity-90 transition-opacity"
+                        className="inline-flex items-center gap-1 text-primary hover:opacity-90 transition-opacity min-w-0"
                         title="Abrir Instagram"
                       >
-                        <span>@{buildInstagramLinks(igHandle)!.raw}</span>
-                        <ExternalLink className="w-4 h-4" />
+                        <span className="truncate">@{buildInstagramLinks(igHandle)!.raw}</span>
+                        <ExternalLink className="w-4 h-4 shrink-0" />
                       </button>
                     ) : (
-                      <span>Instagram não informado</span>
+                      <span className="truncate">Instagram não informado</span>
                     )}
+                  </div>
+
+                  <div className="mt-1 text-sm text-muted-foreground flex items-center gap-2">
+                    <MapPin className="w-4 h-4 shrink-0" />
+                    <span className="truncate">{locationLabel}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="text-sm text-muted-foreground flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                <span>{profile ? `${profile.city}, ${profile.state}` : "—"}</span>
+              {/* Ações (agora em coluna fixa e sem estourar) */}
+              <div className="shrink-0 flex flex-col gap-2 items-end">
+                <button
+                  type="button"
+                  onClick={() => setEditOpen(true)}
+                  className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
+                >
+                  <Pencil className="w-4 h-4 text-primary" />
+                  Editar perfil
+                </button>
+
+                {profile?.id ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/u/${profile.id}`)}
+                    className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
+                  >
+                    <Eye className="w-4 h-4 text-primary" />
+                    Ver público
+                  </button>
+                ) : null}
               </div>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={() => setEditOpen(true)}
-                className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
-              >
-                <Pencil className="w-4 h-4 text-primary" />
-                Editar perfil
-              </button>
-
-              <button
-                onClick={() => setAudOpen(true)}
-                className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
-              >
-                <BarChart3 className="w-4 h-4 text-primary" />
-                Audiência pública
-              </button>
-
-              <button
-                onClick={() => setIgOpen(true)}
-                className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
-              >
-                <Sparkles className="w-4 h-4 text-primary" />
-                Atualizar IG
-              </button>
-
-              {/* ✅ Ver perfil público */}
-              {profile?.id ? (
-                <button
-                  onClick={() => navigate(`/u/${profile.id}`)}
-                  className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
-                >
-                  <Eye className="w-4 h-4 text-primary" />
-                  Ver perfil público
-                </button>
-              ) : null}
-            </div>
+            {/* Dica: verificado */}
+            {!isVerifiedInfluencer && userRole === "influencer" && (
+              <div className="text-xs text-muted-foreground">
+                Seu selo de verificado aparece quando sua conta é aprovada pela Orbty.
+              </div>
+            )}
           </div>
         </GlassCard>
 
+        {/* Métricas rápidas */}
         <div className="grid grid-cols-2 gap-3">
           <MetricCard label="Seguidores" value={followersLabel} icon={<Users className="w-4 h-4 text-primary" />} />
-          <MetricCard
-            label="Região do público"
-            value={instagram?.audience_region || "—"}
-            icon={<MapPin className="w-4 h-4 text-accent" />}
-          />
-          <MetricCard label="Público feminino" value={femaleLabel} />
-          <MetricCard label="Público masculino" value={maleLabel} />
+          <MetricCard label="Estilos" value={(contentStyleCurrent.length ? contentStyleCurrent.join(" · ") : "—")} icon={<Sparkles className="w-4 h-4 text-accent" />} />
         </div>
 
+        {/* Performance Orbty */}
         <GlassCard className="space-y-3">
           <div className="text-sm font-semibold text-foreground">Performance na Orbty</div>
 
@@ -740,199 +576,304 @@ export default function InfluencerProfile() {
           )}
         </GlassCard>
 
-        {/* ---------------------------
-            MODAL: EDITAR PERFIL
-        --------------------------- */}
+        {/* ===== Modal Editar Perfil (tudo junto) ===== */}
         {editOpen && (
           <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
             <div className="absolute inset-0 bg-black/60" onClick={() => (editSaving ? null : setEditOpen(false))} />
-            <div className="relative w-full md:max-w-md rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5">
+            <div className="relative w-full md:max-w-md rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5 max-h-[85vh] overflow-y-auto">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold text-foreground">Editar perfil</div>
-                <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => (editSaving ? null : setEditOpen(false))}>
+                <div className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <UserIcon className="w-4 h-4 text-primary" />
+                  Editar perfil
+                </div>
+                <button
+                  type="button"
+                  className="p-2 rounded-xl hover:bg-white/5"
+                  onClick={() => (editSaving ? null : setEditOpen(false))}
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="mt-4 space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Nome *</Label>
-                  <Input value={editForm.name} onChange={(e) => setEditForm((s) => ({ ...s, name: e.target.value }))} className="text-sm" />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
+              <div className="mt-4 space-y-5">
+                {/* Básico */}
+                <div className="space-y-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Cidade *</Label>
-                    <Input value={editForm.city} onChange={(e) => setEditForm((s) => ({ ...s, city: e.target.value }))} className="text-sm" />
+                    <Label className="text-xs text-muted-foreground">Nome *</Label>
+                    <Input
+                      value={editForm.name}
+                      onChange={(e) => setEditForm((s) => ({ ...s, name: e.target.value }))}
+                      className="text-sm"
+                      placeholder="Seu nome"
+                    />
                   </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Cidade *</Label>
+                      <Input
+                        value={editForm.city}
+                        onChange={(e) => setEditForm((s) => ({ ...s, city: e.target.value }))}
+                        className="text-sm"
+                        placeholder="Ex: Goiânia"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Estado *</Label>
+                      <Input
+                        value={editForm.state}
+                        onChange={(e) => setEditForm((s) => ({ ...s, state: e.target.value }))}
+                        className="text-sm"
+                        placeholder="Ex: GO"
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Estado *</Label>
-                    <Input value={editForm.state} onChange={(e) => setEditForm((s) => ({ ...s, state: e.target.value }))} className="text-sm" />
+                    <Label className="text-xs text-muted-foreground">Bairro</Label>
+                    <Input
+                      value={editForm.neighborhood}
+                      onChange={(e) => setEditForm((s) => ({ ...s, neighborhood: e.target.value }))}
+                      className="text-sm"
+                      placeholder="Ex: Setor Bueno"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Bio</Label>
+                    <textarea
+                      value={editForm.bio}
+                      onChange={(e) => setEditForm((s) => ({ ...s, bio: e.target.value }))}
+                      className="w-full rounded-xl border border-border/50 bg-white/5 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/30 min-h-[90px]"
+                      placeholder="Escreva uma breve bio (pública)"
+                    />
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Bairro</Label>
-                  <Input value={editForm.neighborhood} onChange={(e) => setEditForm((s) => ({ ...s, neighborhood: e.target.value }))} className="text-sm" />
+                {/* Instagram + seguidores */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Instagram className="w-4 h-4 text-primary" />
+                    <div className="text-sm font-semibold text-foreground">Instagram</div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">@instagram</Label>
+                    <Input
+                      value={editForm.instagram}
+                      onChange={(e) => setEditForm((s) => ({ ...s, instagram: e.target.value }))}
+                      className="text-sm"
+                      placeholder="@seuinstagram"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Seguidores</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={editForm.followers}
+                      onChange={(e) => setEditForm((s) => ({ ...s, followers: Number(e.target.value || 0) }))}
+                      className="text-sm"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Bio</Label>
-                  <textarea
-                    value={editForm.bio}
-                    onChange={(e) => setEditForm((s) => ({ ...s, bio: e.target.value }))}
-                    className="w-full min-h-[90px] rounded-xl border border-border/50 bg-background px-3 py-2 text-sm text-foreground focus:outline-none"
-                    placeholder="Conte sobre você e seu conteúdo"
-                  />
+                {/* Estilos (até 3) */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <div className="text-sm font-semibold text-foreground">Estilo de conteúdo (até 3)</div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {CONTENT_STYLES.map((st) => {
+                      const active = editForm.content_styles.includes(st);
+                      return (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => toggleStyle(st)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${
+                            active
+                              ? "border-primary/30 bg-primary/10 text-primary"
+                              : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground hover:bg-card/80"
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    Selecionados:{" "}
+                    <span className="text-foreground font-medium">
+                      {editForm.content_styles.length ? editForm.content_styles.join(", ") : "—"}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Categoria do conteúdo</Label>
-                  <select
-                    value={editForm.content_style}
-                    onChange={(e) => setEditForm((s) => ({ ...s, content_style: e.target.value }))}
-                    className="w-full rounded-xl border border-border/50 bg-background px-3 py-2 text-sm text-foreground focus:outline-none"
-                  >
-                    <option value="">Selecione</option>
-                    {CONTENT_STYLE_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* Audiência */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-primary" />
+                    <div className="text-sm font-semibold text-foreground">Audiência (editável)</div>
+                  </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Instagram</Label>
-                  <Input value={editForm.instagram} onChange={(e) => setEditForm((s) => ({ ...s, instagram: e.target.value }))} className="text-sm" placeholder="@seuinstagram" />
+                  {/* Gênero */}
+                  <div className="rounded-2xl border border-border/50 bg-white/5 p-4 space-y-3">
+                    <div className="text-xs text-muted-foreground font-medium">Gênero (%)</div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Feminino</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={editForm.gender_female}
+                          onChange={(e) =>
+                            setEditForm((s) => ({ ...s, gender_female: Number(e.target.value || 0) }))
+                          }
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Masculino</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={editForm.gender_male}
+                          onChange={(e) =>
+                            setEditForm((s) => ({ ...s, gender_male: Number(e.target.value || 0) }))
+                          }
+                          className="text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      * Se não somar 100, a Orbty normaliza automaticamente ao salvar.
+                    </div>
+                  </div>
+
+                  {/* Faixa etária */}
+                  <div className="rounded-2xl border border-border/50 bg-white/5 p-4 space-y-3">
+                    <div className="text-xs text-muted-foreground font-medium">Faixa etária (%)</div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {AGE_BUCKETS.map((k) => (
+                        <div key={k} className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">{k}</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={safeNum(editForm.audience_age?.[k], 0)}
+                            onChange={(e) => {
+                              const v = Number(e.target.value || 0);
+                              setEditForm((s) => ({
+                                ...s,
+                                audience_age: { ...(s.audience_age || {}), [k]: v },
+                              }));
+                            }}
+                            className="text-sm"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      * A Orbty normaliza para 100% ao salvar.
+                    </div>
+                  </div>
+
+                  {/* Top cidades */}
+                  <div className="rounded-2xl border border-border/50 bg-white/5 p-4 space-y-3">
+                    <div className="text-xs text-muted-foreground font-medium">Principais cidades (Top 3)</div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5 col-span-2">
+                        <Label className="text-xs text-muted-foreground">Cidade 1</Label>
+                        <Input
+                          value={editForm.city_1}
+                          onChange={(e) => setEditForm((s) => ({ ...s, city_1: e.target.value }))}
+                          className="text-sm"
+                          placeholder="Ex: São Paulo"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">%</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={editForm.city_1_pct}
+                          onChange={(e) => setEditForm((s) => ({ ...s, city_1_pct: Number(e.target.value || 0) }))}
+                          className="text-sm"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5 col-span-2">
+                        <Label className="text-xs text-muted-foreground">Cidade 2</Label>
+                        <Input
+                          value={editForm.city_2}
+                          onChange={(e) => setEditForm((s) => ({ ...s, city_2: e.target.value }))}
+                          className="text-sm"
+                          placeholder="Ex: Rio de Janeiro"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">%</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={editForm.city_2_pct}
+                          onChange={(e) => setEditForm((s) => ({ ...s, city_2_pct: Number(e.target.value || 0) }))}
+                          className="text-sm"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5 col-span-2">
+                        <Label className="text-xs text-muted-foreground">Cidade 3</Label>
+                        <Input
+                          value={editForm.city_3}
+                          onChange={(e) => setEditForm((s) => ({ ...s, city_3: e.target.value }))}
+                          className="text-sm"
+                          placeholder="Ex: Belo Horizonte"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">%</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={editForm.city_3_pct}
+                          onChange={(e) => setEditForm((s) => ({ ...s, city_3_pct: Number(e.target.value || 0) }))}
+                          className="text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-muted-foreground">
+                      * A Orbty normaliza para 100% ao salvar (proporcional).
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    * Por enquanto, a audiência é informada por você. No futuro, vamos integrar com Meta.
+                  </div>
                 </div>
 
                 <button
-                  onClick={handleSaveProfileBasics}
+                  type="button"
+                  onClick={handleSaveProfile}
                   disabled={editSaving}
                   className="w-full py-3 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {editSaving ? "Salvando..." : "Salvar"}
+                  {editSaving ? "Salvando..." : "Salvar alterações"}
                 </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ---------------------------
-            MODAL: AUDIÊNCIA PÚBLICA
-        --------------------------- */}
-        {audOpen && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-            <div className="absolute inset-0 bg-black/60" onClick={() => (audSaving ? null : setAudOpen(false))} />
-            <div className="relative w-full md:max-w-md rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold text-foreground">Audiência pública (temporário)</div>
-                <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => (audSaving ? null : setAudOpen(false))}>
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="mt-3 text-xs text-muted-foreground">
-                Esses dados aparecem no seu perfil público para o contratante. No futuro, você poderá conectar com a Meta para
-                puxar automaticamente.
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {renderAudSection("cities", "Principais cidades")}
-                {renderAudSection("gender", "Gênero")}
-                {renderAudSection("age", "Faixa etária")}
-
-                <button
-                  onClick={saveAudiencePublic}
-                  disabled={audSaving}
-                  className="w-full py-3 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue flex items-center justify-center gap-2 disabled:opacity-60"
-                >
-                  {audSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {audSaving ? "Salvando..." : "Salvar audiência"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ---------------------------
-            MODAL: IG
-        --------------------------- */}
-        {igOpen && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-            <div className="absolute inset-0 bg-black/60" onClick={() => (igSaving ? null : setIgOpen(false))} />
-            <div className="relative w-full md:max-w-md rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold text-foreground">Atualizar métricas do Instagram</div>
-                <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => (igSaving ? null : setIgOpen(false))}>
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="mt-4 space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">@instagram</Label>
-                  <Input
-                    value={igForm.instagram_username}
-                    onChange={(e) => setIgForm((s) => ({ ...s, instagram_username: e.target.value }))}
-                    placeholder="@seuinstagram"
-                    className="text-sm"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Seguidores</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={igForm.followers_count}
-                    onChange={(e) => setIgForm((s) => ({ ...s, followers_count: Number(e.target.value || 0) }))}
-                    className="text-sm"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Público (gênero)</Label>
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Feminino: {igForm.audience_female_pct}%</span>
-                    <span>Masculino: {100 - igForm.audience_female_pct}%</span>
-                  </div>
-                  <Slider
-                    value={[igForm.audience_female_pct]}
-                    onValueChange={(v) => setIgForm((s) => ({ ...s, audience_female_pct: v[0] }))}
-                    min={0}
-                    max={100}
-                    step={1}
-                  />
-                  <div className="text-[11px] text-muted-foreground">
-                    Ao salvar, isso também sincroniza o <b>Gênero</b> da audiência pública (sem apagar cidades/idade).
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Região do público</Label>
-                  <Input
-                    value={igForm.audience_region}
-                    onChange={(e) => setIgForm((s) => ({ ...s, audience_region: e.target.value }))}
-                    placeholder="Ex: São Paulo - SP"
-                    className="text-sm"
-                  />
-                </div>
-
-                <button
-                  onClick={handleSaveIg}
-                  disabled={igSaving}
-                  className="w-full py-3 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue flex items-center justify-center gap-2 disabled:opacity-60"
-                >
-                  {igSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {igSaving ? "Salvando..." : "Salvar"}
-                </button>
-
-                <div className="text-xs text-muted-foreground">
-                  * Por enquanto, as métricas são informadas por você. No futuro, elas poderão ser verificadas via integração Meta.
-                </div>
               </div>
             </div>
           </div>
