@@ -8,18 +8,7 @@ import { updateMyInstagramStats } from "@/services/profile";
 import { updateMyAvatarWithUpload } from "@/services/profileAvatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import {
-  Loader2,
-  Instagram,
-  Users,
-  MapPin,
-  Save,
-  X,
-  Camera,
-  Pencil,
-  Shield,
-  Sparkles,
-} from "lucide-react";
+import { Loader2, Instagram, Users, MapPin, Save, X, Camera, Pencil, Shield, Sparkles } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -99,14 +88,13 @@ function formatIGCount(input: number | null | undefined) {
   return `${Math.floor(m)}M`;
 }
 
-function SectionShell(props: {
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
+function SectionShell(props: { title: string; subtitle?: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className={`glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] ${props.className ?? ""}`}>
+    <div
+      className={`glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] ${
+        props.className ?? ""
+      }`}
+    >
       <div>
         <div className="text-sm font-semibold text-foreground">{props.title}</div>
         {props.subtitle ? <div className="text-xs text-muted-foreground mt-1">{props.subtitle}</div> : null}
@@ -143,12 +131,7 @@ function IconButton(props: {
 }
 
 /** ✅ Chip micro com label + valor empilhado (compacto e premium) */
-function MicroChip(props: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  title?: string;
-}) {
+function MicroChip(props: { icon: React.ReactNode; label: string; value: string; title?: string }) {
   return (
     <div
       title={props.title}
@@ -179,14 +162,54 @@ function CityChip(props: { label: string; title?: string }) {
   );
 }
 
-/** Donut dual via SVG (sem badge visível) */
-function DualDonutChart(props: {
-  aPct: number;
-  bPct: number;
-  label: string;
-  aLabel: string;
-  bLabel: string;
-}) {
+/** ✅ Avaliações (estrelas preenchidas/vazias) */
+function StarRating(props: { value: number; max?: number; className?: string }) {
+  const max = props.max ?? 5;
+  const v = Math.max(0, Math.min(max, Number(props.value ?? 0)));
+  const full = Math.round(v);
+
+  return (
+    <div
+      className={`flex items-center justify-center gap-1 ${props.className ?? ""}`}
+      aria-label={`Avaliação: ${full} de ${max}`}
+    >
+      {Array.from({ length: max }).map((_, i) => {
+        const filled = i < full;
+        return (
+          <span
+            key={i}
+            className={`text-[26px] leading-none select-none ${filled ? "text-yellow-400" : "text-white/20"}`}
+            aria-hidden="true"
+          >
+            ★
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function RatingsCard(props: { rating: number; count?: number | null }) {
+  const safeRating = Math.max(0, Math.min(5, Number(props.rating ?? 0)));
+  const count = props.count ?? null;
+
+  return (
+    <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
+      <div className="text-sm font-semibold text-foreground text-center">Avaliações</div>
+
+      <div className="mt-3">
+        <StarRating value={safeRating} />
+      </div>
+
+      <div className="mt-2 text-center text-xs text-muted-foreground">
+        {count && count > 0 ? `${safeRating.toFixed(1).replace(".", ",")} · ${count} avaliações` : "Sem avaliações ainda"}
+      </div>
+    </div>
+  );
+}
+
+/** Donut dual via SVG */
+function DualDonutChart(props: { aPct: number; bPct: number; label: string; aLabel: string; bLabel: string }) {
   const a = clamp(props.aPct, 0, 100);
   const b = clamp(props.bPct, 0, 100);
 
@@ -210,14 +233,7 @@ function DualDonutChart(props: {
       <div className="mt-3 flex items-center gap-4">
         <div className="relative w-[108px] h-[108px] shrink-0">
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-            <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={r}
-              fill="none"
-              stroke="rgba(255,255,255,0.08)"
-              strokeWidth={stroke}
-            />
+            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
             <circle
               cx={size / 2}
               cy={size / 2}
@@ -272,7 +288,7 @@ function DualDonutChart(props: {
   );
 }
 
-/** ✅ Faixa etária em barras (sem badge) */
+/** ✅ Faixa etária em barras */
 function AgeBarsCard(props: { data: Record<string, number> | null; buckets: string[] }) {
   const normalized = useMemo(() => {
     const raw = props.data || {};
@@ -324,36 +340,6 @@ function MetricCard(props: { label: string; value: React.ReactNode }) {
     >
       <div className="text-xs text-muted-foreground">{props.label}</div>
       <div className="mt-2 text-xl font-semibold text-foreground">{props.value}</div>
-    </div>
-  );
-}
-
-function VerifiedOrbtyCard(props: { verified: boolean; updatedAt?: string | null }) {
-  const updatedLabel = props.updatedAt ? new Date(props.updatedAt).toLocaleDateString("pt-BR") : null;
-
-  return (
-    <div className="rounded-2xl border border-border/50 bg-white/5 p-4 shadow-sm transition hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Shield className="w-4 h-4 text-primary" />
-            <div className="text-sm font-semibold text-foreground">Verificado Orbty</div>
-          </div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {props.verified ? "Conta aprovada na Orbty." : "Sua conta ainda não está marcada como verificada."}
-          </div>
-          {updatedLabel ? <div className="mt-2 text-[11px] text-muted-foreground">Atualizado em {updatedLabel}</div> : null}
-        </div>
-
-        <div
-          className={`text-[10px] px-2 py-1 rounded-full border bg-white/5 ${
-            props.verified ? "border-emerald-400/20 text-emerald-200" : "border-border/50 text-muted-foreground"
-          }`}
-          title="Conta aprovada na Orbty"
-        >
-          {props.verified ? "aprovado" : "pendente"}
-        </div>
-      </div>
     </div>
   );
 }
@@ -470,7 +456,7 @@ export default function InfluencerProfile() {
     };
   }, [ctx.data, profile]);
 
-  // Audience extra (cidades/idades) — pega do profile primeiro
+  // Audience extra (cidades/idades)
   const audienceCities = useMemo<ObjNum | null>(() => {
     return (
       parseObjectNumbers((profile as any)?.audience_cities) ||
@@ -490,7 +476,28 @@ export default function InfluencerProfile() {
   const topCities = useMemo(() => topKeys(audienceCities, 4), [audienceCities]);
   const topCities3 = useMemo(() => topKeys(audienceCities, 3), [audienceCities]);
 
-  // Orbty success only
+  // Avaliações (safe fallback)
+  const ratingValue = useMemo(() => {
+    const fromCtx = Number((ctx.data as any)?.ratings?.avg ?? (ctx.data as any)?.rating_avg ?? NaN);
+    if (Number.isFinite(fromCtx)) return fromCtx;
+
+    const fromProfile = Number((profile as any)?.rating_avg ?? (profile as any)?.rating ?? NaN);
+    if (Number.isFinite(fromProfile)) return fromProfile;
+
+    return 0;
+  }, [ctx.data, profile]);
+
+  const ratingCount = useMemo(() => {
+    const fromCtx = Number((ctx.data as any)?.ratings?.count ?? (ctx.data as any)?.rating_count ?? NaN);
+    if (Number.isFinite(fromCtx)) return fromCtx;
+
+    const fromProfile = Number((profile as any)?.rating_count ?? NaN);
+    if (Number.isFinite(fromProfile)) return fromProfile;
+
+    return null;
+  }, [ctx.data, profile]);
+
+  // Orbty success
   const [orbtyAccepted, setOrbtyAccepted] = useState(0);
   const [orbtyTotal, setOrbtyTotal] = useState(0);
   const [loadingOrbty, setLoadingOrbty] = useState(true);
@@ -566,7 +573,7 @@ export default function InfluencerProfile() {
   const showBioMore = useMemo(() => headerBio.length > 140, [headerBio]);
 
   /* =========================
-     EDIT PROFILE MODAL (popup)
+     EDIT PROFILE MODAL
   ========================= */
 
   const [editOpen, setEditOpen] = useState(false);
@@ -798,9 +805,7 @@ export default function InfluencerProfile() {
                       ) : null}
                     </>
                   ) : (
-                    <span className="text-muted-foreground">
-                      Adicione uma bio para deixar seu perfil mais completo.
-                    </span>
+                    <span className="text-muted-foreground">Adicione uma bio para deixar seu perfil mais completo.</span>
                   )}
                 </div>
               </div>
@@ -885,7 +890,6 @@ export default function InfluencerProfile() {
               <CityChip label={topCities3[2] ?? "—"} />
             </div>
 
-            {/* opcional: se quiser manter expandir sem poluir, mantive escondido por padrão */}
             {topCities.length > 3 ? (
               <div className="mt-2">
                 <button
@@ -913,10 +917,8 @@ export default function InfluencerProfile() {
           </div>
         </SectionShell>
 
-        {/* CONFIANÇA */}
-        <SectionShell title="Confiança (Orbty)">
-          <VerifiedOrbtyCard verified={isVerifiedInfluencer} updatedAt={(profile as any)?.updated_at ?? null} />
-        </SectionShell>
+        {/* AVALIAÇÕES (substitui Confiança Orbty) */}
+        <RatingsCard rating={ratingValue} count={ratingCount} />
 
         {/* PERFORMANCE */}
         <SectionShell title="Performance na Orbty">
@@ -952,7 +954,7 @@ export default function InfluencerProfile() {
           )}
         </SectionShell>
 
-        {/* MODAL: Editar perfil completo (único ponto de edição) */}
+        {/* MODAL: Editar perfil completo */}
         {editOpen && (
           <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
             <div className="absolute inset-0 bg-black/60" onMouseDown={() => (saving ? null : setEditOpen(false))} />
@@ -1036,9 +1038,7 @@ export default function InfluencerProfile() {
                       onChange={(e) => setForm((s) => ({ ...s, bio: e.target.value }))}
                       className="text-sm"
                     />
-                    <div className="text-[11px] text-muted-foreground">
-                      O header mostra no máximo 3 linhas (use uma bio curta).
-                    </div>
+                    <div className="text-[11px] text-muted-foreground">O header mostra no máximo 3 linhas (use uma bio curta).</div>
                   </div>
                 </div>
 
@@ -1128,19 +1128,35 @@ export default function InfluencerProfile() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #1</Label>
-                      <Input value={form.audience_city_1} onChange={(e) => setForm((s) => ({ ...s, audience_city_1: e.target.value }))} className="text-sm" />
+                      <Input
+                        value={form.audience_city_1}
+                        onChange={(e) => setForm((s) => ({ ...s, audience_city_1: e.target.value }))}
+                        className="text-sm"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #2</Label>
-                      <Input value={form.audience_city_2} onChange={(e) => setForm((s) => ({ ...s, audience_city_2: e.target.value }))} className="text-sm" />
+                      <Input
+                        value={form.audience_city_2}
+                        onChange={(e) => setForm((s) => ({ ...s, audience_city_2: e.target.value }))}
+                        className="text-sm"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #3</Label>
-                      <Input value={form.audience_city_3} onChange={(e) => setForm((s) => ({ ...s, audience_city_3: e.target.value }))} className="text-sm" />
+                      <Input
+                        value={form.audience_city_3}
+                        onChange={(e) => setForm((s) => ({ ...s, audience_city_3: e.target.value }))}
+                        className="text-sm"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #4</Label>
-                      <Input value={form.audience_city_4} onChange={(e) => setForm((s) => ({ ...s, audience_city_4: e.target.value }))} className="text-sm" />
+                      <Input
+                        value={form.audience_city_4}
+                        onChange={(e) => setForm((s) => ({ ...s, audience_city_4: e.target.value }))}
+                        className="text-sm"
+                      />
                     </div>
                   </div>
 
@@ -1148,44 +1164,42 @@ export default function InfluencerProfile() {
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Idade Top #1</Label>
-                      <Input value={form.age_top_1} onChange={(e) => setForm((s) => ({ ...s, age_top_1: e.target.value }))} placeholder="18-24" className="text-sm" />
+                      <Input
+                        value={form.age_top_1}
+                        onChange={(e) => setForm((s) => ({ ...s, age_top_1: e.target.value }))}
+                        placeholder="18-24"
+                        className="text-sm"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Idade Top #2</Label>
-                      <Input value={form.age_top_2} onChange={(e) => setForm((s) => ({ ...s, age_top_2: e.target.value }))} placeholder="25-34" className="text-sm" />
+                      <Input
+                        value={form.age_top_2}
+                        onChange={(e) => setForm((s) => ({ ...s, age_top_2: e.target.value }))}
+                        placeholder="25-34"
+                        className="text-sm"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Idade Top #3</Label>
-                      <Input value={form.age_top_3} onChange={(e) => setForm((s) => ({ ...s, age_top_3: e.target.value }))} placeholder="35-44" className="text-sm" />
+                      <Input
+                        value={form.age_top_3}
+                        onChange={(e) => setForm((s) => ({ ...s, age_top_3: e.target.value }))}
+                        placeholder="35-44"
+                        className="text-sm"
+                      />
                     </div>
                   </div>
 
-                  <div className="text-[11px] text-muted-foreground">
-                    Sugestão de faixas: {AGE_BUCKETS.join(" · ")}
-                  </div>
+                  <div className="text-[11px] text-muted-foreground">Sugestão de faixas: {AGE_BUCKETS.join(" · ")}</div>
                 </div>
 
                 {/* Estilos */}
                 <div className="space-y-3">
-                  <div className="text-xs text-muted-foreground uppercase tracking-widest">
-                    Estilos de conteúdo (até 3)
-                  </div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-widest">Estilos de conteúdo (até 3)</div>
 
                   <div className="flex flex-wrap gap-2">
-                    {[
-                      "Lifestyle",
-                      "Beleza",
-                      "Moda",
-                      "Educação",
-                      "Fitness",
-                      "Gastronomia",
-                      "Viagem",
-                      "Tech",
-                      "Games",
-                      "Maternidade",
-                      "Negócios",
-                      "Humor",
-                    ].map((opt) => {
+                    {STYLE_OPTIONS.map((opt) => {
                       const active = form.content_styles.includes(opt);
                       const disabled = !active && form.content_styles.length >= 3;
 
@@ -1209,9 +1223,7 @@ export default function InfluencerProfile() {
 
                   <div className="text-[11px] text-muted-foreground">
                     Selecionados:{" "}
-                    <span className="text-foreground font-medium">
-                      {form.content_styles.join(", ") || "—"}
-                    </span>
+                    <span className="text-foreground font-medium">{form.content_styles.join(", ") || "—"}</span>
                   </div>
                 </div>
 
@@ -1223,16 +1235,12 @@ export default function InfluencerProfile() {
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   {saving ? "Salvando..." : "Salvar alterações"}
                 </button>
-
-                
               </div>
             </div>
           </div>
         )}
 
-        {ctx.error && (
-          <div className="text-xs text-muted-foreground">Erro ao carregar contexto premium: {String(ctx.error)}</div>
-        )}
+        {ctx.error && <div className="text-xs text-muted-foreground">Erro ao carregar contexto premium: {String(ctx.error)}</div>}
       </div>
     </MobileLayout>
   );
