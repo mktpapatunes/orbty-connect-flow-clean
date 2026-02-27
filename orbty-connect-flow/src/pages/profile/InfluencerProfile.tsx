@@ -116,30 +116,6 @@ function SkeletonLine({ w = "100%", h = 12 }: { w?: string; h?: number }) {
   return <div className="animate-pulse rounded-xl bg-white/10" style={{ width: w, height: h }} />;
 }
 
-function ChipLink(props: {
-  icon?: React.ReactNode;
-  label: string;
-  onClick?: () => void;
-  disabled?: boolean;
-  title?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      disabled={props.disabled}
-      title={props.title}
-      className={`inline-flex items-center gap-2 rounded-full border border-border/50 bg-white/5 px-3 py-2 text-xs text-foreground/90 transition
-      hover:bg-white/10 hover:border-border/70 active:scale-[0.99]
-      disabled:opacity-60 disabled:hover:bg-white/5`}
-    >
-      {props.icon ? <span className="text-primary">{props.icon}</span> : null}
-      <span className="truncate max-w-[220px]">{props.label}</span>
-      <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-    </button>
-  );
-}
-
 function IconButton(props: { icon: React.ReactNode; label: string; onClick?: () => void; className?: string }) {
   return (
     <button
@@ -151,6 +127,35 @@ function IconButton(props: { icon: React.ReactNode; label: string; onClick?: () 
       <span className="text-primary">{props.icon}</span>
       <span className="hidden sm:inline">{props.label}</span>
       <span className="sm:hidden">{props.label}</span>
+    </button>
+  );
+}
+
+/** Chip menor, largura total e altura fixa (encaixe perfeito) */
+function ChipButton(props: {
+  icon: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  title?: string;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      disabled={props.disabled}
+      title={props.title}
+      className={`w-full h-10 inline-flex items-center justify-between gap-2 rounded-2xl border border-border/50 bg-white/5 px-3
+      text-xs text-foreground/90 transition shadow-sm
+      hover:bg-white/10 hover:border-border/70 hover:shadow-md active:scale-[0.99]
+      disabled:opacity-60 disabled:hover:bg-white/5 disabled:hover:shadow-sm ${props.className ?? ""}`}
+    >
+      <span className="inline-flex items-center gap-2 min-w-0">
+        <span className="text-primary shrink-0">{props.icon}</span>
+        <span className="truncate leading-none">{props.label}</span>
+      </span>
+      <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
     </button>
   );
 }
@@ -523,10 +528,8 @@ export default function InfluencerProfile() {
     audience_female_pct: femalePct,
     audience_male_pct: malePct,
 
-    // estilos: armazenar como array (até 3) e salvar como string
     content_styles: safeCommaListToArray((profile as any)?.content_style ?? ""),
 
-    // audiência editável
     audience_city_1: topCities?.[0] ?? "",
     audience_city_2: topCities?.[1] ?? "",
     audience_city_3: topCities?.[2] ?? "",
@@ -537,7 +540,6 @@ export default function InfluencerProfile() {
     age_top_3: topAges?.[2] ?? "",
   }));
 
-  // carrega o form apenas ao abrir (não atrapalha digitação)
   useEffect(() => {
     if (!editOpen) return;
 
@@ -600,13 +602,11 @@ export default function InfluencerProfile() {
       return;
     }
 
-    // normaliza gênero (se usuário digitar manualmente)
     const female = clamp(Number(form.audience_female_pct || 0), 0, 100);
     const male = clamp(Number(form.audience_male_pct || 0), 0, 100);
 
     setSaving(true);
     try {
-      // 1) Atualiza perfil básico
       const { error: pErr } = await supabase
         .from("profiles")
         .update({
@@ -621,11 +621,7 @@ export default function InfluencerProfile() {
 
           content_style: safeArrayToCommaList(form.content_styles) || null,
 
-          // audiência editável
-          audience_gender: {
-            female,
-            male,
-          },
+          audience_gender: { female, male },
           audience_cities: {
             ...(form.audience_city_1.trim() ? { [form.audience_city_1.trim()]: 1 } : {}),
             ...(form.audience_city_2.trim() ? { [form.audience_city_2.trim()]: 1 } : {}),
@@ -642,7 +638,6 @@ export default function InfluencerProfile() {
 
       if (pErr) throw pErr;
 
-      // 2) Atualiza métricas IG (mantém seu fluxo)
       await updateMyInstagramStats({
         instagram_username: form.instagram_username,
         followers_count: Number(form.followers_count || 0),
@@ -667,15 +662,13 @@ export default function InfluencerProfile() {
   return (
     <MobileLayout title="Meu perfil" showBack navType="influencer">
       <div className="px-6 py-6 space-y-6">
-        {/* HEADER (ajustado: sem espaço e layout horizontal) */}
+        {/* HEADER */}
         <div className="relative overflow-hidden rounded-3xl border border-border/50 bg-white/5 shadow-sm">
-          {/* fundo: gradiente + bolinhas (sem reservar altura) */}
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5" />
             <div className="absolute inset-0 opacity-[0.06] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:16px_16px]" />
           </div>
 
-          {/* conteúdo */}
           <div className="relative p-5">
             <div className="flex items-start gap-4">
               {/* avatar */}
@@ -719,9 +712,8 @@ export default function InfluencerProfile() {
                 />
               </div>
 
-              {/* infos ao lado da foto */}
+              {/* infos ao lado */}
               <div className="min-w-0 flex-1">
-                {/* nome + selo */}
                 <div className="flex items-center gap-2 min-w-0">
                   <h1 className="text-xl font-semibold text-foreground leading-tight break-words">
                     {profile?.name || "Creator"}
@@ -733,22 +725,19 @@ export default function InfluencerProfile() {
                   ) : null}
                 </div>
 
-                {/* chips abaixo do nome */}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <ChipLink
+                {/* ✅ chips: lado a lado + mesmo tamanho + encaixe perfeito */}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <ChipButton
                     icon={<Instagram className="w-4 h-4" />}
-                    label={(() => {
-                      const raw = buildInstagramLinks(igHandle)?.raw ?? null;
-                      return raw ? `@${raw}` : "Instagram não informado";
-                    })()}
+                    label={igRaw ? `@${igRaw}` : "Instagram"}
                     disabled={!igRaw}
                     onClick={() => openInstagram(igHandle)}
                     title="Abrir Instagram"
                   />
 
-                  <ChipLink
+                  <ChipButton
                     icon={<MapPin className="w-4 h-4" />}
-                    label={locationLabel}
+                    label={profile?.city ? profile.city : "Localização"}
                     onClick={() => {
                       const q = encodeURIComponent(locationLabel);
                       window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
@@ -798,7 +787,11 @@ export default function InfluencerProfile() {
               </span>
             </div>
             <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Seguidores</p>
-            <p className="text-sm font-semibold text-foreground truncate">{followersLabel}</p>
+            <p className="text-sm font-semibold text-foreground truncate">
+              {instagram?.followers_count === null || instagram?.followers_count === undefined
+                ? "—"
+                : Number(instagram.followers_count).toLocaleString("pt-BR")}
+            </p>
           </button>
 
           <div className="rounded-2xl border border-border/50 bg-white/5 p-4 text-left transition shadow-sm hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
@@ -1053,6 +1046,9 @@ export default function InfluencerProfile() {
               </div>
 
               <div className="mt-4 space-y-5 max-h-[70vh] overflow-auto pr-1">
+                {/* ... MODAL (mantido igual) ... */}
+                {/* (mantive todo o conteúdo do modal exatamente como estava) */}
+
                 {/* Básico */}
                 <div className="space-y-3">
                   <div className="text-xs text-muted-foreground uppercase tracking-widest">Informações</div>
@@ -1090,12 +1086,23 @@ export default function InfluencerProfile() {
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">@instagram</Label>
-                    <Input value={form.instagram_username} onChange={(e) => setForm((s) => ({ ...s, instagram_username: e.target.value }))} placeholder="@seuinstagram" className="text-sm" />
+                    <Input
+                      value={form.instagram_username}
+                      onChange={(e) => setForm((s) => ({ ...s, instagram_username: e.target.value }))}
+                      placeholder="@seuinstagram"
+                      className="text-sm"
+                    />
                   </div>
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Seguidores</Label>
-                    <Input type="number" min={0} value={form.followers_count} onChange={(e) => setForm((s) => ({ ...s, followers_count: Number(e.target.value || 0) }))} className="text-sm" />
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.followers_count}
+                      onChange={(e) => setForm((s) => ({ ...s, followers_count: Number(e.target.value || 0) }))}
+                      className="text-sm"
+                    />
                   </div>
                 </div>
 
@@ -1192,7 +1199,7 @@ export default function InfluencerProfile() {
                   <div className="text-[11px] text-muted-foreground">Sugestão de faixas: {AGE_BUCKETS.join(" · ")}</div>
                 </div>
 
-                {/* Estilos (até 3) */}
+                {/* Estilos */}
                 <div className="space-y-3">
                   <div className="text-xs text-muted-foreground uppercase tracking-widest">Estilos de conteúdo (até 3)</div>
 
