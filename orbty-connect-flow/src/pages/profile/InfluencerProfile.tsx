@@ -165,14 +165,27 @@ function MicroChip(props: {
   );
 }
 
-/** Donut dual via SVG (premium) */
+/** ✅ Chip minimalista para cidades (3 lado a lado) */
+function CityChip(props: { label: string; title?: string }) {
+  return (
+    <div
+      title={props.title}
+      className="h-10 min-w-0 flex items-center gap-2 rounded-2xl border border-border/50 bg-white/5 px-3
+      text-xs text-foreground/90 shadow-sm"
+    >
+      <MapPin className="w-4 h-4 text-primary shrink-0" />
+      <span className="truncate whitespace-nowrap">{props.label}</span>
+    </div>
+  );
+}
+
+/** Donut dual via SVG (sem badge visível) */
 function DualDonutChart(props: {
   aPct: number;
   bPct: number;
   label: string;
   aLabel: string;
   bLabel: string;
-  badge?: string;
 }) {
   const a = clamp(props.aPct, 0, 100);
   const b = clamp(props.bPct, 0, 100);
@@ -192,11 +205,6 @@ function DualDonutChart(props: {
     <div className="rounded-2xl border border-border/50 bg-white/5 p-4 shadow-sm transition hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
       <div className="flex items-center justify-between">
         <div className="text-xs text-muted-foreground">{props.label}</div>
-        {props.badge ? (
-          <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-            {props.badge}
-          </div>
-        ) : null}
       </div>
 
       <div className="mt-3 flex items-center gap-4">
@@ -264,7 +272,7 @@ function DualDonutChart(props: {
   );
 }
 
-/** ✅ Faixa etária em barras (sem donut) */
+/** ✅ Faixa etária em barras (sem badge) */
 function AgeBarsCard(props: { data: Record<string, number> | null; buckets: string[] }) {
   const normalized = useMemo(() => {
     const raw = props.data || {};
@@ -285,12 +293,7 @@ function AgeBarsCard(props: { data: Record<string, number> | null; buckets: stri
 
   return (
     <div className="rounded-2xl border border-border/50 bg-white/5 p-4 shadow-sm transition hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
-      <div className="flex items-center justify-between">
-        <div className="text-xs text-muted-foreground">Faixa etária</div>
-        <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-          barras
-        </div>
-      </div>
+      <div className="text-xs text-muted-foreground">Faixa etária</div>
 
       {!hasAny ? (
         <div className="mt-3 text-sm text-muted-foreground">Sem dados de faixa etária.</div>
@@ -485,6 +488,7 @@ export default function InfluencerProfile() {
   }, [profile, ctx.data]);
 
   const topCities = useMemo(() => topKeys(audienceCities, 4), [audienceCities]);
+  const topCities3 = useMemo(() => topKeys(audienceCities, 3), [audienceCities]);
 
   // Orbty success only
   const [orbtyAccepted, setOrbtyAccepted] = useState(0);
@@ -567,7 +571,6 @@ export default function InfluencerProfile() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-
   const [showAllCities, setShowAllCities] = useState(false);
 
   const [form, setForm] = useState(() => ({
@@ -803,7 +806,7 @@ export default function InfluencerProfile() {
               </div>
             </div>
 
-            {/* ações: único ponto de edição + instagram */}
+            {/* ações */}
             <div className="mt-4 grid grid-cols-2 gap-2">
               <IconButton
                 icon={<Pencil className="w-4 h-4" />}
@@ -822,7 +825,7 @@ export default function InfluencerProfile() {
           </div>
         </div>
 
-        {/* MODAL Bio completa */}
+        {/* MODAL Bio */}
         {bioOpen && (
           <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
             <div className="absolute inset-0 bg-black/60" onMouseDown={() => setBioOpen(false)} />
@@ -837,9 +840,7 @@ export default function InfluencerProfile() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <div className="mt-3 text-sm text-foreground leading-relaxed whitespace-pre-line">
-                {headerBio}
-              </div>
+              <div className="mt-3 text-sm text-foreground leading-relaxed whitespace-pre-line">{headerBio}</div>
             </div>
           </div>
         )}
@@ -866,66 +867,59 @@ export default function InfluencerProfile() {
           />
         </div>
 
-        {/* ✅ DIRETO PARA AUDIÊNCIA (remove Visão geral) */}
-        <SectionShell title="Audiência" subtitle="Dados informados por você (por enquanto)">
-          {/* Gênero mantém */}
-          <DualDonutChart
-            aPct={femalePct}
-            bPct={malePct}
-            label="Gênero"
-            aLabel="Feminino"
-            bLabel="Masculino"
-            badge="premium"
-          />
+        {/* AUDIÊNCIA */}
+        <SectionShell title="Audiência">
+          <DualDonutChart aPct={femalePct} bPct={malePct} label="Gênero" aLabel="Feminino" bLabel="Masculino" />
 
-          {/* ✅ Faixa etária em barras (18-24 até 55-64) */}
           <div className="mt-4">
             <AgeBarsCard data={audienceAge} buckets={[...AGE_BARS_BUCKETS]} />
           </div>
 
-          {/* Cidades (mantém, sem botão de editar) */}
-          <div className="rounded-2xl border border-border/50 bg-white/5 p-4 mt-4 shadow-sm transition hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-xs text-muted-foreground">Principais cidades</div>
-                <div className="text-[11px] text-muted-foreground mt-1">Sem números, só destaque</div>
-              </div>
+          {/* Principais localizações: 3 chips alinhados */}
+          <div className="mt-4">
+            <div className="text-xs text-muted-foreground mb-2">Principais localizações</div>
 
-              {topCities.length > 3 ? (
+            <div className="grid grid-cols-3 gap-2">
+              <CityChip label={topCities3[0] ?? "—"} />
+              <CityChip label={topCities3[1] ?? "—"} />
+              <CityChip label={topCities3[2] ?? "—"} />
+            </div>
+
+            {/* opcional: se quiser manter expandir sem poluir, mantive escondido por padrão */}
+            {topCities.length > 3 ? (
+              <div className="mt-2">
                 <button
                   type="button"
                   onClick={() => setShowAllCities((s) => !s)}
-                  className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground"
+                  className="text-xs text-muted-foreground hover:text-foreground transition"
                 >
                   {showAllCities ? "Ver menos" : "Ver mais"}
                 </button>
-              ) : null}
-            </div>
 
-            {topCities.length === 0 ? (
-              <div className="mt-3 text-sm text-muted-foreground">Sem dados de cidades.</div>
-            ) : (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {(showAllCities ? topCities : topCities.slice(0, 3)).map((city) => (
-                  <span
-                    key={city}
-                    className="text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground/90 hover:bg-white/10 transition"
-                  >
-                    {city}
-                  </span>
-                ))}
+                {showAllCities ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {topCities.map((city) => (
+                      <span
+                        key={city}
+                        className="text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground/90 hover:bg-white/10 transition"
+                      >
+                        {city}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
-            )}
+            ) : null}
           </div>
         </SectionShell>
 
-        {/* CONFIANÇA (sem botão editar) */}
-        <SectionShell title="Confiança (Orbty)" subtitle="Sinais de credibilidade da sua conta">
+        {/* CONFIANÇA */}
+        <SectionShell title="Confiança (Orbty)">
           <VerifiedOrbtyCard verified={isVerifiedInfluencer} updatedAt={(profile as any)?.updated_at ?? null} />
         </SectionShell>
 
-        {/* PERFORMANCE (sem botão editar) */}
-        <SectionShell title="Performance na Orbty" subtitle="Participações com sucesso">
+        {/* PERFORMANCE */}
+        <SectionShell title="Performance na Orbty">
           {loadingOrbty ? (
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
@@ -1074,7 +1068,7 @@ export default function InfluencerProfile() {
                   </div>
                 </div>
 
-                {/* Audiência (gênero) */}
+                {/* Audiência */}
                 <div className="space-y-3">
                   <div className="text-xs text-muted-foreground uppercase tracking-widest">Audiência</div>
 
@@ -1178,7 +1172,20 @@ export default function InfluencerProfile() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    {STYLE_OPTIONS.map((opt) => {
+                    {[
+                      "Lifestyle",
+                      "Beleza",
+                      "Moda",
+                      "Educação",
+                      "Fitness",
+                      "Gastronomia",
+                      "Viagem",
+                      "Tech",
+                      "Games",
+                      "Maternidade",
+                      "Negócios",
+                      "Humor",
+                    ].map((opt) => {
                       const active = form.content_styles.includes(opt);
                       const disabled = !active && form.content_styles.length >= 3;
 
@@ -1217,9 +1224,7 @@ export default function InfluencerProfile() {
                   {saving ? "Salvando..." : "Salvar alterações"}
                 </button>
 
-                <div className="text-xs text-muted-foreground">
-                  * Por enquanto, audiência e métricas são informadas por você. No futuro, será integrada com dados reais (Meta).
-                </div>
+                
               </div>
             </div>
           </div>
