@@ -20,9 +20,6 @@ import {
   Pencil,
   Shield,
   Sparkles,
-  Info,
-  Layers3,
-  CheckCircle2,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -102,9 +99,7 @@ function SectionShell(props: {
   className?: string;
 }) {
   return (
-    <div
-      className={`glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] ${props.className ?? ""}`}
-    >
+    <div className={`glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] ${props.className ?? ""}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm font-semibold text-foreground">{props.title}</div>
@@ -145,30 +140,17 @@ function ChipLink(props: {
   );
 }
 
-function NavChip(props: { icon?: React.ReactNode; label: string; onClick: () => void }) {
+function IconButton(props: { icon: React.ReactNode; label: string; onClick?: () => void; className?: string }) {
   return (
     <button
       type="button"
       onClick={props.onClick}
-      className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-white/5 px-3 py-2 text-xs text-muted-foreground transition
-      hover:bg-white/10 hover:text-foreground active:scale-[0.99]"
-    >
-      {props.icon ? <span className="text-primary">{props.icon}</span> : null}
-      {props.label}
-    </button>
-  );
-}
-
-function IconButton(props: { icon: React.ReactNode; label: string; onClick?: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      className="inline-flex items-center gap-2 rounded-xl border border-border/50 bg-white/5 px-3 py-2 text-sm text-foreground transition
-      hover:bg-white/10 hover:shadow-sm active:scale-[0.99]"
+      className={`inline-flex items-center gap-2 rounded-xl border border-border/50 bg-white/5 px-3 py-2 text-sm text-foreground transition
+      hover:bg-white/10 hover:shadow-sm active:scale-[0.99] ${props.className ?? ""}`}
     >
       <span className="text-primary">{props.icon}</span>
       <span className="hidden sm:inline">{props.label}</span>
+      <span className="sm:hidden">{props.label}</span>
     </button>
   );
 }
@@ -417,11 +399,19 @@ export default function InfluencerProfile() {
 
   // Audience extra (cidades/idades) — pega do profile primeiro
   const audienceCities = useMemo<ObjNum | null>(() => {
-    return parseObjectNumbers((profile as any)?.audience_cities) || parseObjectNumbers((ctx.data as any)?.audience_cities) || null;
+    return (
+      parseObjectNumbers((profile as any)?.audience_cities) ||
+      parseObjectNumbers((ctx.data as any)?.audience_cities) ||
+      null
+    );
   }, [profile, ctx.data]);
 
   const audienceAge = useMemo<ObjNum | null>(() => {
-    return parseObjectNumbers((profile as any)?.audience_age) || parseObjectNumbers((ctx.data as any)?.audience_age) || null;
+    return (
+      parseObjectNumbers((profile as any)?.audience_age) ||
+      parseObjectNumbers((ctx.data as any)?.audience_age) ||
+      null
+    );
   }, [profile, ctx.data]);
 
   const topCities = useMemo(() => topKeys(audienceCities, 4), [audienceCities]);
@@ -519,19 +509,6 @@ export default function InfluencerProfile() {
   const [saving, setSaving] = useState(false);
 
   const [showAllCities, setShowAllCities] = useState(false);
-
-  // refs das seções (UI-only)
-  const overviewRef = useRef<HTMLDivElement | null>(null);
-  const audienceRef = useRef<HTMLDivElement | null>(null);
-  const contentRef = useRef<HTMLDivElement | null>(null);
-  const trustRef = useRef<HTMLDivElement | null>(null);
-  const performanceRef = useRef<HTMLDivElement | null>(null);
-
-  const scrollTo = (ref: React.RefObject<HTMLDivElement | null>) => {
-    const el = ref.current;
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
 
   const [form, setForm] = useState(() => ({
     name: (profile as any)?.name ?? "",
@@ -690,17 +667,18 @@ export default function InfluencerProfile() {
   return (
     <MobileLayout title="Meu perfil" showBack navType="influencer">
       <div className="px-6 py-6 space-y-6">
-        {/* HERO (premium) */}
+        {/* HEADER (ajustado: sem espaço e layout horizontal) */}
         <div className="relative overflow-hidden rounded-3xl border border-border/50 bg-white/5 shadow-sm">
-          {/* cover */}
-          <div className="relative h-28">
-            <div className="absolute inset-0 bg-gradient-to-br from-white/12 via-transparent to-white/6" />
+          {/* fundo: gradiente + bolinhas (sem reservar altura) */}
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5" />
             <div className="absolute inset-0 opacity-[0.06] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:16px_16px]" />
           </div>
 
-          <div className="px-5 pb-5">
-            <div className="-mt-10 flex items-end justify-between gap-4">
-              {/* avatar + ring/glow */}
+          {/* conteúdo */}
+          <div className="relative p-5">
+            <div className="flex items-start gap-4">
+              {/* avatar */}
               <div className="relative shrink-0">
                 <div className="absolute -inset-2 rounded-3xl bg-primary/10 blur-lg opacity-60" />
                 <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-primary/20 bg-white/5 flex items-center justify-center">
@@ -741,57 +719,60 @@ export default function InfluencerProfile() {
                 />
               </div>
 
-              {/* actions compactas */}
-              <div className="flex gap-2 shrink-0">
-                <IconButton icon={<Pencil className="w-4 h-4" />} label="Editar" onClick={() => setEditOpen(true)} />
-                <IconButton
-                  icon={<Shield className="w-4 h-4" />}
-                  label="Dados"
-                  onClick={() => navigate("/perfil-influenciadora/dados-pessoais")}
-                />
+              {/* infos ao lado da foto */}
+              <div className="min-w-0 flex-1">
+                {/* nome + selo */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <h1 className="text-xl font-semibold text-foreground leading-tight break-words">
+                    {profile?.name || "Creator"}
+                  </h1>
+                  {isVerifiedInfluencer ? (
+                    <span className="shrink-0">
+                      <VerifiedBadge size="sm" />
+                    </span>
+                  ) : null}
+                </div>
+
+                {/* chips abaixo do nome */}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <ChipLink
+                    icon={<Instagram className="w-4 h-4" />}
+                    label={(() => {
+                      const raw = buildInstagramLinks(igHandle)?.raw ?? null;
+                      return raw ? `@${raw}` : "Instagram não informado";
+                    })()}
+                    disabled={!igRaw}
+                    onClick={() => openInstagram(igHandle)}
+                    title="Abrir Instagram"
+                  />
+
+                  <ChipLink
+                    icon={<MapPin className="w-4 h-4" />}
+                    label={locationLabel}
+                    onClick={() => {
+                      const q = encodeURIComponent(locationLabel);
+                      window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
+                    }}
+                    title="Abrir no Maps"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* nome + verificado alinhado */}
-            <div className="mt-4 flex items-center gap-2">
-              <h1 className="text-xl font-semibold text-foreground leading-tight break-words">
-                {profile?.name || "Creator"}
-              </h1>
-              {isVerifiedInfluencer ? (
-                <span className="shrink-0">
-                  <VerifiedBadge size="sm" />
-                </span>
-              ) : null}
-            </div>
-
-            {/* chips clicáveis */}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <ChipLink
-                icon={<Instagram className="w-4 h-4" />}
-                label={igRaw ? `@${igRaw}` : "Instagram não informado"}
-                disabled={!igRaw}
-                onClick={() => openInstagram(igHandle)}
-                title="Abrir Instagram"
+            {/* botões do header (largura igual) */}
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <IconButton
+                icon={<Pencil className="w-4 h-4" />}
+                label="Editar perfil"
+                onClick={() => setEditOpen(true)}
+                className="w-full justify-center"
               />
-
-              <ChipLink
-                icon={<MapPin className="w-4 h-4" />}
-                label={locationLabel}
-                onClick={() => {
-                  const q = encodeURIComponent(locationLabel);
-                  window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
-                }}
-                title="Abrir no Maps"
+              <IconButton
+                icon={<Shield className="w-4 h-4" />}
+                label="Dados pessoais"
+                onClick={() => navigate("/perfil-influenciadora/dados-pessoais")}
+                className="w-full justify-center"
               />
-            </div>
-
-            {/* quick nav premium */}
-            <div className="mt-4 flex flex-wrap gap-2">
-              <NavChip icon={<Info className="w-4 h-4" />} label="Visão geral" onClick={() => scrollTo(overviewRef)} />
-              <NavChip icon={<Users className="w-4 h-4" />} label="Audiência" onClick={() => scrollTo(audienceRef)} />
-              <NavChip icon={<Layers3 className="w-4 h-4" />} label="Conteúdo" onClick={() => scrollTo(contentRef)} />
-              <NavChip icon={<CheckCircle2 className="w-4 h-4" />} label="Confiança" onClick={() => scrollTo(trustRef)} />
-              <NavChip icon={<Sparkles className="w-4 h-4" />} label="Performance" onClick={() => scrollTo(performanceRef)} />
             </div>
           </div>
         </div>
@@ -803,7 +784,11 @@ export default function InfluencerProfile() {
             onClick={() => openInstagram(igHandle)}
             disabled={!igRaw}
             className={`rounded-2xl border p-4 text-left transition shadow-sm
-              ${igRaw ? "border-border/50 bg-white/5 hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px]" : "border-border/30 bg-white/5 opacity-60"}
+              ${
+                igRaw
+                  ? "border-border/50 bg-white/5 hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px]"
+                  : "border-border/30 bg-white/5 opacity-60"
+              }
               active:scale-[0.99]`}
           >
             <div className="flex items-center justify-between">
@@ -847,227 +832,214 @@ export default function InfluencerProfile() {
         </div>
 
         {/* VISÃO GERAL */}
-        <div ref={overviewRef} className="scroll-mt-24">
-          <SectionShell
-            title="Visão geral"
-            subtitle="Informações principais do seu perfil"
-            action={
-              <button
-                onClick={() => setEditOpen(true)}
-                className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
-              >
-                <Pencil className="w-4 h-4" />
-                Editar
-              </button>
-            }
-          >
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
-                <div className="text-xs text-muted-foreground">Bio</div>
-                <div className="mt-2 text-sm text-foreground leading-relaxed">
-                  {(profile as any)?.bio ? (profile as any)?.bio : <span className="text-muted-foreground">Adicione uma bio para deixar seu perfil mais completo.</span>}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <SoftPill icon={<MapPin className="w-4 h-4" />} label={locationLabel} />
-                <SoftPill icon={<Instagram className="w-4 h-4" />} label={igRaw ? `@${igRaw}` : "Instagram não informado"} />
-                <SoftPill icon={<Users className="w-4 h-4" />} label={`Seguidores: ${followersLabel}`} />
-              </div>
-            </div>
-          </SectionShell>
-        </div>
-
-        {/* AUDIÊNCIA */}
-        <div ref={audienceRef} className="scroll-mt-24">
-          <SectionShell
-            title="Audiência"
-            subtitle="Dados informados por você (por enquanto)"
-            action={
-              <button
-                onClick={() => setEditOpen(true)}
-                className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
-                title="Editar audiência no Editar perfil"
-              >
-                <Sparkles className="w-4 h-4" />
-                Editar
-              </button>
-            }
-          >
-            <DualDonutChart
-              aPct={femalePct}
-              bPct={malePct}
-              label="Gênero"
-              aLabel="Feminino"
-              bLabel="Masculino"
-              badge="premium"
-            />
-
-            {/* Idades */}
-            <div className="rounded-2xl border border-border/50 bg-white/5 p-4 mt-4 shadow-sm transition hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">Faixa etária (Top)</div>
-                <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-                  top
-                </div>
-              </div>
-
-              {topAges.length === 0 ? (
-                <div className="mt-3 text-sm text-muted-foreground">Sem dados de faixa etária.</div>
-              ) : (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {topAges.map((age) => (
-                    <span
-                      key={age}
-                      className="text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground/90 hover:bg-white/10 transition"
-                    >
-                      {age}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Cidades */}
-            <div className="rounded-2xl border border-border/50 bg-white/5 p-4 mt-4 shadow-sm transition hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-xs text-muted-foreground">Principais cidades</div>
-                  <div className="text-[11px] text-muted-foreground mt-1">Sem números, só destaque</div>
-                </div>
-
-                {topCities.length > 3 ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowAllCities((s) => !s)}
-                    className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground"
-                  >
-                    {showAllCities ? "Ver menos" : "Ver mais"}
-                  </button>
-                ) : null}
-              </div>
-
-              {topCities.length === 0 ? (
-                <div className="mt-3 text-sm text-muted-foreground">Sem dados de cidades.</div>
-              ) : (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(showAllCities ? topCities : topCities.slice(0, 3)).map((city) => (
-                    <span
-                      key={city}
-                      className="text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground/90 hover:bg-white/10 transition"
-                    >
-                      {city}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </SectionShell>
-        </div>
-
-        {/* CONTEÚDO */}
-        <div ref={contentRef} className="scroll-mt-24">
-          <SectionShell
-            title="Conteúdo"
-            subtitle="Como sua criação aparece para marcas"
-            action={
-              <button
-                onClick={() => setEditOpen(true)}
-                className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
-                title="Editar estilos no Editar perfil"
-              >
-                <Pencil className="w-4 h-4" />
-                Editar
-              </button>
-            }
-          >
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-xs text-muted-foreground">Estilos de conteúdo</div>
-                  <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-                    até 3
-                  </div>
-                </div>
-
-                {contentStyles.length === 0 ? (
-                  <div className="mt-3 text-sm text-muted-foreground">
-                    Nenhum estilo selecionado. Adicione até 3 para deixar seu perfil mais atrativo.
-                  </div>
+        <SectionShell
+          title="Visão geral"
+          subtitle="Informações principais do seu perfil"
+          action={
+            <button
+              onClick={() => setEditOpen(true)}
+              className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
+            >
+              <Pencil className="w-4 h-4" />
+              Editar
+            </button>
+          }
+        >
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
+              <div className="text-xs text-muted-foreground">Bio</div>
+              <div className="mt-2 text-sm text-foreground leading-relaxed">
+                {(profile as any)?.bio ? (
+                  (profile as any)?.bio
                 ) : (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {contentStyles.map((s) => (
-                      <span
-                        key={s}
-                        className="text-xs px-3 py-2 rounded-full border border-primary/20 bg-primary/10 text-primary"
-                      >
-                        {s}
-                      </span>
-                    ))}
-                  </div>
+                  <span className="text-muted-foreground">Adicione uma bio para deixar seu perfil mais completo.</span>
                 )}
               </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <SoftPill icon={<MapPin className="w-4 h-4" />} label={locationLabel} />
+              <SoftPill icon={<Instagram className="w-4 h-4" />} label={igRaw ? `@${igRaw}` : "Instagram não informado"} />
+              <SoftPill icon={<Users className="w-4 h-4" />} label={`Seguidores: ${followersLabel}`} />
+            </div>
+          </div>
+        </SectionShell>
+
+        {/* AUDIÊNCIA */}
+        <SectionShell
+          title="Audiência"
+          subtitle="Dados informados por você (por enquanto)"
+          action={
+            <button
+              onClick={() => setEditOpen(true)}
+              className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
+              title="Editar audiência no Editar perfil"
+            >
+              <Sparkles className="w-4 h-4" />
+              Editar
+            </button>
+          }
+        >
+          <DualDonutChart
+            aPct={femalePct}
+            bPct={malePct}
+            label="Gênero"
+            aLabel="Feminino"
+            bLabel="Masculino"
+            badge="premium"
+          />
+
+          <div className="rounded-2xl border border-border/50 bg-white/5 p-4 mt-4 shadow-sm transition hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">Faixa etária (Top)</div>
+              <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
+                top
+              </div>
+            </div>
+
+            {topAges.length === 0 ? (
+              <div className="mt-3 text-sm text-muted-foreground">Sem dados de faixa etária.</div>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {topAges.map((age) => (
+                  <span
+                    key={age}
+                    className="text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground/90 hover:bg-white/10 transition"
+                  >
+                    {age}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-border/50 bg-white/5 p-4 mt-4 shadow-sm transition hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs text-muted-foreground">Principais cidades</div>
+                <div className="text-[11px] text-muted-foreground mt-1">Sem números, só destaque</div>
+              </div>
+
+              {topCities.length > 3 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllCities((s) => !s)}
+                  className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground"
+                >
+                  {showAllCities ? "Ver menos" : "Ver mais"}
+                </button>
+              ) : null}
+            </div>
+
+            {topCities.length === 0 ? (
+              <div className="mt-3 text-sm text-muted-foreground">Sem dados de cidades.</div>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(showAllCities ? topCities : topCities.slice(0, 3)).map((city) => (
+                  <span
+                    key={city}
+                    className="text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground/90 hover:bg-white/10 transition"
+                  >
+                    {city}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </SectionShell>
+
+        {/* CONTEÚDO */}
+        <SectionShell
+          title="Conteúdo"
+          subtitle="Como sua criação aparece para marcas"
+          action={
+            <button
+              onClick={() => setEditOpen(true)}
+              className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
+              title="Editar estilos no Editar perfil"
+            >
+              <Pencil className="w-4 h-4" />
+              Editar
+            </button>
+          }
+        >
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs text-muted-foreground">Estilos de conteúdo</div>
+                <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
+                  até 3
+                </div>
+              </div>
+
+              {contentStyles.length === 0 ? (
+                <div className="mt-3 text-sm text-muted-foreground">
+                  Nenhum estilo selecionado. Adicione até 3 para deixar seu perfil mais atrativo.
+                </div>
+              ) : (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {contentStyles.map((s) => (
+                    <span key={s} className="text-xs px-3 py-2 rounded-full border border-primary/20 bg-primary/10 text-primary">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
+              <div className="text-xs text-muted-foreground">Dica</div>
+              <div className="mt-2 text-sm text-foreground/90">
+                Perfis com bio clara + estilos definidos costumam converter melhor em campanhas.
+              </div>
+            </div>
+          </div>
+        </SectionShell>
+
+        {/* CONFIANÇA */}
+        <SectionShell title="Confiança (Orbty)" subtitle="Sinais de credibilidade da sua conta">
+          <VerifiedOrbtyCard verified={isVerifiedInfluencer} updatedAt={(profile as any)?.updated_at ?? null} />
+        </SectionShell>
+
+        {/* PERFORMANCE */}
+        <SectionShell title="Performance na Orbty" subtitle="Participações com sucesso">
+          {loadingOrbty ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-muted-foreground">Aceites</div>
+                  <Sparkles className="w-4 h-4 text-primary" />
+                </div>
+                <div className="mt-3 space-y-2">
+                  <SkeletonLine w="40%" h={18} />
+                  <SkeletonLine w="70%" h={10} />
+                </div>
+              </div>
 
               <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
-                <div className="text-xs text-muted-foreground">Dica</div>
-                <div className="mt-2 text-sm text-foreground/90">
-                  Perfis com bio clara + estilos definidos costumam converter melhor em campanhas.
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-muted-foreground">Taxa de sucesso</div>
+                  <Sparkles className="w-4 h-4 text-primary" />
+                </div>
+                <div className="mt-3 space-y-2">
+                  <SkeletonLine w="55%" h={18} />
+                  <SkeletonLine w="80%" h={10} />
                 </div>
               </div>
             </div>
-          </SectionShell>
-        </div>
-
-        {/* CONFIANÇA */}
-        <div ref={trustRef} className="scroll-mt-24">
-          <SectionShell title="Confiança (Orbty)" subtitle="Sinais de credibilidade da sua conta">
-            <VerifiedOrbtyCard verified={isVerifiedInfluencer} updatedAt={(profile as any)?.updated_at ?? null} />
-          </SectionShell>
-        </div>
-
-        {/* PERFORMANCE */}
-        <div ref={performanceRef} className="scroll-mt-24">
-          <SectionShell title="Performance na Orbty" subtitle="Participações com sucesso">
-            {loadingOrbty ? (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs text-muted-foreground">Aceites</div>
-                    <Sparkles className="w-4 h-4 text-primary" />
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    <SkeletonLine w="40%" h={18} />
-                    <SkeletonLine w="70%" h={10} />
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs text-muted-foreground">Taxa de sucesso</div>
-                    <Sparkles className="w-4 h-4 text-primary" />
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    <SkeletonLine w="55%" h={18} />
-                    <SkeletonLine w="80%" h={10} />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                <MetricCard label="Aceites" value={orbtyAccepted} />
-                <MetricCard label="Taxa de sucesso" value={`${Math.round(successRate)}%`} />
-              </div>
-            )}
-          </SectionShell>
-        </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <MetricCard label="Aceites" value={orbtyAccepted} />
+              <MetricCard label="Taxa de sucesso" value={`${Math.round(successRate)}%`} />
+            </div>
+          )}
+        </SectionShell>
 
         {/* MODAL: Editar perfil completo */}
         {editOpen && (
           <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-            {/* ✅ fecha com mouseDown (mais confiável no mobile) */}
             <div className="absolute inset-0 bg-black/60" onMouseDown={() => (saving ? null : setEditOpen(false))} />
 
-            {/* ✅ impede o clique “vazar” pro overlay (corrige foco/digitação) */}
             <div
               className="relative w-full md:max-w-lg rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5"
               onMouseDown={(e) => e.stopPropagation()}
@@ -1118,23 +1090,12 @@ export default function InfluencerProfile() {
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">@instagram</Label>
-                    <Input
-                      value={form.instagram_username}
-                      onChange={(e) => setForm((s) => ({ ...s, instagram_username: e.target.value }))}
-                      placeholder="@seuinstagram"
-                      className="text-sm"
-                    />
+                    <Input value={form.instagram_username} onChange={(e) => setForm((s) => ({ ...s, instagram_username: e.target.value }))} placeholder="@seuinstagram" className="text-sm" />
                   </div>
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Seguidores</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={form.followers_count}
-                      onChange={(e) => setForm((s) => ({ ...s, followers_count: Number(e.target.value || 0) }))}
-                      className="text-sm"
-                    />
+                    <Input type="number" min={0} value={form.followers_count} onChange={(e) => setForm((s) => ({ ...s, followers_count: Number(e.target.value || 0) }))} className="text-sm" />
                   </div>
                 </div>
 
