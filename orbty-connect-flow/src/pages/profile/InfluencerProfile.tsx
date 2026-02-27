@@ -89,6 +89,47 @@ function openInstagram(handle?: string | null) {
   }
 }
 
+/** Formatação estilo Instagram:
+ *  - 1..9.999 -> 9.999
+ *  - 10.000..999.999 -> 10 mil / 12.3 mil / 999 mil
+ *  - 1.000.000+ -> 1M / 1.1M / 10M / 10.5M
+ */
+function formatIGCount(input: number | null | undefined) {
+  const n = Number(input ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return "—";
+
+  if (n < 10_000) {
+    return Math.floor(n).toLocaleString("pt-BR");
+  }
+
+  if (n < 1_000_000) {
+    const k = n / 1000;
+
+    // 10k..99,9k => 1 decimal (ex: 12.3 mil)
+    if (n < 100_000) {
+      const val = Math.floor(k * 10) / 10; // 1 casa, sem arredondar agressivo
+      const str = val % 1 === 0 ? String(Math.floor(val)) : String(val);
+      return `${str} mil`;
+    }
+
+    // 100k..999k => sem decimal (ex: 345 mil)
+    return `${Math.floor(k).toLocaleString("pt-BR")} mil`;
+  }
+
+  // 1M+
+  const m = n / 1_000_000;
+
+  // 1M..9,9M => 1 decimal (ex: 1.1M)
+  if (n < 10_000_000) {
+    const val = Math.floor(m * 10) / 10;
+    const str = val % 1 === 0 ? String(Math.floor(val)) : String(val);
+    return `${str}M`;
+  }
+
+  // 10M+ => inteiro (ex: 12M)
+  return `${Math.floor(m)}M`;
+}
+
 /* ---------- Premium UI blocks (safe, UI-only) ---------- */
 
 function SectionShell(props: {
@@ -157,6 +198,20 @@ function ChipButton(props: {
       </span>
       <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
     </button>
+  );
+}
+
+/** Chip micro (para a linha acima dos cards) */
+function MicroChip(props: { icon?: React.ReactNode; label: string; title?: string }) {
+  return (
+    <div
+      title={props.title}
+      className="h-9 min-w-0 inline-flex items-center gap-2 rounded-2xl border border-border/50 bg-white/5 px-3
+      text-[11px] leading-none text-foreground/90 shadow-sm"
+    >
+      {props.icon ? <span className="text-primary shrink-0">{props.icon}</span> : null}
+      <span className="min-w-0 truncate whitespace-nowrap">{props.label}</span>
+    </div>
   );
 }
 
@@ -498,6 +553,11 @@ export default function InfluencerProfile() {
       ? "—"
       : Number(instagram.followers_count).toLocaleString("pt-BR");
 
+  const followersCompact = useMemo(() => {
+    const n = instagram?.followers_count ?? null;
+    return formatIGCount(typeof n === "number" ? n : Number(n));
+  }, [instagram?.followers_count]);
+
   const femalePct = clamp(Number(instagram?.audience_female_pct ?? 50), 0, 100);
   const malePct = clamp(Number(instagram?.audience_male_pct ?? (100 - femalePct)), 0, 100);
 
@@ -505,6 +565,10 @@ export default function InfluencerProfile() {
 
   // Conteúdo: estilos do perfil (sem inventar)
   const contentStyles = useMemo(() => safeCommaListToArray((profile as any)?.content_style ?? ""), [profile]);
+  const primaryStyle = contentStyles?.[0] ?? "—";
+
+  // Região principal: prioriza topCities[0] (audience), depois city do perfil
+  const primaryRegion = topCities?.[0] ?? profile?.city ?? "—";
 
   /* =========================
      EDIT PROFILE MODAL (popup)
@@ -540,6 +604,7 @@ export default function InfluencerProfile() {
     age_top_3: topAges?.[2] ?? "",
   }));
 
+  // carrega o form apenas ao abrir (não atrapalha digitação)
   useEffect(() => {
     if (!editOpen) return;
 
@@ -602,11 +667,13 @@ export default function InfluencerProfile() {
       return;
     }
 
+    // normaliza gênero (se usuário digitar manualmente)
     const female = clamp(Number(form.audience_female_pct || 0), 0, 100);
     const male = clamp(Number(form.audience_male_pct || 0), 0, 100);
 
     setSaving(true);
     try {
+      // 1) Atualiza perfil básico
       const { error: pErr } = await supabase
         .from("profiles")
         .update({
@@ -621,7 +688,11 @@ export default function InfluencerProfile() {
 
           content_style: safeArrayToCommaList(form.content_styles) || null,
 
-          audience_gender: { female, male },
+          // audiência editável
+          audience_gender: {
+            female,
+            male,
+          },
           audience_cities: {
             ...(form.audience_city_1.trim() ? { [form.audience_city_1.trim()]: 1 } : {}),
             ...(form.audience_city_2.trim() ? { [form.audience_city_2.trim()]: 1 } : {}),
@@ -638,6 +709,7 @@ export default function InfluencerProfile() {
 
       if (pErr) throw pErr;
 
+      // 2) Atualiza métricas IG (mantém seu fluxo)
       await updateMyInstagramStats({
         instagram_username: form.instagram_username,
         followers_count: Number(form.followers_count || 0),
@@ -725,7 +797,7 @@ export default function InfluencerProfile() {
                   ) : null}
                 </div>
 
-                {/* ✅ chips: lado a lado + mesmo tamanho + encaixe perfeito */}
+                {/* chips: lado a lado + mesmo tamanho + encaixe perfeito */}
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <ChipButton
                     icon={<Instagram className="w-4 h-4" />}
@@ -766,7 +838,18 @@ export default function InfluencerProfile() {
           </div>
         </div>
 
-        {/* RESUMO RÁPIDO */}
+        {/* ✅ CHIPS (abaixo do header / acima dos cards) */}
+        <div className="grid grid-cols-3 gap-2">
+          <MicroChip
+            icon={<Users className="w-4 h-4" />}
+            label={`Público • ${followersCompact}`}
+            title={`Público: ${followersLabel}`}
+          />
+          <MicroChip icon={<Sparkles className="w-4 h-4" />} label={`Estilo • ${primaryStyle}`} title={`Estilo principal: ${primaryStyle}`} />
+          <MicroChip icon={<MapPin className="w-4 h-4" />} label={`Região • ${primaryRegion}`} title={`Região principal: ${primaryRegion}`} />
+        </div>
+
+        {/* RESUMO RÁPIDO (cards) */}
         <div className="grid grid-cols-3 gap-3">
           <button
             type="button"
@@ -782,16 +865,10 @@ export default function InfluencerProfile() {
           >
             <div className="flex items-center justify-between">
               <Users className="w-4 h-4 text-primary" />
-              <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-                público
-              </span>
+              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
             </div>
             <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Seguidores</p>
-            <p className="text-sm font-semibold text-foreground truncate">
-              {instagram?.followers_count === null || instagram?.followers_count === undefined
-                ? "—"
-                : Number(instagram.followers_count).toLocaleString("pt-BR")}
-            </p>
+            <p className="text-sm font-semibold text-foreground truncate">{followersCompact}</p>
           </button>
 
           <div className="rounded-2xl border border-border/50 bg-white/5 p-4 text-left transition shadow-sm hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
@@ -1046,8 +1123,7 @@ export default function InfluencerProfile() {
               </div>
 
               <div className="mt-4 space-y-5 max-h-[70vh] overflow-auto pr-1">
-                {/* ... MODAL (mantido igual) ... */}
-                {/* (mantive todo o conteúdo do modal exatamente como estava) */}
+                {/* (modal mantido igual ao que já estava funcionando) */}
 
                 {/* Básico */}
                 <div className="space-y-3">
@@ -1199,7 +1275,7 @@ export default function InfluencerProfile() {
                   <div className="text-[11px] text-muted-foreground">Sugestão de faixas: {AGE_BUCKETS.join(" · ")}</div>
                 </div>
 
-                {/* Estilos */}
+                {/* Estilos (até 3) */}
                 <div className="space-y-3">
                   <div className="text-xs text-muted-foreground uppercase tracking-widest">Estilos de conteúdo (até 3)</div>
 
