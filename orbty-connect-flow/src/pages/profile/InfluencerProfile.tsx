@@ -20,6 +20,9 @@ import {
   Pencil,
   Shield,
   Sparkles,
+  Info,
+  Layers3,
+  CheckCircle2,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -37,7 +40,10 @@ function GlassCard(props: { children: React.ReactNode; className?: string }) {
 
 function MetricCard(props: { label: string; value: React.ReactNode; icon?: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-2xl border border-border/50 bg-white/5 p-4 backdrop-blur ${props.className ?? ""}`}>
+    <div
+      className={`rounded-2xl border border-border/50 bg-white/5 p-4 backdrop-blur shadow-sm transition
+      hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99] ${props.className ?? ""}`}
+    >
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs text-muted-foreground">{props.label}</div>
         {props.icon}
@@ -86,71 +92,215 @@ function openInstagram(handle?: string | null) {
   }
 }
 
-/** Donut simples via SVG (sem libs) */
-function DonutChart(props: {
-  value: number; // 0..100
-  label: string;
-  sublabel?: string;
-  captionLeft?: string;
-  captionRight?: string;
-}) {
-  const v = clamp(props.value, 0, 100);
+/* ---------- Premium UI blocks (safe, UI-only) ---------- */
 
-  const size = 96;
-  const stroke = 10;
+function SectionShell(props: {
+  title: string;
+  subtitle?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] ${props.className ?? ""}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-foreground">{props.title}</div>
+          {props.subtitle ? <div className="text-xs text-muted-foreground mt-1">{props.subtitle}</div> : null}
+        </div>
+        {props.action ? <div className="shrink-0">{props.action}</div> : null}
+      </div>
+      <div className="mt-4">{props.children}</div>
+    </div>
+  );
+}
+
+function SkeletonLine({ w = "100%", h = 12 }: { w?: string; h?: number }) {
+  return <div className="animate-pulse rounded-xl bg-white/10" style={{ width: w, height: h }} />;
+}
+
+function ChipLink(props: {
+  icon?: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      disabled={props.disabled}
+      title={props.title}
+      className={`inline-flex items-center gap-2 rounded-full border border-border/50 bg-white/5 px-3 py-2 text-xs text-foreground/90 transition
+      hover:bg-white/10 hover:border-border/70 active:scale-[0.99]
+      disabled:opacity-60 disabled:hover:bg-white/5`}
+    >
+      {props.icon ? <span className="text-primary">{props.icon}</span> : null}
+      <span className="truncate max-w-[220px]">{props.label}</span>
+      <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+    </button>
+  );
+}
+
+function NavChip(props: { icon?: React.ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-white/5 px-3 py-2 text-xs text-muted-foreground transition
+      hover:bg-white/10 hover:text-foreground active:scale-[0.99]"
+    >
+      {props.icon ? <span className="text-primary">{props.icon}</span> : null}
+      {props.label}
+    </button>
+  );
+}
+
+function IconButton(props: { icon: React.ReactNode; label: string; onClick?: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      className="inline-flex items-center gap-2 rounded-xl border border-border/50 bg-white/5 px-3 py-2 text-sm text-foreground transition
+      hover:bg-white/10 hover:shadow-sm active:scale-[0.99]"
+    >
+      <span className="text-primary">{props.icon}</span>
+      <span className="hidden sm:inline">{props.label}</span>
+    </button>
+  );
+}
+
+/** Donut dual via SVG (premium) */
+function DualDonutChart(props: {
+  aPct: number; // 0..100
+  bPct: number; // 0..100
+  label: string;
+  aLabel: string;
+  bLabel: string;
+  badge?: string;
+}) {
+  const a = clamp(props.aPct, 0, 100);
+  const b = clamp(props.bPct, 0, 100);
+
+  const size = 108;
+  const stroke = 12;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const dash = (v / 100) * c;
+
+  const aDash = (a / 100) * c;
+  const bDash = (b / 100) * c;
+
+  const aOffset = 0;
+  const bOffset = aDash;
 
   return (
-    <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
+    <div className="rounded-2xl border border-border/50 bg-white/5 p-4 shadow-sm transition hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
       <div className="flex items-center justify-between">
         <div className="text-xs text-muted-foreground">{props.label}</div>
-        <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-          donut
-        </div>
+        {props.badge ? (
+          <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
+            {props.badge}
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-3 flex items-center gap-4">
-        <div className="relative w-[96px] h-[96px] shrink-0">
+        <div className="relative w-[108px] h-[108px] shrink-0">
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
             <circle
               cx={size / 2}
               cy={size / 2}
               r={r}
               fill="none"
-              stroke="rgba(255,255,255,0.08)"
+              stroke="rgba(236,72,153,0.75)"
               strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeDasharray={`${aDash} ${c - aDash}`}
+              strokeDashoffset={-aOffset}
+              transform={`rotate(-90 ${size / 2} ${size / 2})`}
             />
             <circle
               cx={size / 2}
               cy={size / 2}
               r={r}
               fill="none"
-              stroke="rgba(59,130,246,0.85)"
+              stroke="rgba(59,130,246,0.75)"
               strokeWidth={stroke}
               strokeLinecap="round"
-              strokeDasharray={`${dash} ${c - dash}`}
+              strokeDasharray={`${bDash} ${c - bDash}`}
+              strokeDashoffset={-bOffset}
               transform={`rotate(-90 ${size / 2} ${size / 2})`}
             />
           </svg>
 
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="text-lg font-semibold text-foreground">{Math.round(v)}%</div>
-            {props.sublabel ? <div className="text-[10px] text-muted-foreground -mt-1">{props.sublabel}</div> : null}
+            <div className="text-lg font-semibold text-foreground">{Math.round(a)}%</div>
+            <div className="text-[10px] text-muted-foreground -mt-1">{props.aLabel}</div>
           </div>
         </div>
 
-        <div className="min-w-0 flex-1">
-          {(props.captionLeft || props.captionRight) && (
-            <div className="text-xs text-muted-foreground space-y-1">
-              {props.captionLeft ? <div>{props.captionLeft}</div> : null}
-              {props.captionRight ? <div>{props.captionRight}</div> : null}
-            </div>
-          )}
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">{props.aLabel}</span>
+            <span className="text-foreground font-medium">{Math.round(a)}%</span>
+          </div>
+          <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+            <div className="h-full bg-pink-500/60" style={{ width: `${a}%` }} />
+          </div>
+
+          <div className="flex items-center justify-between text-xs pt-1">
+            <span className="text-muted-foreground">{props.bLabel}</span>
+            <span className="text-foreground font-medium">{Math.round(b)}%</span>
+          </div>
+          <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+            <div className="h-full bg-blue-500/60" style={{ width: `${b}%` }} />
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function VerifiedOrbtyCard(props: { verified: boolean; updatedAt?: string | null }) {
+  const updatedLabel = props.updatedAt ? new Date(props.updatedAt).toLocaleDateString("pt-BR") : null;
+
+  return (
+    <div className="rounded-2xl border border-border/50 bg-white/5 p-4 shadow-sm transition hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-primary" />
+            <div className="text-sm font-semibold text-foreground">Verificado Orbty</div>
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {props.verified ? "Conta aprovada na Orbty." : "Sua conta ainda não está marcada como verificada."}
+          </div>
+          {updatedLabel ? <div className="mt-2 text-[11px] text-muted-foreground">Atualizado em {updatedLabel}</div> : null}
+        </div>
+
+        <div
+          className={`text-[10px] px-2 py-1 rounded-full border bg-white/5 ${
+            props.verified ? "border-emerald-400/20 text-emerald-200" : "border-border/50 text-muted-foreground"
+          }`}
+          title="Conta aprovada na Orbty"
+        >
+          {props.verified ? "aprovado" : "pendente"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SoftPill(props: { icon?: React.ReactNode; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-white/5 px-3 py-2 text-xs text-foreground/90">
+      {props.icon ? <span className="text-primary">{props.icon}</span> : null}
+      {props.label}
+    </span>
   );
 }
 
@@ -267,19 +417,11 @@ export default function InfluencerProfile() {
 
   // Audience extra (cidades/idades) — pega do profile primeiro
   const audienceCities = useMemo<ObjNum | null>(() => {
-    return (
-      parseObjectNumbers((profile as any)?.audience_cities) ||
-      parseObjectNumbers((ctx.data as any)?.audience_cities) ||
-      null
-    );
+    return parseObjectNumbers((profile as any)?.audience_cities) || parseObjectNumbers((ctx.data as any)?.audience_cities) || null;
   }, [profile, ctx.data]);
 
   const audienceAge = useMemo<ObjNum | null>(() => {
-    return (
-      parseObjectNumbers((profile as any)?.audience_age) ||
-      parseObjectNumbers((ctx.data as any)?.audience_age) ||
-      null
-    );
+    return parseObjectNumbers((profile as any)?.audience_age) || parseObjectNumbers((ctx.data as any)?.audience_age) || null;
   }, [profile, ctx.data]);
 
   const topCities = useMemo(() => topKeys(audienceCities, 4), [audienceCities]);
@@ -366,12 +508,30 @@ export default function InfluencerProfile() {
 
   const locationLabel = profile ? `${profile.city}, ${profile.state}` : "—";
 
+  // Conteúdo: estilos do perfil (sem inventar)
+  const contentStyles = useMemo(() => safeCommaListToArray((profile as any)?.content_style ?? ""), [profile]);
+
   /* =========================
      EDIT PROFILE MODAL (popup)
   ========================= */
 
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const [showAllCities, setShowAllCities] = useState(false);
+
+  // refs das seções (UI-only)
+  const overviewRef = useRef<HTMLDivElement | null>(null);
+  const audienceRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const trustRef = useRef<HTMLDivElement | null>(null);
+  const performanceRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollTo = (ref: React.RefObject<HTMLDivElement | null>) => {
+    const el = ref.current;
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const [form, setForm] = useState(() => ({
     name: (profile as any)?.name ?? "",
@@ -530,13 +690,20 @@ export default function InfluencerProfile() {
   return (
     <MobileLayout title="Meu perfil" showBack navType="influencer">
       <div className="px-6 py-6 space-y-6">
-        {/* HERO */}
-        <GlassCard className="p-5">
-          <div className="flex items-start justify-between gap-4">
-            {/* avatar + infos */}
-            <div className="flex items-start gap-3 min-w-0">
+        {/* HERO (premium) */}
+        <div className="relative overflow-hidden rounded-3xl border border-border/50 bg-white/5 shadow-sm">
+          {/* cover */}
+          <div className="relative h-28">
+            <div className="absolute inset-0 bg-gradient-to-br from-white/12 via-transparent to-white/6" />
+            <div className="absolute inset-0 opacity-[0.06] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:16px_16px]" />
+          </div>
+
+          <div className="px-5 pb-5">
+            <div className="-mt-10 flex items-end justify-between gap-4">
+              {/* avatar + ring/glow */}
               <div className="relative shrink-0">
-                <div className="w-14 h-14 rounded-2xl overflow-hidden border border-primary/20 bg-white/5 flex items-center justify-center">
+                <div className="absolute -inset-2 rounded-3xl bg-primary/10 blur-lg opacity-60" />
+                <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-primary/20 bg-white/5 flex items-center justify-center">
                   {(profile as any)?.avatar_url ? (
                     <img
                       src={(profile as any).avatar_url}
@@ -549,11 +716,13 @@ export default function InfluencerProfile() {
                   )}
                 </div>
 
+                <div className="pointer-events-none absolute inset-0 rounded-3xl ring-2 ring-white/10" />
+
                 <button
                   type="button"
                   onClick={handlePickAvatar}
                   disabled={avatarUploading}
-                  className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-primary flex items-center justify-center disabled:opacity-60"
+                  className="absolute -bottom-2 -right-2 w-9 h-9 rounded-full bg-primary flex items-center justify-center disabled:opacity-60 shadow-md"
                   title="Alterar foto"
                 >
                   {avatarUploading ? (
@@ -572,82 +741,71 @@ export default function InfluencerProfile() {
                 />
               </div>
 
-              <div className="min-w-0">
-                {/* ✅ nome sem cortar + badge alinhado */}
-                <div className="flex items-center gap-2 max-w-full">
-                  <h1 className="text-lg font-semibold text-foreground leading-tight break-words">
-                    {profile?.name || "Creator"}
-                  </h1>
-                  {isVerifiedInfluencer && (
-                    <span className="shrink-0">
-                      <VerifiedBadge size="sm" />
-                    </span>
-                  )}
-                </div>
-
-                <div className="mt-1 text-sm text-muted-foreground flex items-center gap-2">
-                  <Instagram className="w-4 h-4" />
-                  {igRaw ? (
-                    <button
-                      onClick={() => openInstagram(igHandle)}
-                      className="inline-flex items-center gap-1 text-primary hover:opacity-90 transition-opacity"
-                      title="Abrir Instagram"
-                    >
-                      <span>@{igRaw}</span>
-                      <ExternalLink className="w-4 h-4" />
-                    </button>
-                  ) : (
-                    <span>Instagram não informado</span>
-                  )}
-                </div>
-
-                <div className="mt-1 text-sm text-muted-foreground flex items-center gap-2">
-                  <MapPin className="w-4 h-4" />
-                  <span className="truncate">{locationLabel}</span>
-                </div>
+              {/* actions compactas */}
+              <div className="flex gap-2 shrink-0">
+                <IconButton icon={<Pencil className="w-4 h-4" />} label="Editar" onClick={() => setEditOpen(true)} />
+                <IconButton
+                  icon={<Shield className="w-4 h-4" />}
+                  label="Dados"
+                  onClick={() => navigate("/perfil-influenciadora/dados-pessoais")}
+                />
               </div>
             </div>
 
-            {/* Ações (somente 2 botões) */}
-            <div className="flex flex-col gap-2 shrink-0">
-              <button
-                onClick={() => setEditOpen(true)}
-                className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
-              >
-                <Pencil className="w-4 h-4 text-primary" />
-                Editar perfil
-              </button>
+            {/* nome + verificado alinhado */}
+            <div className="mt-4 flex items-center gap-2">
+              <h1 className="text-xl font-semibold text-foreground leading-tight break-words">
+                {profile?.name || "Creator"}
+              </h1>
+              {isVerifiedInfluencer ? (
+                <span className="shrink-0">
+                  <VerifiedBadge size="sm" />
+                </span>
+              ) : null}
+            </div>
 
-              <button
-                onClick={() => navigate("/perfil-influenciadora/dados-pessoais")}
-                className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
-              >
-                <Shield className="w-4 h-4 text-primary" />
-                Dados pessoais
-              </button>
+            {/* chips clicáveis */}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <ChipLink
+                icon={<Instagram className="w-4 h-4" />}
+                label={igRaw ? `@${igRaw}` : "Instagram não informado"}
+                disabled={!igRaw}
+                onClick={() => openInstagram(igHandle)}
+                title="Abrir Instagram"
+              />
+
+              <ChipLink
+                icon={<MapPin className="w-4 h-4" />}
+                label={locationLabel}
+                onClick={() => {
+                  const q = encodeURIComponent(locationLabel);
+                  window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
+                }}
+                title="Abrir no Maps"
+              />
+            </div>
+
+            {/* quick nav premium */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <NavChip icon={<Info className="w-4 h-4" />} label="Visão geral" onClick={() => scrollTo(overviewRef)} />
+              <NavChip icon={<Users className="w-4 h-4" />} label="Audiência" onClick={() => scrollTo(audienceRef)} />
+              <NavChip icon={<Layers3 className="w-4 h-4" />} label="Conteúdo" onClick={() => scrollTo(contentRef)} />
+              <NavChip icon={<CheckCircle2 className="w-4 h-4" />} label="Confiança" onClick={() => scrollTo(trustRef)} />
+              <NavChip icon={<Sparkles className="w-4 h-4" />} label="Performance" onClick={() => scrollTo(performanceRef)} />
             </div>
           </div>
-        </GlassCard>
+        </div>
 
-        {/* QUICK CARDS */}
+        {/* RESUMO RÁPIDO */}
         <div className="grid grid-cols-3 gap-3">
           <button
             type="button"
             onClick={() => openInstagram(igHandle)}
             disabled={!igRaw}
-            className={`rounded-2xl border p-3 text-left transition ${
-              igRaw ? "border-border/50 bg-white/5 hover:bg-white/10" : "border-border/30 bg-white/5 opacity-60"
-            }`}
+            className={`rounded-2xl border p-4 text-left transition shadow-sm
+              ${igRaw ? "border-border/50 bg-white/5 hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px]" : "border-border/30 bg-white/5 opacity-60"}
+              active:scale-[0.99]`}
           >
-            <div className="flex items-center justify-between">
-              <Instagram className="w-4 h-4 text-primary" />
-              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-            </div>
-            <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Instagram</p>
-            <p className="text-sm font-semibold text-foreground truncate">{igRaw ? `@${igRaw}` : "—"}</p>
-          </button>
-
-          <div className="rounded-2xl border border-border/50 bg-white/5 p-3 text-left">
             <div className="flex items-center justify-between">
               <Users className="w-4 h-4 text-primary" />
               <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
@@ -656,6 +814,19 @@ export default function InfluencerProfile() {
             </div>
             <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Seguidores</p>
             <p className="text-sm font-semibold text-foreground truncate">{followersLabel}</p>
+          </button>
+
+          <div className="rounded-2xl border border-border/50 bg-white/5 p-4 text-left transition shadow-sm hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
+            <div className="flex items-center justify-between">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
+                orbty
+              </span>
+            </div>
+            <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Taxa de sucesso</p>
+            <p className="text-sm font-semibold text-foreground truncate">
+              {loadingOrbty ? "—" : `${Math.round(successRate)}%`}
+            </p>
           </div>
 
           <button
@@ -664,113 +835,237 @@ export default function InfluencerProfile() {
               const q = encodeURIComponent(locationLabel);
               window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
             }}
-            className="rounded-2xl border border-border/50 bg-white/5 hover:bg-white/10 p-3 text-left transition"
+            className="rounded-2xl border border-border/50 bg-white/5 hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] p-4 text-left transition shadow-sm active:scale-[0.99]"
           >
             <div className="flex items-center justify-between">
               <MapPin className="w-4 h-4 text-primary" />
               <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
             </div>
-            <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Localização</p>
+            <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Top cidade</p>
             <p className="text-sm font-semibold text-foreground truncate">{profile?.city || "—"}</p>
           </button>
         </div>
 
+        {/* VISÃO GERAL */}
+        <div ref={overviewRef} className="scroll-mt-24">
+          <SectionShell
+            title="Visão geral"
+            subtitle="Informações principais do seu perfil"
+            action={
+              <button
+                onClick={() => setEditOpen(true)}
+                className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
+              >
+                <Pencil className="w-4 h-4" />
+                Editar
+              </button>
+            }
+          >
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
+                <div className="text-xs text-muted-foreground">Bio</div>
+                <div className="mt-2 text-sm text-foreground leading-relaxed">
+                  {(profile as any)?.bio ? (profile as any)?.bio : <span className="text-muted-foreground">Adicione uma bio para deixar seu perfil mais completo.</span>}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <SoftPill icon={<MapPin className="w-4 h-4" />} label={locationLabel} />
+                <SoftPill icon={<Instagram className="w-4 h-4" />} label={igRaw ? `@${igRaw}` : "Instagram não informado"} />
+                <SoftPill icon={<Users className="w-4 h-4" />} label={`Seguidores: ${followersLabel}`} />
+              </div>
+            </div>
+          </SectionShell>
+        </div>
+
         {/* AUDIÊNCIA */}
-        <GlassCard className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-foreground">Audiência</div>
-              <div className="text-xs text-muted-foreground">Dados informados por você (por enquanto)</div>
+        <div ref={audienceRef} className="scroll-mt-24">
+          <SectionShell
+            title="Audiência"
+            subtitle="Dados informados por você (por enquanto)"
+            action={
+              <button
+                onClick={() => setEditOpen(true)}
+                className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
+                title="Editar audiência no Editar perfil"
+              >
+                <Sparkles className="w-4 h-4" />
+                Editar
+              </button>
+            }
+          >
+            <DualDonutChart
+              aPct={femalePct}
+              bPct={malePct}
+              label="Gênero"
+              aLabel="Feminino"
+              bLabel="Masculino"
+              badge="premium"
+            />
+
+            {/* Idades */}
+            <div className="rounded-2xl border border-border/50 bg-white/5 p-4 mt-4 shadow-sm transition hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-muted-foreground">Faixa etária (Top)</div>
+                <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
+                  top
+                </div>
+              </div>
+
+              {topAges.length === 0 ? (
+                <div className="mt-3 text-sm text-muted-foreground">Sem dados de faixa etária.</div>
+              ) : (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {topAges.map((age) => (
+                    <span
+                      key={age}
+                      className="text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground/90 hover:bg-white/10 transition"
+                    >
+                      {age}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <button
-              onClick={() => setEditOpen(true)}
-              className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground inline-flex items-center gap-2 shrink-0"
-              title="Editar audiência no Editar perfil"
-            >
-              <Sparkles className="w-4 h-4" />
-              Editar
-            </button>
-          </div>
+            {/* Cidades */}
+            <div className="rounded-2xl border border-border/50 bg-white/5 p-4 mt-4 shadow-sm transition hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs text-muted-foreground">Principais cidades</div>
+                  <div className="text-[11px] text-muted-foreground mt-1">Sem números, só destaque</div>
+                </div>
 
-          <DonutChart
-            value={femalePct}
-            label="Gênero"
-            sublabel="Feminino"
-            captionLeft={`Feminino: ${Math.round(femalePct)}%`}
-            captionRight={`Masculino: ${Math.round(malePct)}%`}
-          />
+                {topCities.length > 3 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllCities((s) => !s)}
+                    className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground"
+                  >
+                    {showAllCities ? "Ver menos" : "Ver mais"}
+                  </button>
+                ) : null}
+              </div>
 
-          <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-muted-foreground">Faixa etária (Top)</div>
-              <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-                top
+              {topCities.length === 0 ? (
+                <div className="mt-3 text-sm text-muted-foreground">Sem dados de cidades.</div>
+              ) : (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(showAllCities ? topCities : topCities.slice(0, 3)).map((city) => (
+                    <span
+                      key={city}
+                      className="text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground/90 hover:bg-white/10 transition"
+                    >
+                      {city}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </SectionShell>
+        </div>
+
+        {/* CONTEÚDO */}
+        <div ref={contentRef} className="scroll-mt-24">
+          <SectionShell
+            title="Conteúdo"
+            subtitle="Como sua criação aparece para marcas"
+            action={
+              <button
+                onClick={() => setEditOpen(true)}
+                className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
+                title="Editar estilos no Editar perfil"
+              >
+                <Pencil className="w-4 h-4" />
+                Editar
+              </button>
+            }
+          >
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs text-muted-foreground">Estilos de conteúdo</div>
+                  <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
+                    até 3
+                  </div>
+                </div>
+
+                {contentStyles.length === 0 ? (
+                  <div className="mt-3 text-sm text-muted-foreground">
+                    Nenhum estilo selecionado. Adicione até 3 para deixar seu perfil mais atrativo.
+                  </div>
+                ) : (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {contentStyles.map((s) => (
+                      <span
+                        key={s}
+                        className="text-xs px-3 py-2 rounded-full border border-primary/20 bg-primary/10 text-primary"
+                      >
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
+                <div className="text-xs text-muted-foreground">Dica</div>
+                <div className="mt-2 text-sm text-foreground/90">
+                  Perfis com bio clara + estilos definidos costumam converter melhor em campanhas.
+                </div>
               </div>
             </div>
+          </SectionShell>
+        </div>
 
-            {topAges.length === 0 ? (
-              <div className="mt-3 text-sm text-muted-foreground">Sem dados de faixa etária.</div>
+        {/* CONFIANÇA */}
+        <div ref={trustRef} className="scroll-mt-24">
+          <SectionShell title="Confiança (Orbty)" subtitle="Sinais de credibilidade da sua conta">
+            <VerifiedOrbtyCard verified={isVerifiedInfluencer} updatedAt={(profile as any)?.updated_at ?? null} />
+          </SectionShell>
+        </div>
+
+        {/* PERFORMANCE */}
+        <div ref={performanceRef} className="scroll-mt-24">
+          <SectionShell title="Performance na Orbty" subtitle="Participações com sucesso">
+            {loadingOrbty ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-muted-foreground">Aceites</div>
+                    <Sparkles className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    <SkeletonLine w="40%" h={18} />
+                    <SkeletonLine w="70%" h={10} />
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-muted-foreground">Taxa de sucesso</div>
+                    <Sparkles className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    <SkeletonLine w="55%" h={18} />
+                    <SkeletonLine w="80%" h={10} />
+                  </div>
+                </div>
+              </div>
             ) : (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {topAges.map((age) => (
-                  <span key={age} className="text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground">
-                    {age}
-                  </span>
-                ))}
+              <div className="grid grid-cols-2 gap-3">
+                <MetricCard label="Aceites" value={orbtyAccepted} />
+                <MetricCard label="Taxa de sucesso" value={`${Math.round(successRate)}%`} />
               </div>
             )}
-          </div>
-
-          <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-muted-foreground">Principais cidades</div>
-              <div className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-                top
-              </div>
-            </div>
-
-            {topCities.length === 0 ? (
-              <div className="mt-3 text-sm text-muted-foreground">Sem dados de cidades.</div>
-            ) : (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {topCities.map((city) => (
-                  <span key={city} className="text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground">
-                    {city}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </GlassCard>
-
-        {/* PERFORMANCE ORBTY */}
-        <GlassCard className="space-y-3">
-          <div>
-            <div className="text-sm font-semibold text-foreground">Performance na Orbty</div>
-            <div className="text-xs text-muted-foreground">Participações com sucesso</div>
-          </div>
-
-          {loadingOrbty ? (
-            <div className="flex justify-center py-2">
-              <Loader2 className="w-4 h-4 text-primary animate-spin" />
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <MetricCard label="Aceites" value={orbtyAccepted} />
-              <MetricCard label="Taxa de sucesso" value={`${Math.round(successRate)}%`} />
-            </div>
-          )}
-        </GlassCard>
+          </SectionShell>
+        </div>
 
         {/* MODAL: Editar perfil completo */}
         {editOpen && (
           <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
             {/* ✅ fecha com mouseDown (mais confiável no mobile) */}
-            <div
-              className="absolute inset-0 bg-black/60"
-              onMouseDown={() => (saving ? null : setEditOpen(false))}
-            />
+            <div className="absolute inset-0 bg-black/60" onMouseDown={() => (saving ? null : setEditOpen(false))} />
 
             {/* ✅ impede o clique “vazar” pro overlay (corrige foco/digitação) */}
             <div
@@ -780,11 +1075,7 @@ export default function InfluencerProfile() {
             >
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold text-foreground">Editar perfil</div>
-                <button
-                  className="p-2 rounded-xl hover:bg-white/5"
-                  onClick={() => (saving ? null : setEditOpen(false))}
-                  type="button"
-                >
+                <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => (saving ? null : setEditOpen(false))} type="button">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -796,48 +1087,28 @@ export default function InfluencerProfile() {
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Nome *</Label>
-                    <Input
-                      value={form.name}
-                      onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
-                      className="text-sm"
-                    />
+                    <Input value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} className="text-sm" />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade</Label>
-                      <Input
-                        value={form.city}
-                        onChange={(e) => setForm((s) => ({ ...s, city: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={form.city} onChange={(e) => setForm((s) => ({ ...s, city: e.target.value }))} className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Estado</Label>
-                      <Input
-                        value={form.state}
-                        onChange={(e) => setForm((s) => ({ ...s, state: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={form.state} onChange={(e) => setForm((s) => ({ ...s, state: e.target.value }))} className="text-sm" />
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Bairro</Label>
-                    <Input
-                      value={form.neighborhood}
-                      onChange={(e) => setForm((s) => ({ ...s, neighborhood: e.target.value }))}
-                      className="text-sm"
-                    />
+                    <Input value={form.neighborhood} onChange={(e) => setForm((s) => ({ ...s, neighborhood: e.target.value }))} className="text-sm" />
                   </div>
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Bio</Label>
-                    <Input
-                      value={form.bio}
-                      onChange={(e) => setForm((s) => ({ ...s, bio: e.target.value }))}
-                      className="text-sm"
-                    />
+                    <Input value={form.bio} onChange={(e) => setForm((s) => ({ ...s, bio: e.target.value }))} className="text-sm" />
                   </div>
                 </div>
 
@@ -926,78 +1197,43 @@ export default function InfluencerProfile() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #1</Label>
-                      <Input
-                        value={form.audience_city_1}
-                        onChange={(e) => setForm((s) => ({ ...s, audience_city_1: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={form.audience_city_1} onChange={(e) => setForm((s) => ({ ...s, audience_city_1: e.target.value }))} className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #2</Label>
-                      <Input
-                        value={form.audience_city_2}
-                        onChange={(e) => setForm((s) => ({ ...s, audience_city_2: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={form.audience_city_2} onChange={(e) => setForm((s) => ({ ...s, audience_city_2: e.target.value }))} className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #3</Label>
-                      <Input
-                        value={form.audience_city_3}
-                        onChange={(e) => setForm((s) => ({ ...s, audience_city_3: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={form.audience_city_3} onChange={(e) => setForm((s) => ({ ...s, audience_city_3: e.target.value }))} className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #4</Label>
-                      <Input
-                        value={form.audience_city_4}
-                        onChange={(e) => setForm((s) => ({ ...s, audience_city_4: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={form.audience_city_4} onChange={(e) => setForm((s) => ({ ...s, audience_city_4: e.target.value }))} className="text-sm" />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Idade Top #1</Label>
-                      <Input
-                        value={form.age_top_1}
-                        onChange={(e) => setForm((s) => ({ ...s, age_top_1: e.target.value }))}
-                        placeholder="18-24"
-                        className="text-sm"
-                      />
+                      <Input value={form.age_top_1} onChange={(e) => setForm((s) => ({ ...s, age_top_1: e.target.value }))} placeholder="18-24" className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Idade Top #2</Label>
-                      <Input
-                        value={form.age_top_2}
-                        onChange={(e) => setForm((s) => ({ ...s, age_top_2: e.target.value }))}
-                        placeholder="25-34"
-                        className="text-sm"
-                      />
+                      <Input value={form.age_top_2} onChange={(e) => setForm((s) => ({ ...s, age_top_2: e.target.value }))} placeholder="25-34" className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Idade Top #3</Label>
-                      <Input
-                        value={form.age_top_3}
-                        onChange={(e) => setForm((s) => ({ ...s, age_top_3: e.target.value }))}
-                        placeholder="35-44"
-                        className="text-sm"
-                      />
+                      <Input value={form.age_top_3} onChange={(e) => setForm((s) => ({ ...s, age_top_3: e.target.value }))} placeholder="35-44" className="text-sm" />
                     </div>
                   </div>
 
-                  <div className="text-[11px] text-muted-foreground">
-                    Sugestão de faixas: {AGE_BUCKETS.join(" · ")}
-                  </div>
+                  <div className="text-[11px] text-muted-foreground">Sugestão de faixas: {AGE_BUCKETS.join(" · ")}</div>
                 </div>
 
                 {/* Estilos (até 3) */}
                 <div className="space-y-3">
-                  <div className="text-xs text-muted-foreground uppercase tracking-widest">
-                    Estilos de conteúdo (até 3)
-                  </div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-widest">Estilos de conteúdo (até 3)</div>
 
                   <div className="flex flex-wrap gap-2">
                     {STYLE_OPTIONS.map((opt) => {
@@ -1024,9 +1260,7 @@ export default function InfluencerProfile() {
 
                   <div className="text-[11px] text-muted-foreground">
                     Selecionados:{" "}
-                    <span className="text-foreground font-medium">
-                      {form.content_styles.join(", ") || "—"}
-                    </span>
+                    <span className="text-foreground font-medium">{form.content_styles.join(", ") || "—"}</span>
                   </div>
                 </div>
 
@@ -1047,9 +1281,7 @@ export default function InfluencerProfile() {
           </div>
         )}
 
-        {ctx.error && (
-          <div className="text-xs text-muted-foreground">Erro ao carregar contexto premium: {String(ctx.error)}</div>
-        )}
+        {ctx.error && <div className="text-xs text-muted-foreground">Erro ao carregar contexto premium: {String(ctx.error)}</div>}
       </div>
     </MobileLayout>
   );
