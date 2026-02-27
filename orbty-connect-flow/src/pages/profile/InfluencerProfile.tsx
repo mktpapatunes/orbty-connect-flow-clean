@@ -201,16 +201,25 @@ function ChipButton(props: {
   );
 }
 
-/** Chip micro (para a linha acima dos cards) */
-function MicroChip(props: { icon?: React.ReactNode; label: string; title?: string }) {
+/** ✅ Chip micro com label + valor empilhado (compacto e premium) */
+function MicroChip(props: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  title?: string;
+}) {
   return (
     <div
       title={props.title}
-      className="h-9 min-w-0 inline-flex items-center gap-2 rounded-2xl border border-border/50 bg-white/5 px-3
-      text-[11px] leading-none text-foreground/90 shadow-sm"
+      className="h-12 min-w-0 flex items-center gap-2 rounded-2xl border border-border/50 bg-white/5 px-3
+      text-[11px] text-foreground/90 shadow-sm"
     >
-      {props.icon ? <span className="text-primary shrink-0">{props.icon}</span> : null}
-      <span className="min-w-0 truncate whitespace-nowrap">{props.label}</span>
+      <span className="text-primary shrink-0">{props.icon}</span>
+
+      <div className="min-w-0 leading-tight">
+        <div className="text-[10px] text-muted-foreground whitespace-nowrap">{props.label}:</div>
+        <div className="text-xs font-semibold truncate whitespace-nowrap">{props.value}</div>
+      </div>
     </div>
   );
 }
@@ -252,7 +261,14 @@ function DualDonutChart(props: {
       <div className="mt-3 flex items-center gap-4">
         <div className="relative w-[108px] h-[108px] shrink-0">
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={r}
+              fill="none"
+              stroke="rgba(255,255,255,0.08)"
+              strokeWidth={stroke}
+            />
             <circle
               cx={size / 2}
               cy={size / 2}
@@ -592,8 +608,10 @@ export default function InfluencerProfile() {
     audience_female_pct: femalePct,
     audience_male_pct: malePct,
 
+    // estilos: armazenar como array (até 3) e salvar como string
     content_styles: safeCommaListToArray((profile as any)?.content_style ?? ""),
 
+    // audiência editável
     audience_city_1: topCities?.[0] ?? "",
     audience_city_2: topCities?.[1] ?? "",
     audience_city_3: topCities?.[2] ?? "",
@@ -838,67 +856,26 @@ export default function InfluencerProfile() {
           </div>
         </div>
 
-        {/* ✅ CHIPS (abaixo do header / acima dos cards) */}
+        {/* ✅ BLOCO SUBSTITUTO (3 chips no lugar dos cards antigos) */}
         <div className="grid grid-cols-3 gap-2">
           <MicroChip
             icon={<Users className="w-4 h-4" />}
-            label={`Público • ${followersCompact}`}
-            title={`Público: ${followersLabel}`}
+            label="Seguidores"
+            value={followersCompact}
+            title={`Seguidores: ${followersLabel}`}
           />
-          <MicroChip icon={<Sparkles className="w-4 h-4" />} label={`Estilo • ${primaryStyle}`} title={`Estilo principal: ${primaryStyle}`} />
-          <MicroChip icon={<MapPin className="w-4 h-4" />} label={`Região • ${primaryRegion}`} title={`Região principal: ${primaryRegion}`} />
-        </div>
-
-        {/* RESUMO RÁPIDO (cards) */}
-        <div className="grid grid-cols-3 gap-3">
-          <button
-            type="button"
-            onClick={() => openInstagram(igHandle)}
-            disabled={!igRaw}
-            className={`rounded-2xl border p-4 text-left transition shadow-sm
-              ${
-                igRaw
-                  ? "border-border/50 bg-white/5 hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px]"
-                  : "border-border/30 bg-white/5 opacity-60"
-              }
-              active:scale-[0.99]`}
-          >
-            <div className="flex items-center justify-between">
-              <Users className="w-4 h-4 text-primary" />
-              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-            </div>
-            <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Seguidores</p>
-            <p className="text-sm font-semibold text-foreground truncate">{followersCompact}</p>
-          </button>
-
-          <div className="rounded-2xl border border-border/50 bg-white/5 p-4 text-left transition shadow-sm hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
-            <div className="flex items-center justify-between">
-              <Sparkles className="w-4 h-4 text-primary" />
-              <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-white/5 text-muted-foreground">
-                orbty
-              </span>
-            </div>
-            <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Taxa de sucesso</p>
-            <p className="text-sm font-semibold text-foreground truncate">
-              {loadingOrbty ? "—" : `${Math.round(successRate)}%`}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              const q = encodeURIComponent(locationLabel);
-              window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
-            }}
-            className="rounded-2xl border border-border/50 bg-white/5 hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] p-4 text-left transition shadow-sm active:scale-[0.99]"
-          >
-            <div className="flex items-center justify-between">
-              <MapPin className="w-4 h-4 text-primary" />
-              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-            </div>
-            <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Top cidade</p>
-            <p className="text-sm font-semibold text-foreground truncate">{profile?.city || "—"}</p>
-          </button>
+          <MicroChip
+            icon={<Sparkles className="w-4 h-4" />}
+            label="Conteúdo"
+            value={primaryStyle}
+            title={`Estilo principal: ${primaryStyle}`}
+          />
+          <MicroChip
+            icon={<MapPin className="w-4 h-4" />}
+            label="Região"
+            value={primaryRegion}
+            title={`Região principal: ${primaryRegion}`}
+          />
         </div>
 
         {/* VISÃO GERAL */}
@@ -1117,42 +1094,64 @@ export default function InfluencerProfile() {
             >
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold text-foreground">Editar perfil</div>
-                <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => (saving ? null : setEditOpen(false))} type="button">
+                <button
+                  className="p-2 rounded-xl hover:bg-white/5"
+                  onClick={() => (saving ? null : setEditOpen(false))}
+                  type="button"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               <div className="mt-4 space-y-5 max-h-[70vh] overflow-auto pr-1">
-                {/* (modal mantido igual ao que já estava funcionando) */}
-
                 {/* Básico */}
                 <div className="space-y-3">
                   <div className="text-xs text-muted-foreground uppercase tracking-widest">Informações</div>
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Nome *</Label>
-                    <Input value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} className="text-sm" />
+                    <Input
+                      value={form.name}
+                      onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
+                      className="text-sm"
+                    />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade</Label>
-                      <Input value={form.city} onChange={(e) => setForm((s) => ({ ...s, city: e.target.value }))} className="text-sm" />
+                      <Input
+                        value={form.city}
+                        onChange={(e) => setForm((s) => ({ ...s, city: e.target.value }))}
+                        className="text-sm"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Estado</Label>
-                      <Input value={form.state} onChange={(e) => setForm((s) => ({ ...s, state: e.target.value }))} className="text-sm" />
+                      <Input
+                        value={form.state}
+                        onChange={(e) => setForm((s) => ({ ...s, state: e.target.value }))}
+                        className="text-sm"
+                      />
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Bairro</Label>
-                    <Input value={form.neighborhood} onChange={(e) => setForm((s) => ({ ...s, neighborhood: e.target.value }))} className="text-sm" />
+                    <Input
+                      value={form.neighborhood}
+                      onChange={(e) => setForm((s) => ({ ...s, neighborhood: e.target.value }))}
+                      className="text-sm"
+                    />
                   </div>
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Bio</Label>
-                    <Input value={form.bio} onChange={(e) => setForm((s) => ({ ...s, bio: e.target.value }))} className="text-sm" />
+                    <Input
+                      value={form.bio}
+                      onChange={(e) => setForm((s) => ({ ...s, bio: e.target.value }))}
+                      className="text-sm"
+                    />
                   </div>
                 </div>
 
@@ -1241,43 +1240,78 @@ export default function InfluencerProfile() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #1</Label>
-                      <Input value={form.audience_city_1} onChange={(e) => setForm((s) => ({ ...s, audience_city_1: e.target.value }))} className="text-sm" />
+                      <Input
+                        value={form.audience_city_1}
+                        onChange={(e) => setForm((s) => ({ ...s, audience_city_1: e.target.value }))}
+                        className="text-sm"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #2</Label>
-                      <Input value={form.audience_city_2} onChange={(e) => setForm((s) => ({ ...s, audience_city_2: e.target.value }))} className="text-sm" />
+                      <Input
+                        value={form.audience_city_2}
+                        onChange={(e) => setForm((s) => ({ ...s, audience_city_2: e.target.value }))}
+                        className="text-sm"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #3</Label>
-                      <Input value={form.audience_city_3} onChange={(e) => setForm((s) => ({ ...s, audience_city_3: e.target.value }))} className="text-sm" />
+                      <Input
+                        value={form.audience_city_3}
+                        onChange={(e) => setForm((s) => ({ ...s, audience_city_3: e.target.value }))}
+                        className="text-sm"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #4</Label>
-                      <Input value={form.audience_city_4} onChange={(e) => setForm((s) => ({ ...s, audience_city_4: e.target.value }))} className="text-sm" />
+                      <Input
+                        value={form.audience_city_4}
+                        onChange={(e) => setForm((s) => ({ ...s, audience_city_4: e.target.value }))}
+                        className="text-sm"
+                      />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Idade Top #1</Label>
-                      <Input value={form.age_top_1} onChange={(e) => setForm((s) => ({ ...s, age_top_1: e.target.value }))} placeholder="18-24" className="text-sm" />
+                      <Input
+                        value={form.age_top_1}
+                        onChange={(e) => setForm((s) => ({ ...s, age_top_1: e.target.value }))}
+                        placeholder="18-24"
+                        className="text-sm"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Idade Top #2</Label>
-                      <Input value={form.age_top_2} onChange={(e) => setForm((s) => ({ ...s, age_top_2: e.target.value }))} placeholder="25-34" className="text-sm" />
+                      <Input
+                        value={form.age_top_2}
+                        onChange={(e) => setForm((s) => ({ ...s, age_top_2: e.target.value }))}
+                        placeholder="25-34"
+                        className="text-sm"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Idade Top #3</Label>
-                      <Input value={form.age_top_3} onChange={(e) => setForm((s) => ({ ...s, age_top_3: e.target.value }))} placeholder="35-44" className="text-sm" />
+                      <Input
+                        value={form.age_top_3}
+                        onChange={(e) => setForm((s) => ({ ...s, age_top_3: e.target.value }))}
+                        placeholder="35-44"
+                        className="text-sm"
+                      />
                     </div>
                   </div>
 
-                  <div className="text-[11px] text-muted-foreground">Sugestão de faixas: {AGE_BUCKETS.join(" · ")}</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Sugestão de faixas: {AGE_BUCKETS.join(" · ")}
+                  </div>
                 </div>
 
                 {/* Estilos (até 3) */}
                 <div className="space-y-3">
-                  <div className="text-xs text-muted-foreground uppercase tracking-widest">Estilos de conteúdo (até 3)</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-widest">
+                    Estilos de conteúdo (até 3)
+                  </div>
 
                   <div className="flex flex-wrap gap-2">
                     {STYLE_OPTIONS.map((opt) => {
@@ -1304,7 +1338,9 @@ export default function InfluencerProfile() {
 
                   <div className="text-[11px] text-muted-foreground">
                     Selecionados:{" "}
-                    <span className="text-foreground font-medium">{form.content_styles.join(", ") || "—"}</span>
+                    <span className="text-foreground font-medium">
+                      {form.content_styles.join(", ") || "—"}
+                    </span>
                   </div>
                 </div>
 
@@ -1318,14 +1354,17 @@ export default function InfluencerProfile() {
                 </button>
 
                 <div className="text-xs text-muted-foreground">
-                  * Por enquanto, audiência e métricas são informadas por você. No futuro, será integrada com dados reais (Meta).
+                  * Por enquanto, audiência e métricas são informadas por você. No futuro, será integrada com dados reais
+                  (Meta).
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {ctx.error && <div className="text-xs text-muted-foreground">Erro ao carregar contexto premium: {String(ctx.error)}</div>}
+        {ctx.error && (
+          <div className="text-xs text-muted-foreground">Erro ao carregar contexto premium: {String(ctx.error)}</div>
+        )}
       </div>
     </MobileLayout>
   );
