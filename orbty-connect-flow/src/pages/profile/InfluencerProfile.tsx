@@ -169,10 +169,7 @@ function StarRating(props: { value: number; max?: number; className?: string }) 
   const full = Math.round(v);
 
   return (
-    <div
-      className={`flex items-center justify-center gap-1 ${props.className ?? ""}`}
-      aria-label={`Avaliação: ${full} de ${max}`}
-    >
+    <div className={`flex items-center justify-center gap-1 ${props.className ?? ""}`} aria-label={`Avaliação: ${full} de ${max}`}>
       {Array.from({ length: max }).map((_, i) => {
         const filled = i < full;
         return (
@@ -204,6 +201,31 @@ function RatingsCard(props: { rating: number; count?: number | null }) {
       <div className="mt-2 text-center text-xs text-muted-foreground">
         {count && count > 0 ? `${safeRating.toFixed(1).replace(".", ",")} · ${count} avaliações` : "Sem avaliações ainda"}
       </div>
+    </div>
+  );
+}
+
+/** ✅ Ativações e campanhas (safe agora, troca fácil depois) */
+function SingleStatCard(props: { title: string; label: string; value: React.ReactNode; loading?: boolean }) {
+  return (
+    <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
+      <div className="text-sm font-semibold text-foreground text-center">{props.title}</div>
+
+      {props.loading ? (
+        <div className="mt-4 space-y-2">
+          <div className="flex justify-center">
+            <SkeletonLine w="42%" h={18} />
+          </div>
+          <div className="flex justify-center">
+            <SkeletonLine w="64%" h={10} />
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4 text-center">
+          <div className="text-xs text-muted-foreground">{props.label}</div>
+          <div className="mt-1 text-2xl font-semibold text-foreground">{props.value}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -332,18 +354,6 @@ function AgeBarsCard(props: { data: Record<string, number> | null; buckets: stri
   );
 }
 
-function MetricCard(props: { label: string; value: React.ReactNode }) {
-  return (
-    <div
-      className="rounded-2xl border border-border/50 bg-white/5 p-4 backdrop-blur shadow-sm transition
-      hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]"
-    >
-      <div className="text-xs text-muted-foreground">{props.label}</div>
-      <div className="mt-2 text-xl font-semibold text-foreground">{props.value}</div>
-    </div>
-  );
-}
-
 /* =========================
    Types / parsing
 ========================= */
@@ -456,7 +466,7 @@ export default function InfluencerProfile() {
     };
   }, [ctx.data, profile]);
 
-  // Audience extra (cidades/idades)
+  // Audience extra (cidades/idades) — pega do profile primeiro
   const audienceCities = useMemo<ObjNum | null>(() => {
     return (
       parseObjectNumbers((profile as any)?.audience_cities) ||
@@ -476,7 +486,7 @@ export default function InfluencerProfile() {
   const topCities = useMemo(() => topKeys(audienceCities, 4), [audienceCities]);
   const topCities3 = useMemo(() => topKeys(audienceCities, 3), [audienceCities]);
 
-  // Avaliações (safe fallback)
+  // ✅ Avaliações (safe fallback)
   const ratingValue = useMemo(() => {
     const fromCtx = Number((ctx.data as any)?.ratings?.avg ?? (ctx.data as any)?.rating_avg ?? NaN);
     if (Number.isFinite(fromCtx)) return fromCtx;
@@ -497,9 +507,8 @@ export default function InfluencerProfile() {
     return null;
   }, [ctx.data, profile]);
 
-  // Orbty success
+  // ✅ Ativações / campanhas realizadas (SAFE por enquanto: aceites)
   const [orbtyAccepted, setOrbtyAccepted] = useState(0);
-  const [orbtyTotal, setOrbtyTotal] = useState(0);
   const [loadingOrbty, setLoadingOrbty] = useState(true);
 
   useEffect(() => {
@@ -509,10 +518,10 @@ export default function InfluencerProfile() {
       if (!profile?.id) return;
       setLoadingOrbty(true);
 
+      // Preferência: RPC (se já existir)
       const rpcMetrics = (ctx.data as any)?.influencer_metrics;
       if (rpcMetrics) {
         if (!alive) return;
-        setOrbtyTotal(Number(rpcMetrics.total_applications ?? 0));
         setOrbtyAccepted(Number(rpcMetrics.accepted_applications ?? 0));
         setLoadingOrbty(false);
         return;
@@ -532,7 +541,6 @@ export default function InfluencerProfile() {
       }
 
       const list = data ?? [];
-      setOrbtyTotal(list.length);
       setOrbtyAccepted(list.filter((x: any) => x.status === "accepted").length);
       setLoadingOrbty(false);
     })();
@@ -541,11 +549,6 @@ export default function InfluencerProfile() {
       alive = false;
     };
   }, [profile?.id, ctx.data]);
-
-  const successRate = useMemo(() => {
-    if (!orbtyTotal) return 0;
-    return (orbtyAccepted / orbtyTotal) * 100;
-  }, [orbtyAccepted, orbtyTotal]);
 
   const igHandle = (profile as any)?.instagram ?? null;
   const igRaw = buildInstagramLinks(igHandle)?.raw ?? null;
@@ -917,44 +920,13 @@ export default function InfluencerProfile() {
           </div>
         </SectionShell>
 
-        {/* AVALIAÇÕES (substitui Confiança Orbty) */}
+        {/* AVALIAÇÕES */}
         <RatingsCard rating={ratingValue} count={ratingCount} />
 
-        {/* PERFORMANCE */}
-        <SectionShell title="Performance na Orbty">
-          {loadingOrbty ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-muted-foreground">Aceites</div>
-                  <Sparkles className="w-4 h-4 text-primary" />
-                </div>
-                <div className="mt-3 space-y-2">
-                  <SkeletonLine w="40%" h={18} />
-                  <SkeletonLine w="70%" h={10} />
-                </div>
-              </div>
+        {/* ATIVAÇÕES E CAMPANHAS */}
+        <SingleStatCard title="Ativações e campanhas" label="Realizadas:" value={orbtyAccepted} loading={loadingOrbty} />
 
-              <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-muted-foreground">Taxa de sucesso</div>
-                  <Sparkles className="w-4 h-4 text-primary" />
-                </div>
-                <div className="mt-3 space-y-2">
-                  <SkeletonLine w="55%" h={18} />
-                  <SkeletonLine w="80%" h={10} />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <MetricCard label="Aceites" value={orbtyAccepted} />
-              <MetricCard label="Taxa de sucesso" value={`${Math.round(successRate)}%`} />
-            </div>
-          )}
-        </SectionShell>
-
-        {/* MODAL: Editar perfil completo */}
+        {/* MODAL: Editar perfil completo (único ponto de edição) */}
         {editOpen && (
           <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
             <div className="absolute inset-0 bg-black/60" onMouseDown={() => (saving ? null : setEditOpen(false))} />
@@ -996,48 +968,28 @@ export default function InfluencerProfile() {
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Nome *</Label>
-                    <Input
-                      value={form.name}
-                      onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
-                      className="text-sm"
-                    />
+                    <Input value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} className="text-sm" />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade</Label>
-                      <Input
-                        value={form.city}
-                        onChange={(e) => setForm((s) => ({ ...s, city: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={form.city} onChange={(e) => setForm((s) => ({ ...s, city: e.target.value }))} className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Estado</Label>
-                      <Input
-                        value={form.state}
-                        onChange={(e) => setForm((s) => ({ ...s, state: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={form.state} onChange={(e) => setForm((s) => ({ ...s, state: e.target.value }))} className="text-sm" />
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Bairro</Label>
-                    <Input
-                      value={form.neighborhood}
-                      onChange={(e) => setForm((s) => ({ ...s, neighborhood: e.target.value }))}
-                      className="text-sm"
-                    />
+                    <Input value={form.neighborhood} onChange={(e) => setForm((s) => ({ ...s, neighborhood: e.target.value }))} className="text-sm" />
                   </div>
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Bio</Label>
-                    <Input
-                      value={form.bio}
-                      onChange={(e) => setForm((s) => ({ ...s, bio: e.target.value }))}
-                      className="text-sm"
-                    />
+                    <Input value={form.bio} onChange={(e) => setForm((s) => ({ ...s, bio: e.target.value }))} className="text-sm" />
                     <div className="text-[11px] text-muted-foreground">O header mostra no máximo 3 linhas (use uma bio curta).</div>
                   </div>
                 </div>
@@ -1128,35 +1080,19 @@ export default function InfluencerProfile() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #1</Label>
-                      <Input
-                        value={form.audience_city_1}
-                        onChange={(e) => setForm((s) => ({ ...s, audience_city_1: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={form.audience_city_1} onChange={(e) => setForm((s) => ({ ...s, audience_city_1: e.target.value }))} className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #2</Label>
-                      <Input
-                        value={form.audience_city_2}
-                        onChange={(e) => setForm((s) => ({ ...s, audience_city_2: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={form.audience_city_2} onChange={(e) => setForm((s) => ({ ...s, audience_city_2: e.target.value }))} className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #3</Label>
-                      <Input
-                        value={form.audience_city_3}
-                        onChange={(e) => setForm((s) => ({ ...s, audience_city_3: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={form.audience_city_3} onChange={(e) => setForm((s) => ({ ...s, audience_city_3: e.target.value }))} className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade #4</Label>
-                      <Input
-                        value={form.audience_city_4}
-                        onChange={(e) => setForm((s) => ({ ...s, audience_city_4: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={form.audience_city_4} onChange={(e) => setForm((s) => ({ ...s, audience_city_4: e.target.value }))} className="text-sm" />
                     </div>
                   </div>
 
@@ -1164,30 +1100,15 @@ export default function InfluencerProfile() {
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Idade Top #1</Label>
-                      <Input
-                        value={form.age_top_1}
-                        onChange={(e) => setForm((s) => ({ ...s, age_top_1: e.target.value }))}
-                        placeholder="18-24"
-                        className="text-sm"
-                      />
+                      <Input value={form.age_top_1} onChange={(e) => setForm((s) => ({ ...s, age_top_1: e.target.value }))} placeholder="18-24" className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Idade Top #2</Label>
-                      <Input
-                        value={form.age_top_2}
-                        onChange={(e) => setForm((s) => ({ ...s, age_top_2: e.target.value }))}
-                        placeholder="25-34"
-                        className="text-sm"
-                      />
+                      <Input value={form.age_top_2} onChange={(e) => setForm((s) => ({ ...s, age_top_2: e.target.value }))} placeholder="25-34" className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Idade Top #3</Label>
-                      <Input
-                        value={form.age_top_3}
-                        onChange={(e) => setForm((s) => ({ ...s, age_top_3: e.target.value }))}
-                        placeholder="35-44"
-                        className="text-sm"
-                      />
+                      <Input value={form.age_top_3} onChange={(e) => setForm((s) => ({ ...s, age_top_3: e.target.value }))} placeholder="35-44" className="text-sm" />
                     </div>
                   </div>
 
@@ -1222,8 +1143,7 @@ export default function InfluencerProfile() {
                   </div>
 
                   <div className="text-[11px] text-muted-foreground">
-                    Selecionados:{" "}
-                    <span className="text-foreground font-medium">{form.content_styles.join(", ") || "—"}</span>
+                    Selecionados: <span className="text-foreground font-medium">{form.content_styles.join(", ") || "—"}</span>
                   </div>
                 </div>
 
