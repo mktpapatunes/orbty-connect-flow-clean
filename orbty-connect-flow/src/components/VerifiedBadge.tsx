@@ -1,35 +1,23 @@
-import { motion } from "framer-motion";
-import { BadgeCheck } from "lucide-react";
+// src/components/VerifiedBadge.tsx
 
-interface VerifiedBadgeProps {
-  size?: "sm" | "md" | "lg";
-  showLabel?: boolean;
-  className?: string;
-}
+import { CheckCircle2 } from "lucide-react";
 
-const sizeMap = {
-  sm: { icon: "w-3.5 h-3.5", badge: "px-1.5 py-0.5", text: "text-[10px]" },
-  md: { icon: "w-4 h-4", badge: "px-2 py-1", text: "text-xs" },
-  lg: { icon: "w-5 h-5", badge: "px-3 py-1.5", text: "text-sm" },
+type Props = {
+  size?: "sm" | "md";
 };
 
-const VerifiedBadge = ({ size = "md", showLabel = true, className = "" }: VerifiedBadgeProps) => {
-  const s = sizeMap[size];
+export default function VerifiedBadge({ size = "sm" }: Props) {
+  const iconSize = size === "sm" ? "w-4 h-4" : "w-5 h-5";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.8 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className={`inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/30 ${s.badge} ${className}`}
+    <span
+      title="Conta verificada pela Orbty"
+      className="inline-flex items-center justify-center shrink-0"
     >
-      <BadgeCheck className={`${s.icon} text-primary`} />
-      {showLabel && (
-        <span className={`${s.text} font-medium text-primary whitespace-nowrap`}>
-          Verificada ORBTY
-        </span>
-      )}
-    </motion.div>
+      <CheckCircle2
+        className={`${iconSize} text-primary`}
+        strokeWidth={2.5}
+      />
+    </span>
   );
-};
-
-export default VerifiedBadge;
+}

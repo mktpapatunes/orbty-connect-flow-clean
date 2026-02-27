@@ -560,13 +560,15 @@ export default function InfluencerProfile() {
                 />
               </div>
 
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="text-lg font-semibold text-foreground break-words leading-tight">
-                    {profile?.name || "Creator"}
-                  </div>
-                  {isVerifiedInfluencer && <VerifiedBadge size="sm" />}
-                </div>
+              <div className="flex items-center gap-2 max-w-full">
+  <h1 className="text-lg font-semibold text-foreground leading-tight break-words">
+    {profile?.name || "Creator"}
+  </h1>
+
+  {isVerifiedInfluencer && (
+    <VerifiedBadge size="sm" />
+  )}
+</div>
 
                 <div className="mt-1 text-sm text-muted-foreground flex items-center gap-2">
                   <Instagram className="w-4 h-4" />
