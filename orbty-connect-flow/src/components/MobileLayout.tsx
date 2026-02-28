@@ -59,6 +59,9 @@ const MobileLayout = ({
   };
 
   const handleSignOut = async () => {
+    const ok = window.confirm("Você tem certeza que deseja sair da conta?");
+    if (!ok) return;
+
     await signOut();
     navigate("/welcome");
   };
@@ -72,6 +75,7 @@ const MobileLayout = ({
             <button
               onClick={handleBack}
               className="text-muted-foreground hover:text-foreground transition-colors text-sm"
+              title="Voltar"
             >
               ←
             </button>
