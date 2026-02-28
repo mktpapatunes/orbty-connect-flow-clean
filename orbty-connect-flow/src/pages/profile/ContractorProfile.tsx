@@ -147,20 +147,7 @@ function MetricCard(props: { label: string; value: React.ReactNode; icon?: React
  * Mantém o componente original (influencer não muda).
  * A forma mais segura sem mexer no VerifiedBadge é aplicar filter no wrapper.
  */
-function ContractorVerifiedBadge() {
-  return (
-    <span
-      className="inline-flex items-center"
-      // Ajuste fino para transformar o azul em amarelo (sem quebrar o badge)
-      style={{
-        filter: "hue-rotate(205deg) saturate(180%) brightness(120%)",
-      }}
-      title="Conta aprovada"
-    >
-      <VerifiedBadge size="sm" />
-    </span>
-  );
-}
+
 
 /* =========================
    Avaliações (negócio)
