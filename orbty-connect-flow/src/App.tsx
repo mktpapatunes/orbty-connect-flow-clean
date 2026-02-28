@@ -31,8 +31,8 @@ import InfluencerProfile from "@/pages/profile/InfluencerProfile";
 // ✅ NOVO: Dados pessoais (privado) do influencer
 import InfluencerPersonalData from "@/pages/profile/InfluencerPersonalData";
 
-// ✅ Perfil público (visão de terceiros)
-import PublicProfile from "@/pages/profile/PublicProfile";
+// ✅ Perfil público (visão de terceiros) — wrapper keyed (evita flash de estado antigo)
+import PublicProfileKeyed from "@/pages/profile/PublicProfileKeyed";
 
 import History from "./pages/History";
 import CheckEmail from "./pages/CheckEmail";
@@ -189,7 +189,7 @@ const App = () => (
                 path="/u/:id"
                 element={
                   <ProtectedRoute>
-                    <PublicProfile />
+                    <PublicProfileKeyed />
                   </ProtectedRoute>
                 }
               />

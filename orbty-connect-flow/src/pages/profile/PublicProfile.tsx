@@ -1,5 +1,5 @@
 // src/pages/PublicProfile.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
 import VerifiedBadge from "@/components/VerifiedBadge";
@@ -20,6 +20,7 @@ import {
   Home,
   Globe,
   Package,
+  X,
 } from "lucide-react";
 
 /* =========================
@@ -495,7 +496,7 @@ export default function PublicProfile() {
   const backTo = userRole === "contractor" ? "/dashboard-contratante" : "/dashboard-influenciadora";
 
   const [loading, setLoading] = useState(true);
-  const [loadedId, setLoadedId] = useState<string | null>(null); // ✅ evita "flash" ao trocar /u/:id
+  const [loadedId, setLoadedId] = useState<string | null>(null);
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [org, setOrg] = useState<OrgRow | null>(null);
@@ -513,25 +514,45 @@ export default function PublicProfile() {
   // bio modal
   const [bioOpen, setBioOpen] = useState(false);
 
+  /**
+   * ✅ CORREÇÃO DO "FLASH":
+   * useLayoutEffect roda ANTES do browser pintar quando o :id muda.
+   * Então a gente limpa tudo aqui e evita renderizar 1 frame com o perfil anterior.
+   */
+  useLayoutEffect(() => {
+    setLoadedId(null);
+    setLoading(true);
+
+    setProfile(null);
+    setOrg(null);
+
+    // força layout neutro até o fetch decidir
+    setRole("influencer");
+
+    setRatingAvg(0);
+    setRatingCount(null);
+    setLoadingRatings(true);
+
+    setAcceptedCount(0);
+    setLoadingAccepted(true);
+
+    setBioOpen(false);
+  }, [id]);
+
   useEffect(() => {
     let alive = true;
 
     (async () => {
       if (!id) {
+        if (!alive) return;
         setLoading(false);
         setLoadedId(null);
         setProfile(null);
         setOrg(null);
+        setLoadingRatings(false);
+        setLoadingAccepted(false);
         return;
       }
-
-      // ✅ reset imediato evita 1 frame com estado anterior
-      setLoadedId(null);
-      setBioOpen(false);
-
-      setLoading(true);
-      setLoadingRatings(true);
-      setLoadingAccepted(true);
 
       try {
         const p = await fetchProfileById(id);
@@ -547,11 +568,12 @@ export default function PublicProfile() {
           return;
         }
 
-        setProfile(p);
-
-        // ✅ role real do seu schema: desired_role
+        // ✅ role real do schema
         const rRaw = String(p.desired_role ?? "").toLowerCase();
         const finalRole: "influencer" | "contractor" = rRaw === "contractor" ? "contractor" : "influencer";
+
+        // set "base" primeiro
+        setProfile(p);
         setRole(finalRole);
 
         if (finalRole === "contractor") {
@@ -611,8 +633,8 @@ export default function PublicProfile() {
         }
 
         if (!alive) return;
+        setLoadedId(id);
         setLoading(false);
-        setLoadedId(id); // ✅ marca que o conteúdo renderizado pertence ao id atual
       } catch (e: any) {
         console.error("PUBLIC_PROFILE_ERROR", e);
         if (!alive) return;
@@ -631,8 +653,6 @@ export default function PublicProfile() {
       alive = false;
     };
   }, [id]);
-
-  const isViewReady = !!id && loadedId === id; // ✅ guard anti-flash
 
   const isVerified = useMemo(() => String((profile as any)?.approval_status ?? "").toLowerCase() === "approved", [profile]);
 
@@ -738,6 +758,8 @@ export default function PublicProfile() {
     return Object.keys(out).length ? out : null;
   }, [profile]);
 
+  const ready = !!id && loadedId === id && !loading;
+
   return (
     <MobileLayout
       title="Perfil"
@@ -757,7 +779,7 @@ export default function PublicProfile() {
           Voltar
         </button>
 
-        {loading || !isViewReady ? (
+        {!ready ? (
           <div className="flex justify-center py-16">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
@@ -865,9 +887,9 @@ export default function PublicProfile() {
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold text-foreground">Bio</div>
-                    <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => setBioOpen(false)} type="button">
-                      ✕
+                    <div className="text-sm font-semibold text-foreground">{role === "contractor" ? "Sobre" : "Bio"}</div>
+                    <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => setBioOpen(false)} type="button" aria-label="Fechar">
+                      <X className="w-4 h-4" />
                     </button>
                   </div>
                   <div className="mt-3 text-sm text-foreground leading-relaxed whitespace-pre-line">{headerBio}</div>
