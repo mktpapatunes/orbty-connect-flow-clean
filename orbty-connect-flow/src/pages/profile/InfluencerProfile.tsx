@@ -23,6 +23,12 @@ function clamp(n: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, n));
 }
 
+function clampInt(n: number, min: number, max: number) {
+  const v = Math.round(Number(n));
+  if (!Number.isFinite(v)) return min;
+  return Math.max(min, Math.min(max, v));
+}
+
 function initials(name?: string | null) {
   const n = (name || "").trim();
   if (!n) return "U";
@@ -88,13 +94,19 @@ function formatIGCount(input: number | null | undefined) {
   return `${Math.floor(m)}M`;
 }
 
+/** Formata só com separador pt-BR (1.000.000) */
+function formatBRInt(n: number) {
+  const v = Math.max(0, Math.floor(Number(n) || 0));
+  return v.toLocaleString("pt-BR");
+}
+
+function parseDigitsOnly(v: string) {
+  return (v || "").replace(/[^\d]/g, "");
+}
+
 function SectionShell(props: { title: string; subtitle?: string; children: React.ReactNode; className?: string }) {
   return (
-    <div
-      className={`glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] ${
-        props.className ?? ""
-      }`}
-    >
+    <div className={`glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] ${props.className ?? ""}`}>
       <div>
         <div className="text-sm font-semibold text-foreground">{props.title}</div>
         {props.subtitle ? <div className="text-xs text-muted-foreground mt-1">{props.subtitle}</div> : null}
@@ -148,21 +160,21 @@ function MicroChip(props: { icon: React.ReactNode; label: string; value: string;
   );
 }
 
-/** ✅ Chip minimalista para cidades (3 lado a lado) */
-function CityChip(props: { label: string; title?: string }) {
+/** ✅ Chip minimalista para localizações (estado/cidade/bairro) */
+function LocationChip(props: { icon?: React.ReactNode; label: string; title?: string }) {
   return (
     <div
       title={props.title}
       className="h-10 min-w-0 flex items-center gap-2 rounded-2xl border border-border/50 bg-white/5 px-3
       text-xs text-foreground/90 shadow-sm"
     >
-      <MapPin className="w-4 h-4 text-primary shrink-0" />
+      <span className="text-primary shrink-0">{props.icon ?? <MapPin className="w-4 h-4" />}</span>
       <span className="truncate whitespace-nowrap">{props.label}</span>
     </div>
   );
 }
 
-/** ✅ Avaliações (estrelas preenchidas/vazias) */
+/** ✅ Avaliações */
 function StarRating(props: { value: number; max?: number; className?: string }) {
   const max = props.max ?? 5;
   const v = Math.max(0, Math.min(max, Number(props.value ?? 0)));
@@ -205,7 +217,7 @@ function RatingsCard(props: { rating: number; count?: number | null }) {
   );
 }
 
-/** ✅ Ativações e campanhas (safe agora, troca fácil depois) */
+/** ✅ Ativações e campanhas */
 function SingleStatCard(props: { title: string; label: string; value: React.ReactNode; loading?: boolean }) {
   return (
     <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
@@ -373,14 +385,6 @@ function parseObjectNumbers(v: any): ObjNum | null {
   return Object.keys(out).length ? out : null;
 }
 
-function topKeys(obj: ObjNum | null | undefined, top = 3) {
-  if (!obj) return [];
-  return Object.entries(obj)
-    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
-    .slice(0, top)
-    .map(([k]) => k);
-}
-
 function safeCommaListToArray(v?: string | null) {
   const raw = (v || "").trim();
   if (!raw) return [];
@@ -388,15 +392,65 @@ function safeCommaListToArray(v?: string | null) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean)
-    .slice(0, 3);
+    .filter((s) => !["null", "undefined", "-", "—"].includes(s.toLowerCase()))
+    .slice(0, 1); // ✅ agora é apenas 1 estilo
 }
 
 function safeArrayToCommaList(arr: string[]) {
   return (arr || [])
     .map((s) => s.trim())
     .filter(Boolean)
-    .slice(0, 3)
+    .filter((s) => !["null", "undefined", "-", "—"].includes(s.toLowerCase()))
+    .slice(0, 1) // ✅ apenas 1 estilo
     .join(", ");
+}
+
+/* =========================
+   UF / Cities (IBGE)
+========================= */
+
+const UF_OPTIONS: Array<{ uf: string; name: string }> = [
+  { uf: "AC", name: "Acre" },
+  { uf: "AL", name: "Alagoas" },
+  { uf: "AP", name: "Amapá" },
+  { uf: "AM", name: "Amazonas" },
+  { uf: "BA", name: "Bahia" },
+  { uf: "CE", name: "Ceará" },
+  { uf: "DF", name: "Distrito Federal" },
+  { uf: "ES", name: "Espírito Santo" },
+  { uf: "GO", name: "Goiás" },
+  { uf: "MA", name: "Maranhão" },
+  { uf: "MT", name: "Mato Grosso" },
+  { uf: "MS", name: "Mato Grosso do Sul" },
+  { uf: "MG", name: "Minas Gerais" },
+  { uf: "PA", name: "Pará" },
+  { uf: "PB", name: "Paraíba" },
+  { uf: "PR", name: "Paraná" },
+  { uf: "PE", name: "Pernambuco" },
+  { uf: "PI", name: "Piauí" },
+  { uf: "RJ", name: "Rio de Janeiro" },
+  { uf: "RN", name: "Rio Grande do Norte" },
+  { uf: "RS", name: "Rio Grande do Sul" },
+  { uf: "RO", name: "Rondônia" },
+  { uf: "RR", name: "Roraima" },
+  { uf: "SC", name: "Santa Catarina" },
+  { uf: "SP", name: "São Paulo" },
+  { uf: "SE", name: "Sergipe" },
+  { uf: "TO", name: "Tocantins" },
+];
+
+function normalizeUF(v: string) {
+  return (v || "").trim().toUpperCase().slice(0, 2);
+}
+
+async function fetchCitiesByUF(uf: string, signal?: AbortSignal): Promise<string[]> {
+  const UF = normalizeUF(uf);
+  if (!UF || UF.length !== 2) return [];
+  // IBGE - municípios por UF
+  const res = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${UF}/municipios`, { signal });
+  if (!res.ok) return [];
+  const data = (await res.json()) as Array<{ nome: string }>;
+  return (data || []).map((x) => x?.nome).filter(Boolean);
 }
 
 /* =========================
@@ -466,27 +520,12 @@ export default function InfluencerProfile() {
     };
   }, [ctx.data, profile]);
 
-  // Audience extra (cidades/idades) — pega do profile primeiro
-  const audienceCities = useMemo<ObjNum | null>(() => {
-    return (
-      parseObjectNumbers((profile as any)?.audience_cities) ||
-      parseObjectNumbers((ctx.data as any)?.audience_cities) ||
-      null
-    );
-  }, [profile, ctx.data]);
-
+  // Audience extra (idades) — pega do profile primeiro
   const audienceAge = useMemo<ObjNum | null>(() => {
-    return (
-      parseObjectNumbers((profile as any)?.audience_age) ||
-      parseObjectNumbers((ctx.data as any)?.audience_age) ||
-      null
-    );
+    return parseObjectNumbers((profile as any)?.audience_age) || parseObjectNumbers((ctx.data as any)?.audience_age) || null;
   }, [profile, ctx.data]);
 
-  const topCities = useMemo(() => topKeys(audienceCities, 4), [audienceCities]);
-  const topCities3 = useMemo(() => topKeys(audienceCities, 3), [audienceCities]);
-
-  // ✅ Avaliações (safe fallback)
+  // Avaliações (safe fallback)
   const ratingValue = useMemo(() => {
     const fromCtx = Number((ctx.data as any)?.ratings?.avg ?? (ctx.data as any)?.rating_avg ?? NaN);
     if (Number.isFinite(fromCtx)) return fromCtx;
@@ -507,7 +546,7 @@ export default function InfluencerProfile() {
     return null;
   }, [ctx.data, profile]);
 
-  // ✅ Ativações / campanhas realizadas (SAFE por enquanto: aceites)
+  // Ativações/campanhas realizadas (SAFE por enquanto: aceites)
   const [orbtyAccepted, setOrbtyAccepted] = useState(0);
   const [loadingOrbty, setLoadingOrbty] = useState(true);
 
@@ -518,7 +557,6 @@ export default function InfluencerProfile() {
       if (!profile?.id) return;
       setLoadingOrbty(true);
 
-      // Preferência: RPC (se já existir)
       const rpcMetrics = (ctx.data as any)?.influencer_metrics;
       if (rpcMetrics) {
         if (!alive) return;
@@ -527,10 +565,7 @@ export default function InfluencerProfile() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("campaign_applications")
-        .select("status")
-        .eq("influencer_id", profile.id);
+      const { data, error } = await supabase.from("campaign_applications").select("status").eq("influencer_id", profile.id);
 
       if (!alive) return;
 
@@ -569,8 +604,6 @@ export default function InfluencerProfile() {
   const contentStyles = useMemo(() => safeCommaListToArray((profile as any)?.content_style ?? ""), [profile]);
   const primaryStyle = contentStyles?.[0] ?? "—";
 
-  const primaryRegion = topCities?.[0] ?? profile?.city ?? "—";
-
   const headerBio = ((profile as any)?.bio as string | null | undefined)?.trim() ?? "";
   const [bioOpen, setBioOpen] = useState(false);
   const showBioMore = useMemo(() => headerBio.length > 140, [headerBio]);
@@ -581,31 +614,41 @@ export default function InfluencerProfile() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showAllCities, setShowAllCities] = useState(false);
 
+  // cidades IBGE (cache por UF)
+  const citiesCacheRef = useRef<Record<string, string[]>>({});
+  const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
+  const cityFetchAbortRef = useRef<AbortController | null>(null);
+
+  const initialFollowersDigits = useMemo(() => {
+    const n = Number(instagram?.followers_count ?? 0);
+    return n > 0 ? String(Math.floor(n)) : "";
+  }, [instagram?.followers_count]);
+
+  // form: seguidores como string (digits), gênero como string (permite vazio), idade como sliders
   const [form, setForm] = useState(() => ({
     name: (profile as any)?.name ?? "",
-    city: (profile as any)?.city ?? "",
     state: (profile as any)?.state ?? "",
+    city: (profile as any)?.city ?? "",
     neighborhood: (profile as any)?.neighborhood ?? "",
     bio: (profile as any)?.bio ?? "",
 
     instagram_username: (profile as any)?.instagram ?? "",
-    followers_count: Number(instagram?.followers_count ?? 0),
 
-    audience_female_pct: femalePct,
-    audience_male_pct: malePct,
+    followers_digits: initialFollowersDigits, // ✅ sem setinhas, com formatação
 
-    content_styles: safeCommaListToArray((profile as any)?.content_style ?? ""),
+    female_str: String(femalePct), // ✅ permite vazio durante digitação
+    male_str: String(malePct),
 
-    audience_city_1: topCities?.[0] ?? "",
-    audience_city_2: topCities?.[1] ?? "",
-    audience_city_3: topCities?.[2] ?? "",
-    audience_city_4: topCities?.[3] ?? "",
+    // ✅ idade editável (0..100 step 10)
+    age_18_24: clampInt(Number(audienceAge?.["18-24"] ?? 0), 0, 100),
+    age_25_34: clampInt(Number(audienceAge?.["25-34"] ?? 0), 0, 100),
+    age_35_44: clampInt(Number(audienceAge?.["35-44"] ?? 0), 0, 100),
+    age_45_54: clampInt(Number(audienceAge?.["45-54"] ?? 0), 0, 100),
+    age_55_64: clampInt(Number(audienceAge?.["55-64"] ?? 0), 0, 100),
 
-    age_top_1: topKeys(audienceAge, 3)?.[0] ?? "",
-    age_top_2: topKeys(audienceAge, 3)?.[1] ?? "",
-    age_top_3: topKeys(audienceAge, 3)?.[2] ?? "",
+    // ✅ apenas 1 estilo
+    content_style_one: safeCommaListToArray((profile as any)?.content_style ?? "")?.[0] ?? "",
   }));
 
   useEffect(() => {
@@ -613,54 +656,97 @@ export default function InfluencerProfile() {
 
     setForm({
       name: (profile as any)?.name ?? "",
-      city: (profile as any)?.city ?? "",
       state: (profile as any)?.state ?? "",
+      city: (profile as any)?.city ?? "",
       neighborhood: (profile as any)?.neighborhood ?? "",
       bio: (profile as any)?.bio ?? "",
 
       instagram_username: (profile as any)?.instagram ?? "",
-      followers_count: Number(instagram?.followers_count ?? 0),
 
-      audience_female_pct: clamp(Number(instagram?.audience_female_pct ?? 50), 0, 100),
-      audience_male_pct: clamp(Number(instagram?.audience_male_pct ?? 50), 0, 100),
+      followers_digits: (() => {
+        const n = Number(instagram?.followers_count ?? 0);
+        return n > 0 ? String(Math.floor(n)) : "";
+      })(),
 
-      content_styles: safeCommaListToArray((profile as any)?.content_style ?? ""),
+      female_str: String(clamp(Number(instagram?.audience_female_pct ?? 50), 0, 100)),
+      male_str: String(clamp(Number(instagram?.audience_male_pct ?? 50), 0, 100)),
 
-      audience_city_1: topCities?.[0] ?? "",
-      audience_city_2: topCities?.[1] ?? "",
-      audience_city_3: topCities?.[2] ?? "",
-      audience_city_4: topCities?.[3] ?? "",
+      age_18_24: clampInt(Number(audienceAge?.["18-24"] ?? 0), 0, 100),
+      age_25_34: clampInt(Number(audienceAge?.["25-34"] ?? 0), 0, 100),
+      age_35_44: clampInt(Number(audienceAge?.["35-44"] ?? 0), 0, 100),
+      age_45_54: clampInt(Number(audienceAge?.["45-54"] ?? 0), 0, 100),
+      age_55_64: clampInt(Number(audienceAge?.["55-64"] ?? 0), 0, 100),
 
-      age_top_1: topKeys(audienceAge, 3)?.[0] ?? "",
-      age_top_2: topKeys(audienceAge, 3)?.[1] ?? "",
-      age_top_3: topKeys(audienceAge, 3)?.[2] ?? "",
+      content_style_one: safeCommaListToArray((profile as any)?.content_style ?? "")?.[0] ?? "",
     });
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editOpen]);
 
-  const STYLE_OPTIONS = [
-    "Lifestyle",
-    "Beleza",
-    "Moda",
-    "Educação",
-    "Fitness",
-    "Gastronomia",
-    "Viagem",
-    "Tech",
-    "Games",
-    "Maternidade",
-    "Negócios",
-    "Humor",
-  ];
+  // sugestões de cidade via IBGE (com debounce + cache)
+  useEffect(() => {
+    if (!editOpen) return;
 
-  const toggleStyle = (style: string) => {
-    setForm((s) => {
-      const exists = s.content_styles.includes(style);
-      if (exists) return { ...s, content_styles: s.content_styles.filter((x) => x !== style) };
-      if (s.content_styles.length >= 3) return s;
-      return { ...s, content_styles: [...s.content_styles, style] };
-    });
-  };
+    const uf = normalizeUF(form.state);
+    const q = (form.city || "").trim().toLowerCase();
+
+    // limpa suggestions se não tem UF
+    if (!uf || uf.length !== 2) {
+      setCitySuggestions([]);
+      return;
+    }
+
+    let alive = true;
+    const t = setTimeout(async () => {
+      try {
+        if (!alive) return;
+
+        // usa cache
+        if (!citiesCacheRef.current[uf]) {
+          // abort anterior
+          if (cityFetchAbortRef.current) cityFetchAbortRef.current.abort();
+          const ac = new AbortController();
+          cityFetchAbortRef.current = ac;
+
+          const list = await fetchCitiesByUF(uf, ac.signal);
+          citiesCacheRef.current[uf] = list;
+        }
+
+        const list = citiesCacheRef.current[uf] || [];
+        const filtered =
+          q.length < 1
+            ? list.slice(0, 25)
+            : list.filter((name) => name.toLowerCase().startsWith(q)).slice(0, 25);
+
+        if (!alive) return;
+        setCitySuggestions(filtered);
+      } catch {
+        if (!alive) return;
+        setCitySuggestions([]);
+      }
+    }, 220);
+
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [editOpen, form.state, form.city]);
+
+  // valores atuais (para render)
+  const followersFormatted = useMemo(() => {
+    const digits = parseDigitsOnly(form.followers_digits);
+    if (!digits) return "";
+    return formatBRInt(Number(digits));
+  }, [form.followers_digits]);
+
+  const femaleInput = useMemo(() => parseDigitsOnly(form.female_str).slice(0, 3), [form.female_str]);
+  const maleInput = useMemo(() => parseDigitsOnly(form.male_str).slice(0, 3), [form.male_str]);
+
+  const femaleValue = clamp(Number(femaleInput || 0), 0, 100);
+  const maleValue = clamp(Number(maleInput || 0), 0, 100);
+
+  // mantém soma 100 quando editar pelo slider (mais premium)
+  const genderFromSlider = useMemo(() => clamp(Number(femaleValue), 0, 100), [femaleValue]);
 
   const saveEditProfile = async () => {
     if (!profile?.id) return;
@@ -670,8 +756,21 @@ export default function InfluencerProfile() {
       return;
     }
 
-    const female = clamp(Number(form.audience_female_pct || 0), 0, 100);
-    const male = clamp(Number(form.audience_male_pct || 0), 0, 100);
+    const uf = normalizeUF(form.state);
+    const followersNum = Number(parseDigitsOnly(form.followers_digits) || 0);
+
+    // gênero
+    const female = clamp(Number(parseDigitsOnly(form.female_str) || 0), 0, 100);
+    const male = clamp(100 - female, 0, 100); // ✅ garante consistência
+
+    // idade (0..100 step 10)
+    const ageObj: Record<string, number> = {
+      "18-24": clampInt(form.age_18_24, 0, 100),
+      "25-34": clampInt(form.age_25_34, 0, 100),
+      "35-44": clampInt(form.age_35_44, 0, 100),
+      "45-54": clampInt(form.age_45_54, 0, 100),
+      "55-64": clampInt(form.age_55_64, 0, 100),
+    };
 
     setSaving(true);
     try {
@@ -679,36 +778,30 @@ export default function InfluencerProfile() {
         .from("profiles")
         .update({
           name: form.name.trim(),
+          state: uf || null,
           city: form.city.trim() || null,
-          state: form.state.trim() || null,
           neighborhood: form.neighborhood.trim() || null,
           bio: form.bio.trim() || null,
 
           instagram: form.instagram_username.trim() || null,
-          followers: String(Math.max(0, Number(form.followers_count || 0))),
+          followers: String(Math.max(0, followersNum)),
 
-          content_style: safeArrayToCommaList(form.content_styles) || null,
+          // ✅ só 1 estilo
+          content_style: form.content_style_one?.trim() ? form.content_style_one.trim() : null,
 
           audience_gender: { female, male },
-          audience_cities: {
-            ...(form.audience_city_1.trim() ? { [form.audience_city_1.trim()]: 1 } : {}),
-            ...(form.audience_city_2.trim() ? { [form.audience_city_2.trim()]: 1 } : {}),
-            ...(form.audience_city_3.trim() ? { [form.audience_city_3.trim()]: 1 } : {}),
-            ...(form.audience_city_4.trim() ? { [form.audience_city_4.trim()]: 1 } : {}),
-          },
-          audience_age: {
-            ...(form.age_top_1 ? { [form.age_top_1]: 1 } : {}),
-            ...(form.age_top_2 ? { [form.age_top_2]: 1 } : {}),
-            ...(form.age_top_3 ? { [form.age_top_3]: 1 } : {}),
-          },
+
+          // ✅ faixa etária conectada
+          audience_age: ageObj,
         })
         .eq("id", profile.id);
 
       if (pErr) throw pErr;
 
+      // mantém seu fluxo (stats)
       await updateMyInstagramStats({
         instagram_username: form.instagram_username,
-        followers_count: Number(form.followers_count || 0),
+        followers_count: Math.max(0, followersNum),
         audience_female_pct: female,
         audience_male_pct: male,
         audience_region: undefined,
@@ -726,6 +819,11 @@ export default function InfluencerProfile() {
       setSaving(false);
     }
   };
+
+  // Dados para exibir nos chips de localização (agora: estado/cidade/bairro)
+  const stateLabel = (profile?.state || "—").toString();
+  const cityLabel = (profile?.city || "—").toString();
+  const neighborhoodLabel = ((profile as any)?.neighborhood || "—").toString();
 
   return (
     <MobileLayout title="Meu perfil" showBack navType="influencer">
@@ -865,13 +963,13 @@ export default function InfluencerProfile() {
             icon={<Sparkles className="w-4 h-4" />}
             label="Conteúdo"
             value={primaryStyle}
-            title={`Estilo principal: ${primaryStyle}`}
+            title={`Estilo: ${primaryStyle}`}
           />
           <MicroChip
             icon={<MapPin className="w-4 h-4" />}
             label="Região"
-            value={primaryRegion}
-            title={`Região principal: ${primaryRegion}`}
+            value={stateLabel !== "—" ? stateLabel : "—"}
+            title={`Estado: ${stateLabel}`}
           />
         </div>
 
@@ -883,40 +981,15 @@ export default function InfluencerProfile() {
             <AgeBarsCard data={audienceAge} buckets={[...AGE_BARS_BUCKETS]} />
           </div>
 
-          {/* Principais localizações: 3 chips alinhados */}
+          {/* Principais localizações: estado/cidade/bairro */}
           <div className="mt-4">
             <div className="text-xs text-muted-foreground mb-2">Principais localizações</div>
 
             <div className="grid grid-cols-3 gap-2">
-              <CityChip label={topCities3[0] ?? "—"} />
-              <CityChip label={topCities3[1] ?? "—"} />
-              <CityChip label={topCities3[2] ?? "—"} />
+              <LocationChip label={stateLabel || "—"} title="Estado" />
+              <LocationChip label={cityLabel || "—"} title="Cidade" />
+              <LocationChip label={neighborhoodLabel || "—"} title="Bairro" />
             </div>
-
-            {topCities.length > 3 ? (
-              <div className="mt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAllCities((s) => !s)}
-                  className="text-xs text-muted-foreground hover:text-foreground transition"
-                >
-                  {showAllCities ? "Ver menos" : "Ver mais"}
-                </button>
-
-                {showAllCities ? (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {topCities.map((city) => (
-                      <span
-                        key={city}
-                        className="text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground/90 hover:bg-white/10 transition"
-                      >
-                        {city}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
           </div>
         </SectionShell>
 
@@ -926,7 +999,7 @@ export default function InfluencerProfile() {
         {/* ATIVAÇÕES E CAMPANHAS */}
         <SingleStatCard title="Ativações e campanhas" label="Realizadas:" value={orbtyAccepted} loading={loadingOrbty} />
 
-        {/* MODAL: Editar perfil completo (único ponto de edição) */}
+        {/* MODAL: Editar perfil */}
         {editOpen && (
           <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
             <div className="absolute inset-0 bg-black/60" onMouseDown={() => (saving ? null : setEditOpen(false))} />
@@ -940,7 +1013,6 @@ export default function InfluencerProfile() {
                 <div className="text-sm font-semibold text-foreground">Editar perfil</div>
 
                 <div className="flex items-center gap-2">
-                  {/* Dados pessoais só aqui */}
                   <button
                     type="button"
                     onClick={() => navigate("/perfil-influenciadora/dados-pessoais")}
@@ -971,20 +1043,57 @@ export default function InfluencerProfile() {
                     <Input value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} className="text-sm" />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* Estado / Cidade / Bairro (3 campos alinhados) */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Estado (UF)</Label>
+                      <Input
+                        value={form.state}
+                        onChange={(e) => {
+                          const uf = normalizeUF(e.target.value);
+                          setForm((s) => ({ ...s, state: uf }));
+                        }}
+                        placeholder="SP"
+                        className="text-sm uppercase"
+                        list="uf-list"
+                        inputMode="text"
+                        autoComplete="off"
+                      />
+                      <datalist id="uf-list">
+                        {UF_OPTIONS.map((x) => (
+                          <option key={x.uf} value={x.uf}>
+                            {x.name}
+                          </option>
+                        ))}
+                      </datalist>
+                    </div>
+
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade</Label>
-                      <Input value={form.city} onChange={(e) => setForm((s) => ({ ...s, city: e.target.value }))} className="text-sm" />
+                      <Input
+                        value={form.city}
+                        onChange={(e) => setForm((s) => ({ ...s, city: e.target.value }))}
+                        placeholder="Digite a cidade"
+                        className="text-sm"
+                        list="city-list"
+                        autoComplete="off"
+                      />
+                      <datalist id="city-list">
+                        {citySuggestions.map((c) => (
+                          <option key={c} value={c} />
+                        ))}
+                      </datalist>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Estado</Label>
-                      <Input value={form.state} onChange={(e) => setForm((s) => ({ ...s, state: e.target.value }))} className="text-sm" />
-                    </div>
-                  </div>
 
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Bairro</Label>
-                    <Input value={form.neighborhood} onChange={(e) => setForm((s) => ({ ...s, neighborhood: e.target.value }))} className="text-sm" />
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Bairro</Label>
+                      <Input
+                        value={form.neighborhood}
+                        onChange={(e) => setForm((s) => ({ ...s, neighborhood: e.target.value }))}
+                        placeholder="Digite o bairro"
+                        className="text-sm"
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-1.5">
@@ -1008,15 +1117,21 @@ export default function InfluencerProfile() {
                     />
                   </div>
 
+                  {/* Seguidores - text com formatação (sem setinhas) */}
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Seguidores</Label>
                     <Input
-                      type="number"
-                      min={0}
-                      value={form.followers_count}
-                      onChange={(e) => setForm((s) => ({ ...s, followers_count: Number(e.target.value || 0) }))}
+                      value={followersFormatted}
+                      onChange={(e) => {
+                        const digits = parseDigitsOnly(e.target.value).slice(0, 12);
+                        setForm((s) => ({ ...s, followers_digits: digits }));
+                      }}
+                      placeholder="0"
                       className="text-sm"
+                      inputMode="numeric"
+                      autoComplete="off"
                     />
+                    <div className="text-[11px] text-muted-foreground">Digite apenas números (o campo formata automaticamente).</div>
                   </div>
                 </div>
 
@@ -1024,51 +1139,63 @@ export default function InfluencerProfile() {
                 <div className="space-y-3">
                   <div className="text-xs text-muted-foreground uppercase tracking-widest">Audiência</div>
 
+                  <div className="text-[11px] text-muted-foreground">Preencha com base nos dados do seu público do Instagram</div>
+
+                  {/* Gênero: inputs limpos (sem setinhas) + slider */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Feminino (%)</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={form.audience_female_pct}
-                        onChange={(e) => {
-                          const female = clamp(Number(e.target.value || 0), 0, 100);
-                          const male = clamp(100 - female, 0, 100);
-                          setForm((s) => ({ ...s, audience_female_pct: female, audience_male_pct: male }));
-                        }}
-                        className="text-sm"
-                      />
+                      <div className="relative">
+                        <Input
+                          value={form.female_str}
+                          onChange={(e) => {
+                            const digits = parseDigitsOnly(e.target.value).slice(0, 3);
+                            const val = digits ? clamp(Number(digits), 0, 100) : 0;
+                            const male = clamp(100 - val, 0, 100);
+                            setForm((s) => ({ ...s, female_str: digits ? String(val) : "", male_str: String(male) }));
+                          }}
+                          placeholder="0"
+                          className="text-sm pr-7"
+                          inputMode="numeric"
+                          autoComplete="off"
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                      </div>
                     </div>
+
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Masculino (%)</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={form.audience_male_pct}
-                        onChange={(e) => {
-                          const male = clamp(Number(e.target.value || 0), 0, 100);
-                          const female = clamp(100 - male, 0, 100);
-                          setForm((s) => ({ ...s, audience_male_pct: male, audience_female_pct: female }));
-                        }}
-                        className="text-sm"
-                      />
+                      <div className="relative">
+                        <Input
+                          value={form.male_str}
+                          onChange={(e) => {
+                            const digits = parseDigitsOnly(e.target.value).slice(0, 3);
+                            const val = digits ? clamp(Number(digits), 0, 100) : 0;
+                            const female = clamp(100 - val, 0, 100);
+                            setForm((s) => ({ ...s, male_str: digits ? String(val) : "", female_str: String(female) }));
+                          }}
+                          placeholder="0"
+                          className="text-sm pr-7"
+                          inputMode="numeric"
+                          autoComplete="off"
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                      </div>
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <Label className="text-xs text-muted-foreground">Ajuste rápido (Feminino)</Label>
                     <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Feminino: {clamp(Number(form.audience_female_pct || 0), 0, 100)}%</span>
-                      <span>Masculino: {clamp(Number(form.audience_male_pct || 0), 0, 100)}%</span>
+                      <span>Feminino: {clamp(Number(parseDigitsOnly(form.female_str) || 0), 0, 100)}%</span>
+                      <span>Masculino: {clamp(100 - clamp(Number(parseDigitsOnly(form.female_str) || 0), 0, 100), 0, 100)}%</span>
                     </div>
                     <Slider
-                      value={[clamp(Number(form.audience_female_pct || 0), 0, 100)]}
+                      value={[genderFromSlider]}
                       onValueChange={(v) => {
                         const female = clamp(v[0], 0, 100);
                         const male = clamp(100 - female, 0, 100);
-                        setForm((s) => ({ ...s, audience_female_pct: female, audience_male_pct: male }));
+                        setForm((s) => ({ ...s, female_str: String(female), male_str: String(male) }));
                       }}
                       min={0}
                       max={100}
@@ -1076,65 +1203,76 @@ export default function InfluencerProfile() {
                     />
                   </div>
 
-                  {/* Cidades */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Cidade #1</Label>
-                      <Input value={form.audience_city_1} onChange={(e) => setForm((s) => ({ ...s, audience_city_1: e.target.value }))} className="text-sm" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Cidade #2</Label>
-                      <Input value={form.audience_city_2} onChange={(e) => setForm((s) => ({ ...s, audience_city_2: e.target.value }))} className="text-sm" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Cidade #3</Label>
-                      <Input value={form.audience_city_3} onChange={(e) => setForm((s) => ({ ...s, audience_city_3: e.target.value }))} className="text-sm" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Cidade #4</Label>
-                      <Input value={form.audience_city_4} onChange={(e) => setForm((s) => ({ ...s, audience_city_4: e.target.value }))} className="text-sm" />
-                    </div>
-                  </div>
+                  {/* Faixa etária editável (step 10) */}
+                  <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
+                    <div className="text-xs text-muted-foreground mb-3">Faixa etária</div>
 
-                  {/* Idade top */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Idade Top #1</Label>
-                      <Input value={form.age_top_1} onChange={(e) => setForm((s) => ({ ...s, age_top_1: e.target.value }))} placeholder="18-24" className="text-sm" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Idade Top #2</Label>
-                      <Input value={form.age_top_2} onChange={(e) => setForm((s) => ({ ...s, age_top_2: e.target.value }))} placeholder="25-34" className="text-sm" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Idade Top #3</Label>
-                      <Input value={form.age_top_3} onChange={(e) => setForm((s) => ({ ...s, age_top_3: e.target.value }))} placeholder="35-44" className="text-sm" />
-                    </div>
+                    {(
+                      [
+                        { key: "18-24", val: form.age_18_24, set: (x: number) => setForm((s) => ({ ...s, age_18_24: x })) },
+                        { key: "25-34", val: form.age_25_34, set: (x: number) => setForm((s) => ({ ...s, age_25_34: x })) },
+                        { key: "35-44", val: form.age_35_44, set: (x: number) => setForm((s) => ({ ...s, age_35_44: x })) },
+                        { key: "45-54", val: form.age_45_54, set: (x: number) => setForm((s) => ({ ...s, age_45_54: x })) },
+                        { key: "55-64", val: form.age_55_64, set: (x: number) => setForm((s) => ({ ...s, age_55_64: x })) },
+                      ] as const
+                    ).map((row) => (
+                      <div key={row.key} className="py-2">
+                        <div className="flex items-center justify-between text-xs mb-2">
+                          <span className="text-muted-foreground">{row.key}</span>
+                          <span className="text-foreground font-medium">{clampInt(row.val, 0, 100)}%</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-white/10 overflow-hidden mb-2">
+                          <div className="h-full bg-white/30" style={{ width: `${clampInt(row.val, 0, 100)}%` }} />
+                        </div>
+                        <Slider
+                          value={[clampInt(row.val, 0, 100)]}
+                          onValueChange={(v) => row.set(clampInt(v[0], 0, 100))}
+                          min={0}
+                          max={100}
+                          step={10}
+                        />
+                      </div>
+                    ))}
                   </div>
-
-                  <div className="text-[11px] text-muted-foreground">Sugestão de faixas: {AGE_BUCKETS.join(" · ")}</div>
                 </div>
 
-                {/* Estilos */}
+                {/* Estilo (apenas 1) */}
                 <div className="space-y-3">
-                  <div className="text-xs text-muted-foreground uppercase tracking-widest">Estilos de conteúdo (até 3)</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-widest">Estilo de conteúdo</div>
 
                   <div className="flex flex-wrap gap-2">
-                    {STYLE_OPTIONS.map((opt) => {
-                      const active = form.content_styles.includes(opt);
-                      const disabled = !active && form.content_styles.length >= 3;
+                    {[
+                      "Lifestyle",
+                      "Beleza",
+                      "Moda",
+                      "Educação",
+                      "Fitness",
+                      "Gastronomia",
+                      "Viagem",
+                      "Tech",
+                      "Games",
+                      "Maternidade",
+                      "Negócios",
+                      "Humor",
+                      "Música",
+                    ].map((opt) => {
+                      const active = form.content_style_one === opt;
 
                       return (
                         <button
                           key={opt}
                           type="button"
-                          disabled={disabled}
-                          onClick={() => toggleStyle(opt)}
+                          onClick={() =>
+                            setForm((s) => ({
+                              ...s,
+                              content_style_one: active ? "" : opt,
+                            }))
+                          }
                           className={`text-xs px-3 py-2 rounded-full border transition ${
                             active
                               ? "border-primary/30 bg-primary/10 text-primary"
                               : "border-border/50 bg-white/5 text-muted-foreground hover:text-foreground hover:bg-white/10"
-                          } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                          }`}
                         >
                           {opt}
                         </button>
@@ -1143,7 +1281,8 @@ export default function InfluencerProfile() {
                   </div>
 
                   <div className="text-[11px] text-muted-foreground">
-                    Selecionados: <span className="text-foreground font-medium">{form.content_styles.join(", ") || "—"}</span>
+                    Selecionado:{" "}
+                    <span className="text-foreground font-medium">{form.content_style_one || "—"}</span>
                   </div>
                 </div>
 
