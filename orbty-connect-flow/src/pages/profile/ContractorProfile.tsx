@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   CircleDot,
   FileText,
-  Trash2,
   ImagePlus,
   Building2,
   Pencil,
@@ -23,8 +22,7 @@ import {
   Globe,
   Tag,
   Package,
-  Eye,
-  ExternalLink,
+  Instagram,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -32,18 +30,41 @@ import { Label } from "@/components/ui/label";
 import { useNavigate } from "react-router-dom";
 
 /* =========================
-   UI helpers (padrão influencer)
+   UI helpers
 ========================= */
-
-function GlassCard(props: { children: React.ReactNode; className?: string }) {
-  return <div className={`glass-card p-5 ${props.className ?? ""}`}>{props.children}</div>;
-}
 
 function safeUrl(url?: string | null) {
   const raw = (url || "").trim();
   if (!raw) return null;
   if (/^https?:\/\//i.test(raw)) return raw;
   return `https://${raw}`;
+}
+
+function buildInstagramLinks(handle?: string | null) {
+  const raw = (handle || "").trim().replace(/^@/, "");
+  if (!raw) return null;
+  return {
+    raw,
+    web: `https://instagram.com/${raw}`,
+    app: `instagram://user?username=${raw}`,
+  };
+}
+
+function openInstagram(handle?: string | null) {
+  const links = buildInstagramLinks(handle);
+  if (!links) return;
+
+  const opened = window.open(links.app, "_blank", "noopener,noreferrer");
+  if (!opened) window.open(links.web, "_blank", "noopener,noreferrer");
+  else {
+    setTimeout(() => {
+      try {
+        window.open(links.web, "_blank", "noopener,noreferrer");
+      } catch {
+        // ignore
+      }
+    }, 450);
+  }
 }
 
 function initials(name?: string | null) {
@@ -76,24 +97,38 @@ function IconButton(props: {
   );
 }
 
-/** ✅ Chip micro com label + valor empilhado (compacto e premium) */
-function MicroChip(props: { icon: React.ReactNode; label: string; value: string; title?: string }) {
+function MicroChip(props: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  title?: string;
+  onClick?: () => void;
+  clickable?: boolean;
+}) {
+  const clickable = !!props.onClick || !!props.clickable;
+
   return (
-    <div
+    <button
+      type="button"
+      onClick={props.onClick}
+      disabled={!clickable}
       title={props.title}
-      className="h-12 min-w-0 flex items-center gap-2 rounded-2xl border border-border/50 bg-white/5 px-3
-      text-[11px] text-foreground/90 shadow-sm"
+      className={`h-12 min-w-0 flex items-center gap-2 rounded-2xl border border-border/50 bg-white/5 px-3
+      text-[11px] text-foreground/90 shadow-sm text-left
+      ${clickable ? "hover:bg-white/10 hover:shadow-sm active:scale-[0.99]" : "opacity-100"}
+      disabled:opacity-100 disabled:cursor-default`}
     >
-      <span className="text-primary shrink-0">{props.icon}</span>
+      <span className={`shrink-0 ${clickable ? "text-primary" : "text-primary"}`}>{props.icon}</span>
       <div className="min-w-0 leading-tight">
         <div className="text-[10px] text-muted-foreground whitespace-nowrap">{props.label}:</div>
         <div className="text-xs font-semibold truncate whitespace-nowrap">{props.value}</div>
       </div>
-    </div>
+      {clickable ? <span className="ml-auto text-[10px] text-muted-foreground">↗</span> : null}
+    </button>
   );
 }
 
-function MetricCard(props: { label: string; value: React.ReactNode; icon?: React.ReactNode; hint?: string }) {
+function MetricCard(props: { label: string; value: React.ReactNode; icon?: React.ReactNode }) {
   return (
     <div
       className="rounded-2xl border border-border/50 bg-white/5 p-4 backdrop-blur shadow-sm transition
@@ -102,7 +137,6 @@ function MetricCard(props: { label: string; value: React.ReactNode; icon?: React
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-xs text-muted-foreground">{props.label}</div>
-          {props.hint ? <div className="text-[10px] text-muted-foreground/70 mt-0.5">{props.hint}</div> : null}
         </div>
         {props.icon}
       </div>
@@ -111,6 +145,103 @@ function MetricCard(props: { label: string; value: React.ReactNode; icon?: React
   );
 }
 
+/** Avaliações (mesmo visual do influencer) */
+function SkeletonLine({ w = "100%", h = 12 }: { w?: string; h?: number }) {
+  return <div className="animate-pulse rounded-xl bg-white/10" style={{ width: w, height: h }} />;
+}
+
+function StarRating(props: { value: number; max?: number; className?: string }) {
+  const max = props.max ?? 5;
+  const v = Math.max(0, Math.min(max, Number(props.value ?? 0)));
+  const full = Math.round(v);
+
+  return (
+    <div className={`flex items-center justify-center gap-1 ${props.className ?? ""}`} aria-label={`Avaliação: ${full} de ${max}`}>
+      {Array.from({ length: max }).map((_, i) => {
+        const filled = i < full;
+        return (
+          <span
+            key={i}
+            className={`text-[26px] leading-none select-none ${filled ? "text-yellow-400" : "text-white/20"}`}
+            aria-hidden="true"
+          >
+            ★
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function RatingsCard(props: { rating: number; count?: number | null; loading?: boolean }) {
+  if (props.loading) {
+    return (
+      <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
+        <div className="text-sm font-semibold text-foreground text-center">Avaliações</div>
+        <div className="mt-4 flex justify-center">
+          <SkeletonLine w="180px" h={22} />
+        </div>
+        <div className="mt-3 flex justify-center">
+          <SkeletonLine w="140px" h={10} />
+        </div>
+      </div>
+    );
+  }
+
+  const safeRating = Math.max(0, Math.min(5, Number(props.rating ?? 0)));
+  const count = props.count ?? null;
+
+  return (
+    <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
+      <div className="text-sm font-semibold text-foreground text-center">Avaliações</div>
+
+      <div className="mt-3">
+        <StarRating value={safeRating} />
+      </div>
+
+      <div className="mt-2 text-center text-xs text-muted-foreground">
+        {count && count > 0 ? `${safeRating.toFixed(1).replace(".", ",")} · ${count} avaliações` : "Sem avaliações ainda"}
+      </div>
+    </div>
+  );
+}
+
+/* =========================
+   Catálogo: Categorias + Produtos (listas)
+========================= */
+
+const BUSINESS_CATEGORIES = [
+  "Restaurante / Hamburgueria",
+  "Cafeteria / Doceria",
+  "Moda / Loja",
+  "Beleza / Estética",
+  "Academia / Fitness",
+  "Clínica / Saúde",
+  "Hotelaria / Turismo",
+  "Eventos",
+  "Imobiliária",
+  "Auto / Serviços",
+  "Mercado / Varejo",
+  "Tecnologia",
+  "Educação",
+] as const;
+
+const PRODUCTS_BY_CATEGORY: Record<string, string[]> = {
+  "Restaurante / Hamburgueria": ["Cardápio", "Lançamento", "Delivery", "Promoção"],
+  "Cafeteria / Doceria": ["Menu", "Novidade", "Delivery", "Promoção"],
+  "Moda / Loja": ["Coleção", "Lançamento", "Cupom", "Liquidação"],
+  "Beleza / Estética": ["Procedimento", "Pacote", "Promoção", "Lançamento"],
+  "Academia / Fitness": ["Plano", "Desafio", "Aula", "Promoção"],
+  "Clínica / Saúde": ["Serviço", "Consulta", "Programa", "Especialidade"],
+  "Hotelaria / Turismo": ["Hospedagem", "Pacote", "Experiência", "Promoção"],
+  Eventos: ["Evento", "Ingresso", "Lote", "Divulgação"],
+  Imobiliária: ["Imóvel", "Lançamento", "Open house", "Captação"],
+  "Auto / Serviços": ["Serviço", "Revisão", "Promoção", "Campanha"],
+  "Mercado / Varejo": ["Produto", "Oferta", "Campanha", "Lançamento"],
+  Tecnologia: ["Produto", "Serviço", "Lançamento", "Oferta"],
+  Educação: ["Curso", "Turma", "Matrícula", "Evento"],
+};
+
 /* =========================
    Page
 ========================= */
@@ -118,7 +249,7 @@ function MetricCard(props: { label: string; value: React.ReactNode; icon?: React
 export default function ContractorProfile() {
   const navigate = useNavigate();
 
-  // ⚠️ Mantém compatível: se seu useAuth não tiver userRole/approvalStatus, não quebra
+  // ⚠️ Mantém compatível
   const auth = useAuth() as any;
   const profile = auth?.profile;
   const userRole = auth?.userRole;
@@ -243,6 +374,72 @@ export default function ContractorProfile() {
   }, [(ctx.data as any)?.organization_metrics]);
 
   /* -------------------------
+     Avaliações (negócio) - leitura segura
+     View esperada: organization_rating_summary (organization_id, avg_rating, rating_count)
+     Se não existir: mantém 0 sem quebrar.
+  ------------------------- */
+  const [ratingAvg, setRatingAvg] = useState<number>(0);
+  const [ratingCount, setRatingCount] = useState<number | null>(null);
+  const [loadingRatings, setLoadingRatings] = useState<boolean>(true);
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      if (!org?.id) {
+        setRatingAvg(0);
+        setRatingCount(null);
+        setLoadingRatings(false);
+        return;
+      }
+
+      setLoadingRatings(true);
+      try {
+        const { data, error } = await supabase
+          .from("organization_rating_summary")
+          .select("avg_rating, rating_count")
+          .eq("organization_id", org.id)
+          .maybeSingle();
+
+        if (!alive) return;
+
+        if (error) {
+          // view pode não existir ainda -> não quebra
+          console.warn("organization_rating_summary:", error);
+          setRatingAvg(0);
+          setRatingCount(null);
+          setLoadingRatings(false);
+          return;
+        }
+
+        if (!data) {
+          setRatingAvg(0);
+          setRatingCount(null);
+          setLoadingRatings(false);
+          return;
+        }
+
+        const avg = Number((data as any).avg_rating ?? 0);
+        const cnt = Number((data as any).rating_count ?? 0);
+
+        setRatingAvg(Number.isFinite(avg) ? avg : 0);
+        setRatingCount(Number.isFinite(cnt) ? cnt : null);
+        setLoadingRatings(false);
+      } catch (e) {
+        if (!alive) return;
+        console.warn(e);
+        setRatingAvg(0);
+        setRatingCount(null);
+        setLoadingRatings(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [org?.id]);
+
+  /* -------------------------
      Modal Criar/Editar Negócio
   ------------------------- */
   const [orgOpen, setOrgOpen] = useState(false);
@@ -255,7 +452,12 @@ export default function ContractorProfile() {
     business_category: "",
     product_or_brand: "",
     website_url: "",
+    instagram: "",
     bio: "",
+    address_street: "",
+    address_number: "",
+    address_complement: "",
+    address_zip: "",
   });
 
   useEffect(() => {
@@ -268,7 +470,12 @@ export default function ContractorProfile() {
       business_category: org?.business_category ?? "",
       product_or_brand: org?.product_or_brand ?? "",
       website_url: org?.website_url ?? "",
+      instagram: org?.instagram ?? "",
       bio: org?.bio ?? "",
+      address_street: org?.address_street ?? "",
+      address_number: org?.address_number ?? "",
+      address_complement: org?.address_complement ?? "",
+      address_zip: org?.address_zip ?? "",
     });
   }, [orgOpen, org, profile?.city, profile?.state]);
 
@@ -290,8 +497,13 @@ export default function ContractorProfile() {
           business_category: orgForm.business_category.trim() || undefined,
           product_or_brand: orgForm.product_or_brand.trim() || undefined,
           website_url: orgForm.website_url.trim() || undefined,
+          instagram: orgForm.instagram.trim() || undefined,
           bio: orgForm.bio.trim() || undefined,
-        });
+          address_street: orgForm.address_street.trim() || undefined,
+          address_number: orgForm.address_number.trim() || undefined,
+          address_complement: orgForm.address_complement.trim() || undefined,
+          address_zip: orgForm.address_zip.trim() || undefined,
+        } as any);
 
         toast.success("Negócio criado!");
       } else {
@@ -304,8 +516,13 @@ export default function ContractorProfile() {
             business_category: orgForm.business_category.trim() || null,
             product_or_brand: orgForm.product_or_brand.trim() || null,
             website_url: orgForm.website_url.trim() || null,
+            instagram: orgForm.instagram.trim() || null,
             bio: orgForm.bio.trim() || null,
-          })
+            address_street: orgForm.address_street.trim() || null,
+            address_number: orgForm.address_number.trim() || null,
+            address_complement: orgForm.address_complement.trim() || null,
+            address_zip: orgForm.address_zip.trim() || null,
+          } as any)
           .eq("id", org.id);
 
         if (error) throw error;
@@ -336,14 +553,28 @@ export default function ContractorProfile() {
   }, [org?.region_city, org?.region_state, profile?.city, profile?.state]);
 
   const website = useMemo(() => safeUrl(org?.website_url), [org?.website_url]);
-
   const openWebsite = () => {
     if (!website) return;
     window.open(website, "_blank", "noopener,noreferrer");
   };
 
+  const igHandle = (org?.instagram || "").trim();
+  const igRaw = buildInstagramLinks(igHandle)?.raw ?? null;
+
   const openMaps = () => {
-    const q = encodeURIComponent(locationLabel || "");
+    // monta endereço exato se existir, senão cai no locationLabel
+    const parts = [
+      org?.address_street,
+      org?.address_number,
+      org?.address_complement,
+      org?.address_zip,
+      org?.region_city || profile?.city,
+      org?.region_state || profile?.state,
+    ]
+      .map((x: any) => (x || "").toString().trim())
+      .filter(Boolean);
+
+    const q = encodeURIComponent(parts.length ? parts.join(", ") : locationLabel || "");
     if (!q) return;
     window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
   };
@@ -353,7 +584,7 @@ export default function ContractorProfile() {
   const showBioMore = useMemo(() => headerBio.length > 140, [headerBio]);
 
   const category = (org?.business_category || "—").trim() || "—";
-  const productOrBrand = (org?.product_or_brand || "").trim();
+  const product = (org?.product_or_brand || "—").trim() || "—";
 
   const navType = "contractor";
 
@@ -361,7 +592,7 @@ export default function ContractorProfile() {
     <MobileLayout title="Meu negócio" showBack navType={navType}>
       <div className="px-6 py-6 space-y-6">
         {/* =========================
-            HEADER PREMIUM (igual influencer)
+            HEADER PREMIUM
         ========================= */}
         <div className="relative overflow-hidden rounded-3xl border border-border/50 bg-white/5 shadow-sm">
           <div className="absolute inset-0 pointer-events-none">
@@ -376,12 +607,7 @@ export default function ContractorProfile() {
                 <div className="absolute -inset-2 rounded-3xl bg-primary/10 blur-lg opacity-60" />
                 <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-primary/20 bg-white/5 flex items-center justify-center">
                   {org?.logo_url ? (
-                    <img
-                      src={org.logo_url}
-                      alt="Logo"
-                      className="w-full h-full object-cover block"
-                      referrerPolicy="no-referrer"
-                    />
+                    <img src={org.logo_url} alt="Logo" className="w-full h-full object-cover block" referrerPolicy="no-referrer" />
                   ) : (
                     <span className="text-primary font-bold">{initials(title)}</span>
                   )}
@@ -403,13 +629,7 @@ export default function ContractorProfile() {
                   )}
                 </button>
 
-                <input
-                  ref={logoRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => handleLogoFile(e.target.files?.[0])}
-                />
+                <input ref={logoRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleLogoFile(e.target.files?.[0])} />
               </div>
 
               {/* Infos */}
@@ -429,11 +649,7 @@ export default function ContractorProfile() {
                     <>
                       <span className="line-clamp-3">{headerBio}</span>
                       {showBioMore ? (
-                        <button
-                          type="button"
-                          onClick={() => setBioOpen(true)}
-                          className="mt-1 text-xs text-primary hover:opacity-90 transition"
-                        >
+                        <button type="button" onClick={() => setBioOpen(true)} className="mt-1 text-xs text-primary hover:opacity-90 transition">
                           Ver mais
                         </button>
                       ) : null}
@@ -442,29 +658,10 @@ export default function ContractorProfile() {
                     <span className="text-muted-foreground">Adicione uma descrição do seu negócio.</span>
                   )}
                 </div>
-
-                {/* Mini tags (opcional, bem discreto) */}
-                {(category !== "—" || productOrBrand) && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {category !== "—" ? (
-                      <span className="inline-flex items-center gap-1 text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground/90">
-                        <Tag className="w-4 h-4 text-primary" />
-                        <span className="truncate max-w-[140px]">{category}</span>
-                      </span>
-                    ) : null}
-
-                    {productOrBrand ? (
-                      <span className="inline-flex items-center gap-1 text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground/90">
-                        <Package className="w-4 h-4 text-primary" />
-                        <span className="truncate max-w-[160px]">{productOrBrand}</span>
-                      </span>
-                    ) : null}
-                  </div>
-                )}
               </div>
             </div>
 
-            {/* ações */}
+            {/* ações (editar + instagram) */}
             <div className="mt-4 grid grid-cols-2 gap-2">
               <IconButton
                 icon={<Pencil className="w-4 h-4" />}
@@ -474,30 +671,30 @@ export default function ContractorProfile() {
               />
 
               <IconButton
-                icon={<Globe className="w-4 h-4" />}
-                label={website ? "Site" : "Site"}
-                onClick={openWebsite}
-                disabled={!website}
+                icon={<Instagram className="w-4 h-4" />}
+                label={igRaw ? `@${igRaw}` : "Instagram"}
+                onClick={() => openInstagram(igHandle)}
+                disabled={!igRaw}
                 className="w-full justify-center"
               />
             </div>
 
-            {/* ação secundária: ver perfil público */}
-            {profile?.id ? (
-              <button
-                type="button"
-                onClick={() => navigate(`/u/${profile.id}`)}
-                className="mt-3 w-full rounded-xl border border-border/50 bg-white/5 px-3 py-2 text-sm text-foreground transition hover:bg-white/10 flex items-center justify-center gap-2"
-              >
-                <Eye className="w-4 h-4 text-primary" />
-                Ver perfil público
-              </button>
-            ) : null}
+            {/* botão full: Site (substitui “ver perfil público”) */}
+            <button
+              type="button"
+              onClick={openWebsite}
+              disabled={!website}
+              className={`mt-3 w-full rounded-xl border px-3 py-2 text-sm transition flex items-center justify-center gap-2 ${
+                website ? "border-border/50 bg-white/5 hover:bg-white/10" : "border-border/30 bg-white/5 opacity-60"
+              }`}
+              title={website ? "Abrir site em nova aba" : "Informe o site no Editar negócio"}
+            >
+              <Globe className="w-4 h-4 text-primary" />
+              Site
+            </button>
 
             {!org && (
-              <div className="mt-3 text-xs text-muted-foreground">
-                Para exibir o negócio completo e permitir envio de logo, crie o perfil do seu negócio.
-              </div>
+              <div className="mt-3 text-xs text-muted-foreground">Para exibir o negócio completo e permitir envio de logo, crie o perfil do seu negócio.</div>
             )}
           </div>
         </div>
@@ -522,48 +719,36 @@ export default function ContractorProfile() {
           </div>
         )}
 
-        {/* 3 CHIPS (substitui quick cards) */}
+        {/* 3 CHIPS (Localização clicável + Categoria + Produto) */}
         <div className="grid grid-cols-3 gap-2">
-          <MicroChip icon={<MapPin className="w-4 h-4" />} label="Localização" value={locationLabel} title="Abrir no Maps" />
-          <MicroChip icon={<Tag className="w-4 h-4" />} label="Categoria" value={category} title={category} />
           <MicroChip
-            icon={<Megaphone className="w-4 h-4" />}
-            label="Ativações"
-            value={loadingMetrics ? "—" : String(metrics.total)}
-            title="Total de campanhas (por enquanto)"
+            icon={<MapPin className="w-4 h-4" />}
+            label="Localização"
+            value={locationLabel}
+            title="Abrir no Google Maps"
+            onClick={openMaps}
+            clickable
+          />
+
+          <MicroChip
+            icon={<Building2 className="w-4 h-4" />}
+            label="Categoria"
+            value={category}
+            title={category}
+          />
+
+          <MicroChip
+            icon={<Package className="w-4 h-4" />}
+            label="Produto"
+            value={product}
+            title={product}
           />
         </div>
 
-        {/* AÇÃO rápida: Maps + Site (discreto, mas útil) */}
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={openMaps}
-            className="rounded-2xl border border-border/50 bg-white/5 hover:bg-white/10 px-3 py-3 text-sm transition flex items-center justify-center gap-2"
-          >
-            <MapPin className="w-4 h-4 text-primary" />
-            Abrir no Maps
-            <ExternalLink className="w-4 h-4 text-muted-foreground" />
-          </button>
-
-          <button
-            type="button"
-            onClick={openWebsite}
-            disabled={!website}
-            className={`rounded-2xl border px-3 py-3 text-sm transition flex items-center justify-center gap-2 ${
-              website ? "border-border/50 bg-white/5 hover:bg-white/10" : "border-border/30 bg-white/5 opacity-60"
-            }`}
-          >
-            <Globe className="w-4 h-4 text-primary" />
-            Abrir Site
-            <ExternalLink className="w-4 h-4 text-muted-foreground" />
-          </button>
-        </div>
-
         {/* =========================
-            ATIVAÇÕES E CAMPANHAS (repaginado)
+            ATIVAÇÕES E CAMPANHAS (sem rascunhos/excluídas)
         ========================= */}
-        <GlassCard className="space-y-3">
+        <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] space-y-3">
           <div className="text-sm font-semibold text-foreground text-center">Ativações e campanhas</div>
 
           {loadingMetrics ? (
@@ -576,11 +761,12 @@ export default function ContractorProfile() {
               <MetricCard label="Ativas" value={metrics.active} icon={<CircleDot className="w-4 h-4 text-primary" />} />
               <MetricCard label="Concluídas" value={metrics.completed} icon={<CheckCircle2 className="w-4 h-4 text-primary" />} />
               <MetricCard label="Encerradas" value={metrics.closed} icon={<FileText className="w-4 h-4 text-muted-foreground" />} />
-              <MetricCard label="Rascunhos" value={metrics.draft} hint="Não publicadas" />
-              <MetricCard label="Excluídas" value={metrics.deleted} icon={<Trash2 className="w-4 h-4 text-destructive" />} />
             </div>
           )}
-        </GlassCard>
+        </div>
+
+        {/* ✅ Avaliações do negócio */}
+        <RatingsCard rating={ratingAvg} count={ratingCount} loading={loadingRatings} />
 
         {/* Modal Criar/Editar negócio */}
         {orgOpen && (
@@ -593,12 +779,7 @@ export default function ContractorProfile() {
             >
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold text-foreground">{isEditingOrg ? "Editar negócio" : "Criar negócio"}</div>
-                <button
-                  className="p-2 rounded-xl hover:bg-white/5"
-                  onClick={() => (orgSaving ? null : setOrgOpen(false))}
-                  title="Fechar"
-                  type="button"
-                >
+                <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => (orgSaving ? null : setOrgOpen(false))} title="Fechar" type="button">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -635,22 +816,96 @@ export default function ContractorProfile() {
                   </div>
                 </div>
 
+                {/* Endereço para Maps (não aparece escrito no perfil, só usado no clique) */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Rua</Label>
+                    <Input
+                      value={orgForm.address_street}
+                      onChange={(e) => setOrgForm((s) => ({ ...s, address_street: e.target.value }))}
+                      placeholder="Ex: Av. Brasil"
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Número</Label>
+                    <Input
+                      value={orgForm.address_number}
+                      onChange={(e) => setOrgForm((s) => ({ ...s, address_number: e.target.value }))}
+                      placeholder="Ex: 123"
+                      className="text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Complemento</Label>
+                    <Input
+                      value={orgForm.address_complement}
+                      onChange={(e) => setOrgForm((s) => ({ ...s, address_complement: e.target.value }))}
+                      placeholder="Ex: Sala 2"
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">CEP</Label>
+                    <Input
+                      value={orgForm.address_zip}
+                      onChange={(e) => setOrgForm((s) => ({ ...s, address_zip: e.target.value }))}
+                      placeholder="Ex: 74000-000"
+                      className="text-sm"
+                      inputMode="numeric"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Categoria</Label>
                   <Input
                     value={orgForm.business_category}
-                    onChange={(e) => setOrgForm((s) => ({ ...s, business_category: e.target.value }))}
-                    placeholder="Ex: Hamburgueria / Moda / Clínica"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const products = PRODUCTS_BY_CATEGORY[v] || [];
+                      setOrgForm((s) => ({
+                        ...s,
+                        business_category: v,
+                        product_or_brand: products.includes(s.product_or_brand) ? s.product_or_brand : "",
+                      }));
+                    }}
+                    placeholder="Selecione ou digite"
                     className="text-sm"
+                    list="business-category-list"
                   />
+                  <datalist id="business-category-list">
+                    {BUSINESS_CATEGORIES.map((c) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Produto/Marca</Label>
+                  <Label className="text-xs text-muted-foreground">Produto</Label>
                   <Input
                     value={orgForm.product_or_brand}
                     onChange={(e) => setOrgForm((s) => ({ ...s, product_or_brand: e.target.value }))}
-                    placeholder="Ex: Smash Burger / Coleção X"
+                    placeholder="Selecione ou digite"
+                    className="text-sm"
+                    list="business-product-list"
+                  />
+                  <datalist id="business-product-list">
+                    {(PRODUCTS_BY_CATEGORY[orgForm.business_category] || []).map((p) => (
+                      <option key={p} value={p} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Instagram</Label>
+                  <Input
+                    value={orgForm.instagram}
+                    onChange={(e) => setOrgForm((s) => ({ ...s, instagram: e.target.value }))}
+                    placeholder="@seunegocio"
                     className="text-sm"
                   />
                 </div>
@@ -673,9 +928,7 @@ export default function ContractorProfile() {
                     placeholder="Uma descrição curta do seu negócio"
                     className="text-sm"
                   />
-                  <div className="text-[11px] text-muted-foreground">
-                    O header mostra no máximo 3 linhas (use uma descrição curta).
-                  </div>
+                  <div className="text-[11px] text-muted-foreground">O header mostra no máximo 3 linhas (use uma descrição curta).</div>
                 </div>
 
                 <button
@@ -687,9 +940,7 @@ export default function ContractorProfile() {
                   {orgSaving ? "Salvando..." : "Salvar"}
                 </button>
 
-                <div className="text-xs text-muted-foreground">
-                  Este perfil representa seu negócio para influenciadores e para a Orbty.
-                </div>
+                <div className="text-xs text-muted-foreground">Este perfil representa seu negócio para influenciadores e para a Orbty.</div>
               </div>
             </div>
           </div>
