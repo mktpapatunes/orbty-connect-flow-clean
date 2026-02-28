@@ -20,7 +20,6 @@ import {
   Save,
   X,
   Globe,
-  Tag,
   Package,
   Instagram,
 } from "lucide-react";
@@ -144,23 +143,91 @@ function MetricCard(props: { label: string; value: React.ReactNode; icon?: React
   );
 }
 
-/** Selo dourado (envolve o VerifiedBadge existente sem depender da implementação interna) */
-function GoldVerifiedBadge() {
+/** ✅ Selo verificado amarelo (apenas contratante)
+ * Mantém o componente original (influencer não muda).
+ * A forma mais segura sem mexer no VerifiedBadge é aplicar filter no wrapper.
+ */
+function ContractorVerifiedBadge() {
   return (
     <span
-      className="inline-flex items-center rounded-full px-1.5 py-0.5
-      bg-amber-500/10 border border-amber-400/25 shadow-sm"
+      className="inline-flex items-center"
+      // Ajuste fino para transformar o azul em amarelo (sem quebrar o badge)
+      style={{
+        filter: "hue-rotate(205deg) saturate(180%) brightness(120%)",
+      }}
       title="Conta aprovada"
     >
-      <span className="text-amber-300 drop-shadow-[0_0_10px_rgba(251,191,36,0.22)]">
-        <VerifiedBadge size="sm" />
-      </span>
+      <VerifiedBadge size="sm" />
     </span>
   );
 }
 
 /* =========================
-   Catálogo: Categorias + Produtos (listas)
+   Avaliações (negócio)
+========================= */
+
+function SkeletonLine({ w = "100%", h = 12 }: { w?: string; h?: number }) {
+  return <div className="animate-pulse rounded-xl bg-white/10" style={{ width: w, height: h }} />;
+}
+
+function StarRating(props: { value: number; max?: number; className?: string }) {
+  const max = props.max ?? 5;
+  const v = Math.max(0, Math.min(max, Number(props.value ?? 0)));
+  const full = Math.round(v);
+
+  return (
+    <div className={`flex items-center justify-center gap-1 ${props.className ?? ""}`} aria-label={`Avaliação: ${full} de ${max}`}>
+      {Array.from({ length: max }).map((_, i) => {
+        const filled = i < full;
+        return (
+          <span
+            key={i}
+            className={`text-[26px] leading-none select-none ${filled ? "text-yellow-400" : "text-white/20"}`}
+            aria-hidden="true"
+          >
+            ★
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function RatingsCard(props: { rating: number; count?: number | null; loading?: boolean }) {
+  if (props.loading) {
+    return (
+      <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
+        <div className="text-sm font-semibold text-foreground text-center">Avaliações</div>
+        <div className="mt-4 flex justify-center">
+          <SkeletonLine w="180px" h={22} />
+        </div>
+        <div className="mt-3 flex justify-center">
+          <SkeletonLine w="140px" h={10} />
+        </div>
+      </div>
+    );
+  }
+
+  const safeRating = Math.max(0, Math.min(5, Number(props.rating ?? 0)));
+  const count = props.count ?? null;
+
+  return (
+    <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
+      <div className="text-sm font-semibold text-foreground text-center">Avaliações</div>
+
+      <div className="mt-3">
+        <StarRating value={safeRating} />
+      </div>
+
+      <div className="mt-2 text-center text-xs text-muted-foreground">
+        {count && count > 0 ? `${safeRating.toFixed(1).replace(".", ",")} · ${count} avaliações` : "Sem avaliações ainda"}
+      </div>
+    </div>
+  );
+}
+
+/* =========================
+   Catálogo: Categorias + Produtos
 ========================= */
 
 const BUSINESS_CATEGORIES = [
@@ -327,6 +394,71 @@ export default function ContractorProfile() {
       alive = false;
     };
   }, [(ctx.data as any)?.organization_metrics]);
+
+  /* -------------------------
+     Avaliações (negócio) - leitura segura
+     View esperada: organization_rating_summary (organization_id, avg_rating, rating_count)
+     Se não existir: não quebra e mostra vazio.
+  ------------------------- */
+  const [ratingAvg, setRatingAvg] = useState<number>(0);
+  const [ratingCount, setRatingCount] = useState<number | null>(null);
+  const [loadingRatings, setLoadingRatings] = useState<boolean>(true);
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      if (!org?.id) {
+        setRatingAvg(0);
+        setRatingCount(null);
+        setLoadingRatings(false);
+        return;
+      }
+
+      setLoadingRatings(true);
+      try {
+        const { data, error } = await supabase
+          .from("organization_rating_summary")
+          .select("avg_rating, rating_count")
+          .eq("organization_id", org.id)
+          .maybeSingle();
+
+        if (!alive) return;
+
+        if (error) {
+          console.warn("organization_rating_summary:", error);
+          setRatingAvg(0);
+          setRatingCount(null);
+          setLoadingRatings(false);
+          return;
+        }
+
+        if (!data) {
+          setRatingAvg(0);
+          setRatingCount(null);
+          setLoadingRatings(false);
+          return;
+        }
+
+        const avg = Number((data as any).avg_rating ?? 0);
+        const cnt = Number((data as any).rating_count ?? 0);
+
+        setRatingAvg(Number.isFinite(avg) ? avg : 0);
+        setRatingCount(Number.isFinite(cnt) ? cnt : null);
+        setLoadingRatings(false);
+      } catch (e) {
+        if (!alive) return;
+        console.warn(e);
+        setRatingAvg(0);
+        setRatingCount(null);
+        setLoadingRatings(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [org?.id]);
 
   /* -------------------------
      Modal Criar/Editar Negócio
@@ -524,7 +656,11 @@ export default function ContractorProfile() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 min-w-0">
                   <h1 className="text-xl font-semibold text-foreground leading-tight break-words">{title}</h1>
-                  {isVerifiedContractor ? <GoldVerifiedBadge /> : null}
+                  {isVerifiedContractor ? (
+                    <span className="shrink-0">
+                      <ContractorVerifiedBadge />
+                    </span>
+                  ) : null}
                 </div>
 
                 <div className="mt-2 text-sm text-foreground/90 leading-relaxed">
@@ -636,6 +772,9 @@ export default function ContractorProfile() {
           )}
         </div>
 
+        {/* ✅ AVALIAÇÕES (voltou) */}
+        <RatingsCard rating={ratingAvg} count={ratingCount} loading={loadingRatings} />
+
         {/* Modal Criar/Editar negócio */}
         {orgOpen && (
           <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
@@ -658,7 +797,7 @@ export default function ContractorProfile() {
                   <Input value={orgForm.name} onChange={(e) => setOrgForm((s) => ({ ...s, name: e.target.value }))} className="text-sm" />
                 </div>
 
-                {/* ✅ BIO logo abaixo do nome */}
+                {/* BIO abaixo do nome */}
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Descrição (bio)</Label>
                   <Input
@@ -709,7 +848,7 @@ export default function ContractorProfile() {
                   </div>
                 </div>
 
-                {/* ✅ Categoria: agora é SELECT (sem digitar) */}
+                {/* Categoria: SELECT (sem digitar) */}
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Categoria</Label>
                   <select
