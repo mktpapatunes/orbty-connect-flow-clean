@@ -27,7 +27,6 @@ import {
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useNavigate } from "react-router-dom";
 
 /* =========================
    UI helpers
@@ -118,7 +117,7 @@ function MicroChip(props: {
       ${clickable ? "hover:bg-white/10 hover:shadow-sm active:scale-[0.99]" : "opacity-100"}
       disabled:opacity-100 disabled:cursor-default`}
     >
-      <span className={`shrink-0 ${clickable ? "text-primary" : "text-primary"}`}>{props.icon}</span>
+      <span className="shrink-0 text-primary">{props.icon}</span>
       <div className="min-w-0 leading-tight">
         <div className="text-[10px] text-muted-foreground whitespace-nowrap">{props.label}:</div>
         <div className="text-xs font-semibold truncate whitespace-nowrap">{props.value}</div>
@@ -145,64 +144,18 @@ function MetricCard(props: { label: string; value: React.ReactNode; icon?: React
   );
 }
 
-/** Avaliações (mesmo visual do influencer) */
-function SkeletonLine({ w = "100%", h = 12 }: { w?: string; h?: number }) {
-  return <div className="animate-pulse rounded-xl bg-white/10" style={{ width: w, height: h }} />;
-}
-
-function StarRating(props: { value: number; max?: number; className?: string }) {
-  const max = props.max ?? 5;
-  const v = Math.max(0, Math.min(max, Number(props.value ?? 0)));
-  const full = Math.round(v);
-
+/** Selo dourado (envolve o VerifiedBadge existente sem depender da implementação interna) */
+function GoldVerifiedBadge() {
   return (
-    <div className={`flex items-center justify-center gap-1 ${props.className ?? ""}`} aria-label={`Avaliação: ${full} de ${max}`}>
-      {Array.from({ length: max }).map((_, i) => {
-        const filled = i < full;
-        return (
-          <span
-            key={i}
-            className={`text-[26px] leading-none select-none ${filled ? "text-yellow-400" : "text-white/20"}`}
-            aria-hidden="true"
-          >
-            ★
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-function RatingsCard(props: { rating: number; count?: number | null; loading?: boolean }) {
-  if (props.loading) {
-    return (
-      <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
-        <div className="text-sm font-semibold text-foreground text-center">Avaliações</div>
-        <div className="mt-4 flex justify-center">
-          <SkeletonLine w="180px" h={22} />
-        </div>
-        <div className="mt-3 flex justify-center">
-          <SkeletonLine w="140px" h={10} />
-        </div>
-      </div>
-    );
-  }
-
-  const safeRating = Math.max(0, Math.min(5, Number(props.rating ?? 0)));
-  const count = props.count ?? null;
-
-  return (
-    <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
-      <div className="text-sm font-semibold text-foreground text-center">Avaliações</div>
-
-      <div className="mt-3">
-        <StarRating value={safeRating} />
-      </div>
-
-      <div className="mt-2 text-center text-xs text-muted-foreground">
-        {count && count > 0 ? `${safeRating.toFixed(1).replace(".", ",")} · ${count} avaliações` : "Sem avaliações ainda"}
-      </div>
-    </div>
+    <span
+      className="inline-flex items-center rounded-full px-1.5 py-0.5
+      bg-amber-500/10 border border-amber-400/25 shadow-sm"
+      title="Conta aprovada"
+    >
+      <span className="text-amber-300 drop-shadow-[0_0_10px_rgba(251,191,36,0.22)]">
+        <VerifiedBadge size="sm" />
+      </span>
+    </span>
   );
 }
 
@@ -211,7 +164,7 @@ function RatingsCard(props: { rating: number; count?: number | null; loading?: b
 ========================= */
 
 const BUSINESS_CATEGORIES = [
-  "Restaurante / Hamburgueria",
+  "Restaurante",
   "Cafeteria / Doceria",
   "Moda / Loja",
   "Beleza / Estética",
@@ -224,10 +177,12 @@ const BUSINESS_CATEGORIES = [
   "Mercado / Varejo",
   "Tecnologia",
   "Educação",
+  "Música",
+  "Arte",
 ] as const;
 
 const PRODUCTS_BY_CATEGORY: Record<string, string[]> = {
-  "Restaurante / Hamburgueria": ["Cardápio", "Lançamento", "Delivery", "Promoção"],
+  Restaurante: ["Cardápio", "Lançamento", "Delivery", "Promoção", "Hambúrguer"],
   "Cafeteria / Doceria": ["Menu", "Novidade", "Delivery", "Promoção"],
   "Moda / Loja": ["Coleção", "Lançamento", "Cupom", "Liquidação"],
   "Beleza / Estética": ["Procedimento", "Pacote", "Promoção", "Lançamento"],
@@ -240,6 +195,8 @@ const PRODUCTS_BY_CATEGORY: Record<string, string[]> = {
   "Mercado / Varejo": ["Produto", "Oferta", "Campanha", "Lançamento"],
   Tecnologia: ["Produto", "Serviço", "Lançamento", "Oferta"],
   Educação: ["Curso", "Turma", "Matrícula", "Evento"],
+  Música: ["Show", "Lançamento", "Divulgação", "Evento"],
+  Arte: ["Exposição", "Coleção", "Divulgação", "Evento"],
 };
 
 /* =========================
@@ -247,8 +204,6 @@ const PRODUCTS_BY_CATEGORY: Record<string, string[]> = {
 ========================= */
 
 export default function ContractorProfile() {
-  const navigate = useNavigate();
-
   // ⚠️ Mantém compatível
   const auth = useAuth() as any;
   const profile = auth?.profile;
@@ -374,72 +329,6 @@ export default function ContractorProfile() {
   }, [(ctx.data as any)?.organization_metrics]);
 
   /* -------------------------
-     Avaliações (negócio) - leitura segura
-     View esperada: organization_rating_summary (organization_id, avg_rating, rating_count)
-     Se não existir: mantém 0 sem quebrar.
-  ------------------------- */
-  const [ratingAvg, setRatingAvg] = useState<number>(0);
-  const [ratingCount, setRatingCount] = useState<number | null>(null);
-  const [loadingRatings, setLoadingRatings] = useState<boolean>(true);
-
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      if (!org?.id) {
-        setRatingAvg(0);
-        setRatingCount(null);
-        setLoadingRatings(false);
-        return;
-      }
-
-      setLoadingRatings(true);
-      try {
-        const { data, error } = await supabase
-          .from("organization_rating_summary")
-          .select("avg_rating, rating_count")
-          .eq("organization_id", org.id)
-          .maybeSingle();
-
-        if (!alive) return;
-
-        if (error) {
-          // view pode não existir ainda -> não quebra
-          console.warn("organization_rating_summary:", error);
-          setRatingAvg(0);
-          setRatingCount(null);
-          setLoadingRatings(false);
-          return;
-        }
-
-        if (!data) {
-          setRatingAvg(0);
-          setRatingCount(null);
-          setLoadingRatings(false);
-          return;
-        }
-
-        const avg = Number((data as any).avg_rating ?? 0);
-        const cnt = Number((data as any).rating_count ?? 0);
-
-        setRatingAvg(Number.isFinite(avg) ? avg : 0);
-        setRatingCount(Number.isFinite(cnt) ? cnt : null);
-        setLoadingRatings(false);
-      } catch (e) {
-        if (!alive) return;
-        console.warn(e);
-        setRatingAvg(0);
-        setRatingCount(null);
-        setLoadingRatings(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [org?.id]);
-
-  /* -------------------------
      Modal Criar/Editar Negócio
   ------------------------- */
   const [orgOpen, setOrgOpen] = useState(false);
@@ -562,7 +451,6 @@ export default function ContractorProfile() {
   const igRaw = buildInstagramLinks(igHandle)?.raw ?? null;
 
   const openMaps = () => {
-    // monta endereço exato se existir, senão cai no locationLabel
     const parts = [
       org?.address_street,
       org?.address_number,
@@ -586,14 +474,14 @@ export default function ContractorProfile() {
   const category = (org?.business_category || "—").trim() || "—";
   const product = (org?.product_or_brand || "—").trim() || "—";
 
-  const navType = "contractor";
+  const productsForSelectedCategory = useMemo(() => {
+    return PRODUCTS_BY_CATEGORY[orgForm.business_category] || [];
+  }, [orgForm.business_category]);
 
   return (
-    <MobileLayout title="Meu negócio" showBack navType={navType}>
+    <MobileLayout title="Meu negócio" showBack navType="contractor">
       <div className="px-6 py-6 space-y-6">
-        {/* =========================
-            HEADER PREMIUM
-        ========================= */}
+        {/* HEADER PREMIUM */}
         <div className="relative overflow-hidden rounded-3xl border border-border/50 bg-white/5 shadow-sm">
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5" />
@@ -636,14 +524,9 @@ export default function ContractorProfile() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 min-w-0">
                   <h1 className="text-xl font-semibold text-foreground leading-tight break-words">{title}</h1>
-                  {isVerifiedContractor ? (
-                    <span className="shrink-0">
-                      <VerifiedBadge size="sm" />
-                    </span>
-                  ) : null}
+                  {isVerifiedContractor ? <GoldVerifiedBadge /> : null}
                 </div>
 
-                {/* Bio limpa */}
                 <div className="mt-2 text-sm text-foreground/90 leading-relaxed">
                   {headerBio ? (
                     <>
@@ -679,7 +562,7 @@ export default function ContractorProfile() {
               />
             </div>
 
-            {/* botão full: Site (substitui “ver perfil público”) */}
+            {/* botão full: Site */}
             <button
               type="button"
               onClick={openWebsite}
@@ -719,7 +602,7 @@ export default function ContractorProfile() {
           </div>
         )}
 
-        {/* 3 CHIPS (Localização clicável + Categoria + Produto) */}
+        {/* 3 CHIPS */}
         <div className="grid grid-cols-3 gap-2">
           <MicroChip
             icon={<MapPin className="w-4 h-4" />}
@@ -730,24 +613,12 @@ export default function ContractorProfile() {
             clickable
           />
 
-          <MicroChip
-            icon={<Building2 className="w-4 h-4" />}
-            label="Categoria"
-            value={category}
-            title={category}
-          />
+          <MicroChip icon={<Building2 className="w-4 h-4" />} label="Categoria" value={category} title={category} />
 
-          <MicroChip
-            icon={<Package className="w-4 h-4" />}
-            label="Produto"
-            value={product}
-            title={product}
-          />
+          <MicroChip icon={<Package className="w-4 h-4" />} label="Produto" value={product} title={product} />
         </div>
 
-        {/* =========================
-            ATIVAÇÕES E CAMPANHAS (sem rascunhos/excluídas)
-        ========================= */}
+        {/* ATIVAÇÕES E CAMPANHAS */}
         <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] space-y-3">
           <div className="text-sm font-semibold text-foreground text-center">Ativações e campanhas</div>
 
@@ -764,9 +635,6 @@ export default function ContractorProfile() {
             </div>
           )}
         </div>
-
-        {/* ✅ Avaliações do negócio */}
-        <RatingsCard rating={ratingAvg} count={ratingCount} loading={loadingRatings} />
 
         {/* Modal Criar/Editar negócio */}
         {orgOpen && (
@@ -787,82 +655,64 @@ export default function ContractorProfile() {
               <div className="mt-4 space-y-4 max-h-[70vh] overflow-auto pr-1">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Nome do negócio *</Label>
+                  <Input value={orgForm.name} onChange={(e) => setOrgForm((s) => ({ ...s, name: e.target.value }))} className="text-sm" />
+                </div>
+
+                {/* ✅ BIO logo abaixo do nome */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Descrição (bio)</Label>
                   <Input
-                    value={orgForm.name}
-                    onChange={(e) => setOrgForm((s) => ({ ...s, name: e.target.value }))}
-                    placeholder="Ex: Hamburgueria X"
+                    value={orgForm.bio}
+                    onChange={(e) => setOrgForm((s) => ({ ...s, bio: e.target.value }))}
+                    placeholder="Uma descrição curta do seu negócio"
                     className="text-sm"
                   />
+                  <div className="text-[11px] text-muted-foreground">O header mostra no máximo 3 linhas (use uma descrição curta).</div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Cidade</Label>
-                    <Input
-                      value={orgForm.region_city}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, region_city: e.target.value }))}
-                      placeholder="Ex: Goiânia"
-                      className="text-sm"
-                    />
+                    <Input value={orgForm.region_city} onChange={(e) => setOrgForm((s) => ({ ...s, region_city: e.target.value }))} className="text-sm" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Estado</Label>
-                    <Input
-                      value={orgForm.region_state}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, region_state: e.target.value }))}
-                      placeholder="Ex: GO"
-                      className="text-sm"
-                    />
+                    <Input value={orgForm.region_state} onChange={(e) => setOrgForm((s) => ({ ...s, region_state: e.target.value }))} className="text-sm" />
                   </div>
                 </div>
 
-                {/* Endereço para Maps (não aparece escrito no perfil, só usado no clique) */}
+                {/* Endereço (Maps) */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Rua</Label>
-                    <Input
-                      value={orgForm.address_street}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, address_street: e.target.value }))}
-                      placeholder="Ex: Av. Brasil"
-                      className="text-sm"
-                    />
+                    <Input value={orgForm.address_street} onChange={(e) => setOrgForm((s) => ({ ...s, address_street: e.target.value }))} className="text-sm" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Número</Label>
-                    <Input
-                      value={orgForm.address_number}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, address_number: e.target.value }))}
-                      placeholder="Ex: 123"
-                      className="text-sm"
-                    />
+                    <Input value={orgForm.address_number} onChange={(e) => setOrgForm((s) => ({ ...s, address_number: e.target.value }))} className="text-sm" />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Complemento</Label>
-                    <Input
-                      value={orgForm.address_complement}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, address_complement: e.target.value }))}
-                      placeholder="Ex: Sala 2"
-                      className="text-sm"
-                    />
+                    <Input value={orgForm.address_complement} onChange={(e) => setOrgForm((s) => ({ ...s, address_complement: e.target.value }))} className="text-sm" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">CEP</Label>
                     <Input
                       value={orgForm.address_zip}
                       onChange={(e) => setOrgForm((s) => ({ ...s, address_zip: e.target.value }))}
-                      placeholder="Ex: 74000-000"
                       className="text-sm"
                       inputMode="numeric"
                     />
                   </div>
                 </div>
 
+                {/* ✅ Categoria: agora é SELECT (sem digitar) */}
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Categoria</Label>
-                  <Input
+                  <select
                     value={orgForm.business_category}
                     onChange={(e) => {
                       const v = e.target.value;
@@ -873,28 +723,30 @@ export default function ContractorProfile() {
                         product_or_brand: products.includes(s.product_or_brand) ? s.product_or_brand : "",
                       }));
                     }}
-                    placeholder="Selecione ou digite"
-                    className="text-sm"
-                    list="business-category-list"
-                  />
-                  <datalist id="business-category-list">
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="">Selecione</option>
                     {BUSINESS_CATEGORIES.map((c) => (
-                      <option key={c} value={c} />
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
 
+                {/* Produto com sugestões por categoria */}
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Produto</Label>
                   <Input
                     value={orgForm.product_or_brand}
                     onChange={(e) => setOrgForm((s) => ({ ...s, product_or_brand: e.target.value }))}
-                    placeholder="Selecione ou digite"
+                    placeholder={productsForSelectedCategory.length ? "Selecione ou digite" : "Selecione a categoria primeiro"}
                     className="text-sm"
                     list="business-product-list"
+                    disabled={!orgForm.business_category}
                   />
                   <datalist id="business-product-list">
-                    {(PRODUCTS_BY_CATEGORY[orgForm.business_category] || []).map((p) => (
+                    {productsForSelectedCategory.map((p) => (
                       <option key={p} value={p} />
                     ))}
                   </datalist>
@@ -902,33 +754,12 @@ export default function ContractorProfile() {
 
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Instagram</Label>
-                  <Input
-                    value={orgForm.instagram}
-                    onChange={(e) => setOrgForm((s) => ({ ...s, instagram: e.target.value }))}
-                    placeholder="@seunegocio"
-                    className="text-sm"
-                  />
+                  <Input value={orgForm.instagram} onChange={(e) => setOrgForm((s) => ({ ...s, instagram: e.target.value }))} placeholder="@seunegocio" className="text-sm" />
                 </div>
 
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Site</Label>
-                  <Input
-                    value={orgForm.website_url}
-                    onChange={(e) => setOrgForm((s) => ({ ...s, website_url: e.target.value }))}
-                    placeholder="https://..."
-                    className="text-sm"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Descrição (bio)</Label>
-                  <Input
-                    value={orgForm.bio}
-                    onChange={(e) => setOrgForm((s) => ({ ...s, bio: e.target.value }))}
-                    placeholder="Uma descrição curta do seu negócio"
-                    className="text-sm"
-                  />
-                  <div className="text-[11px] text-muted-foreground">O header mostra no máximo 3 linhas (use uma descrição curta).</div>
+                  <Input value={orgForm.website_url} onChange={(e) => setOrgForm((s) => ({ ...s, website_url: e.target.value }))} placeholder="https://..." className="text-sm" />
                 </div>
 
                 <button
