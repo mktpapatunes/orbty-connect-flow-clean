@@ -25,27 +25,15 @@ import {
   Package,
   Eye,
   ExternalLink,
-  Sparkles,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNavigate } from "react-router-dom";
 
-function MetricCard(props: { label: string; value: React.ReactNode; icon?: React.ReactNode; hint?: string }) {
-  return (
-    <div className="rounded-2xl border border-border/50 bg-white/5 p-4 backdrop-blur">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-xs text-muted-foreground">{props.label}</div>
-          {props.hint ? <div className="text-[10px] text-muted-foreground/70 mt-0.5">{props.hint}</div> : null}
-        </div>
-        {props.icon}
-      </div>
-      <div className="mt-2 text-xl font-semibold text-foreground">{props.value}</div>
-    </div>
-  );
-}
+/* =========================
+   UI helpers (padrão influencer)
+========================= */
 
 function GlassCard(props: { children: React.ReactNode; className?: string }) {
   return <div className={`glass-card p-5 ${props.className ?? ""}`}>{props.children}</div>;
@@ -58,6 +46,75 @@ function safeUrl(url?: string | null) {
   return `https://${raw}`;
 }
 
+function initials(name?: string | null) {
+  const n = (name || "").trim();
+  if (!n) return "N";
+  const parts = n.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+function IconButton(props: {
+  icon: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      disabled={props.disabled}
+      className={`inline-flex items-center gap-2 rounded-xl border border-border/50 bg-white/5 px-3 py-2 text-sm text-foreground transition
+      hover:bg-white/10 hover:shadow-sm active:scale-[0.99]
+      disabled:opacity-60 disabled:hover:bg-white/5 ${props.className ?? ""}`}
+    >
+      <span className="text-primary">{props.icon}</span>
+      <span className="truncate">{props.label}</span>
+    </button>
+  );
+}
+
+/** ✅ Chip micro com label + valor empilhado (compacto e premium) */
+function MicroChip(props: { icon: React.ReactNode; label: string; value: string; title?: string }) {
+  return (
+    <div
+      title={props.title}
+      className="h-12 min-w-0 flex items-center gap-2 rounded-2xl border border-border/50 bg-white/5 px-3
+      text-[11px] text-foreground/90 shadow-sm"
+    >
+      <span className="text-primary shrink-0">{props.icon}</span>
+      <div className="min-w-0 leading-tight">
+        <div className="text-[10px] text-muted-foreground whitespace-nowrap">{props.label}:</div>
+        <div className="text-xs font-semibold truncate whitespace-nowrap">{props.value}</div>
+      </div>
+    </div>
+  );
+}
+
+function MetricCard(props: { label: string; value: React.ReactNode; icon?: React.ReactNode; hint?: string }) {
+  return (
+    <div
+      className="rounded-2xl border border-border/50 bg-white/5 p-4 backdrop-blur shadow-sm transition
+      hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs text-muted-foreground">{props.label}</div>
+          {props.hint ? <div className="text-[10px] text-muted-foreground/70 mt-0.5">{props.hint}</div> : null}
+        </div>
+        {props.icon}
+      </div>
+      <div className="mt-2 text-xl font-semibold text-foreground">{props.value}</div>
+    </div>
+  );
+}
+
+/* =========================
+   Page
+========================= */
+
 export default function ContractorProfile() {
   const navigate = useNavigate();
 
@@ -68,11 +125,13 @@ export default function ContractorProfile() {
   const approvalStatus = auth?.approvalStatus;
 
   const ctx = useMyProfileContext();
-  const org = ctx.data?.organization;
+  const org = (ctx.data as any)?.organization;
 
   const isVerifiedContractor = userRole === "contractor" && approvalStatus === "approved";
 
-  // Upload logo
+  /* -------------------------
+     Upload logo
+  ------------------------- */
   const logoRef = useRef<HTMLInputElement | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
 
@@ -114,7 +173,9 @@ export default function ContractorProfile() {
     }
   };
 
-  // Métricas campanhas
+  /* -------------------------
+     Métricas campanhas
+  ------------------------- */
   const [metrics, setMetrics] = useState<{
     total: number;
     active: number;
@@ -132,7 +193,7 @@ export default function ContractorProfile() {
     (async () => {
       setLoadingMetrics(true);
 
-      const m = ctx.data?.organization_metrics;
+      const m = (ctx.data as any)?.organization_metrics;
       if (m) {
         if (!alive) return;
         setMetrics({
@@ -179,9 +240,11 @@ export default function ContractorProfile() {
     return () => {
       alive = false;
     };
-  }, [ctx.data?.organization_metrics]);
+  }, [(ctx.data as any)?.organization_metrics]);
 
-  // Modal Criar/Editar Negócio
+  /* -------------------------
+     Modal Criar/Editar Negócio
+  ------------------------- */
   const [orgOpen, setOrgOpen] = useState(false);
   const [orgSaving, setOrgSaving] = useState(false);
 
@@ -192,6 +255,7 @@ export default function ContractorProfile() {
     business_category: "",
     product_or_brand: "",
     website_url: "",
+    bio: "",
   });
 
   useEffect(() => {
@@ -204,6 +268,7 @@ export default function ContractorProfile() {
       business_category: org?.business_category ?? "",
       product_or_brand: org?.product_or_brand ?? "",
       website_url: org?.website_url ?? "",
+      bio: org?.bio ?? "",
     });
   }, [orgOpen, org, profile?.city, profile?.state]);
 
@@ -225,6 +290,7 @@ export default function ContractorProfile() {
           business_category: orgForm.business_category.trim() || undefined,
           product_or_brand: orgForm.product_or_brand.trim() || undefined,
           website_url: orgForm.website_url.trim() || undefined,
+          bio: orgForm.bio.trim() || undefined,
         });
 
         toast.success("Negócio criado!");
@@ -238,6 +304,7 @@ export default function ContractorProfile() {
             business_category: orgForm.business_category.trim() || null,
             product_or_brand: orgForm.product_or_brand.trim() || null,
             website_url: orgForm.website_url.trim() || null,
+            bio: orgForm.bio.trim() || null,
           })
           .eq("id", org.id);
 
@@ -255,6 +322,9 @@ export default function ContractorProfile() {
     }
   };
 
+  /* -------------------------
+     Dados exibidos
+  ------------------------- */
   const title = useMemo(() => org?.name || profile?.name || "Meu negócio", [org?.name, profile?.name]);
 
   const locationLabel = useMemo(() => {
@@ -278,195 +348,223 @@ export default function ContractorProfile() {
     window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
   };
 
+  const headerBio = (org?.bio || "").trim();
+  const [bioOpen, setBioOpen] = useState(false);
+  const showBioMore = useMemo(() => headerBio.length > 140, [headerBio]);
+
+  const category = (org?.business_category || "—").trim() || "—";
+  const productOrBrand = (org?.product_or_brand || "").trim();
+
   const navType = "contractor";
 
   return (
-    <MobileLayout title="Perfil do contratante" showBack navType={navType}>
+    <MobileLayout title="Meu negócio" showBack navType={navType}>
       <div className="px-6 py-6 space-y-6">
         {/* =========================
-            HERO / HEADER PREMIUM
+            HEADER PREMIUM (igual influencer)
         ========================= */}
-        <GlassCard>
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-2 min-w-0">
-              <div className="flex items-center gap-3">
-                {/* Logo */}
-                {org?.logo_url ? (
-                  <div className="w-14 h-14 rounded-2xl overflow-hidden border border-primary/20 bg-white/5 shrink-0">
+        <div className="relative overflow-hidden rounded-3xl border border-border/50 bg-white/5 shadow-sm">
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5" />
+            <div className="absolute inset-0 opacity-[0.06] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:16px_16px]" />
+          </div>
+
+          <div className="relative p-5">
+            <div className="flex items-start gap-4">
+              {/* Logo */}
+              <div className="relative shrink-0">
+                <div className="absolute -inset-2 rounded-3xl bg-primary/10 blur-lg opacity-60" />
+                <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-primary/20 bg-white/5 flex items-center justify-center">
+                  {org?.logo_url ? (
                     <img
                       src={org.logo_url}
                       alt="Logo"
                       className="w-full h-full object-cover block"
                       referrerPolicy="no-referrer"
                     />
-                  </div>
-                ) : (
-                  <div className="w-14 h-14 rounded-2xl bg-white/5 border border-border/50 flex items-center justify-center shrink-0">
-                    <Building2 className="w-6 h-6 text-muted-foreground" />
-                  </div>
-                )}
-
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="text-lg font-semibold text-foreground truncate">{title}</div>
-                    {isVerifiedContractor ? <VerifiedBadge size="sm" /> : null}
-
-                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground inline-flex items-center gap-1">
-                      <Sparkles className="w-3 h-3" />
-                      Orbty Business
-                    </span>
-                  </div>
-
-                  <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
-                    <MapPin className="w-4 h-4" />
-                    <span className="truncate">{locationLabel}</span>
-                  </div>
+                  ) : (
+                    <span className="text-primary font-bold">{initials(title)}</span>
+                  )}
                 </div>
-              </div>
 
-              {(org?.business_category || org?.product_or_brand) && (
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  {org?.business_category ? (
-                    <span className="inline-flex items-center gap-1 text-xs px-3 py-2 rounded-full border border-border/50 bg-card/60 text-foreground">
-                      <Tag className="w-4 h-4 text-primary" />
-                      {org.business_category}
-                    </span>
-                  ) : null}
+                <div className="pointer-events-none absolute inset-0 rounded-3xl ring-2 ring-white/10" />
 
-                  {org?.product_or_brand ? (
-                    <span className="inline-flex items-center gap-1 text-xs px-3 py-2 rounded-full border border-border/50 bg-card/60 text-foreground">
-                      <Package className="w-4 h-4 text-accent" />
-                      {org.product_or_brand}
-                    </span>
-                  ) : null}
-                </div>
-              )}
-
-              {website ? (
                 <button
                   type="button"
-                  onClick={openWebsite}
-                  className="inline-flex items-center gap-2 text-sm text-primary hover:opacity-90 transition-opacity"
-                  title="Abrir site"
+                  onClick={handlePickLogo}
+                  disabled={logoUploading || !org?.id}
+                  className="absolute -bottom-2 -right-2 w-9 h-9 rounded-full bg-primary flex items-center justify-center disabled:opacity-60 shadow-md"
+                  title="Trocar logo"
                 >
-                  <Globe className="w-4 h-4" />
-                  <span className="underline truncate">{website}</span>
-                  <ExternalLink className="w-4 h-4" />
+                  {logoUploading ? (
+                    <Loader2 className="w-4 h-4 text-primary-foreground animate-spin" />
+                  ) : (
+                    <ImagePlus className="w-4 h-4 text-primary-foreground" />
+                  )}
                 </button>
-              ) : null}
+
+                <input
+                  ref={logoRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleLogoFile(e.target.files?.[0])}
+                />
+              </div>
+
+              {/* Infos */}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <h1 className="text-xl font-semibold text-foreground leading-tight break-words">{title}</h1>
+                  {isVerifiedContractor ? (
+                    <span className="shrink-0">
+                      <VerifiedBadge size="sm" />
+                    </span>
+                  ) : null}
+                </div>
+
+                {/* Bio limpa */}
+                <div className="mt-2 text-sm text-foreground/90 leading-relaxed">
+                  {headerBio ? (
+                    <>
+                      <span className="line-clamp-3">{headerBio}</span>
+                      {showBioMore ? (
+                        <button
+                          type="button"
+                          onClick={() => setBioOpen(true)}
+                          className="mt-1 text-xs text-primary hover:opacity-90 transition"
+                        >
+                          Ver mais
+                        </button>
+                      ) : null}
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">Adicione uma descrição do seu negócio.</span>
+                  )}
+                </div>
+
+                {/* Mini tags (opcional, bem discreto) */}
+                {(category !== "—" || productOrBrand) && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {category !== "—" ? (
+                      <span className="inline-flex items-center gap-1 text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground/90">
+                        <Tag className="w-4 h-4 text-primary" />
+                        <span className="truncate max-w-[140px]">{category}</span>
+                      </span>
+                    ) : null}
+
+                    {productOrBrand ? (
+                      <span className="inline-flex items-center gap-1 text-xs px-3 py-2 rounded-full border border-border/50 bg-white/5 text-foreground/90">
+                        <Package className="w-4 h-4 text-primary" />
+                        <span className="truncate max-w-[160px]">{productOrBrand}</span>
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Ações */}
-            <div className="flex flex-col gap-2 shrink-0">
-              <button
+            {/* ações */}
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <IconButton
+                icon={<Pencil className="w-4 h-4" />}
+                label={org ? "Editar negócio" : "Criar negócio"}
                 onClick={() => setOrgOpen(true)}
-                className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
-              >
-                {org ? <Pencil className="w-4 h-4 text-primary" /> : <Building2 className="w-4 h-4 text-primary" />}
-                {org ? "Editar negócio" : "Criar negócio"}
-              </button>
+                className="w-full justify-center"
+              />
 
-              <button
-                onClick={handlePickLogo}
-                disabled={logoUploading || !org?.id}
-                className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2 disabled:opacity-60"
-              >
-                {logoUploading ? (
-                  <Loader2 className="w-4 h-4 text-primary animate-spin" />
-                ) : (
-                  <ImagePlus className="w-4 h-4 text-primary" />
-                )}
-                Trocar logo
-              </button>
-
-              {/* Ver perfil público (usa /u/:id - não cria rota nova) */}
-              {profile?.id ? (
-                <button
-                  onClick={() => navigate(`/u/${profile.id}`)}
-                  className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2"
-                >
-                  <Eye className="w-4 h-4 text-primary" />
-                  Ver perfil público
-                </button>
-              ) : null}
-
-              <input
-                ref={logoRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => handleLogoFile(e.target.files?.[0])}
+              <IconButton
+                icon={<Globe className="w-4 h-4" />}
+                label={website ? "Site" : "Site"}
+                onClick={openWebsite}
+                disabled={!website}
+                className="w-full justify-center"
               />
             </div>
+
+            {/* ação secundária: ver perfil público */}
+            {profile?.id ? (
+              <button
+                type="button"
+                onClick={() => navigate(`/u/${profile.id}`)}
+                className="mt-3 w-full rounded-xl border border-border/50 bg-white/5 px-3 py-2 text-sm text-foreground transition hover:bg-white/10 flex items-center justify-center gap-2"
+              >
+                <Eye className="w-4 h-4 text-primary" />
+                Ver perfil público
+              </button>
+            ) : null}
+
+            {!org && (
+              <div className="mt-3 text-xs text-muted-foreground">
+                Para exibir o negócio completo e permitir envio de logo, crie o perfil do seu negócio.
+              </div>
+            )}
           </div>
+        </div>
 
-          {!org && (
-            <div className="mt-3 text-xs text-muted-foreground">
-              Para exibir o negócio completo e permitir envio de logo, crie o perfil do seu negócio acima.
+        {/* MODAL Bio */}
+        {bioOpen && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
+            <div className="absolute inset-0 bg-black/60" onMouseDown={() => setBioOpen(false)} />
+            <div
+              className="relative w-full md:max-w-lg rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-foreground">Sobre</div>
+                <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => setBioOpen(false)} type="button">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="mt-3 text-sm text-foreground leading-relaxed whitespace-pre-line">{headerBio}</div>
             </div>
-          )}
-        </GlassCard>
+          </div>
+        )}
 
-        {/* =========================
-            QUICK CARDS (100% clicáveis)
-        ========================= */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* 3 CHIPS (substitui quick cards) */}
+        <div className="grid grid-cols-3 gap-2">
+          <MicroChip icon={<MapPin className="w-4 h-4" />} label="Localização" value={locationLabel} title="Abrir no Maps" />
+          <MicroChip icon={<Tag className="w-4 h-4" />} label="Categoria" value={category} title={category} />
+          <MicroChip
+            icon={<Megaphone className="w-4 h-4" />}
+            label="Ativações"
+            value={loadingMetrics ? "—" : String(metrics.total)}
+            title="Total de campanhas (por enquanto)"
+          />
+        </div>
+
+        {/* AÇÃO rápida: Maps + Site (discreto, mas útil) */}
+        <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={openMaps}
-            className="rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 p-3 text-left transition"
-            title="Abrir no Maps"
+            className="rounded-2xl border border-border/50 bg-white/5 hover:bg-white/10 px-3 py-3 text-sm transition flex items-center justify-center gap-2"
           >
-            <div className="flex items-center justify-between">
-              <MapPin className="w-4 h-4 text-primary" />
-              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-            </div>
-            <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Localização</p>
-            <p className="text-sm font-semibold text-foreground truncate">{locationLabel}</p>
+            <MapPin className="w-4 h-4 text-primary" />
+            Abrir no Maps
+            <ExternalLink className="w-4 h-4 text-muted-foreground" />
           </button>
 
           <button
             type="button"
             onClick={openWebsite}
             disabled={!website}
-            className={`rounded-2xl border p-3 text-left transition ${
-              website ? "border-border/50 bg-card/60 hover:bg-card/80" : "border-border/30 bg-card/40 opacity-70"
+            className={`rounded-2xl border px-3 py-3 text-sm transition flex items-center justify-center gap-2 ${
+              website ? "border-border/50 bg-white/5 hover:bg-white/10" : "border-border/30 bg-white/5 opacity-60"
             }`}
-            title={website ? "Abrir site" : "Site não informado"}
           >
-            <div className="flex items-center justify-between">
-              <Globe className="w-4 h-4 text-primary" />
-              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-            </div>
-            <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Site</p>
-            <p className="text-sm font-semibold text-foreground truncate">{website || "—"}</p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setOrgOpen(true)}
-            className="rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 p-3 text-left transition"
-            title={org ? "Editar negócio" : "Criar negócio"}
-          >
-            <div className="flex items-center justify-between">
-              <Building2 className="w-4 h-4 text-primary" />
-              <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-            </div>
-            <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">Negócio</p>
-            <p className="text-sm font-semibold text-foreground truncate">{org ? "Editar dados" : "Criar agora"}</p>
+            <Globe className="w-4 h-4 text-primary" />
+            Abrir Site
+            <ExternalLink className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
 
         {/* =========================
-            MÉTRICAS
+            ATIVAÇÕES E CAMPANHAS (repaginado)
         ========================= */}
         <GlassCard className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold text-foreground">Performance na Orbty</div>
-            <span className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
-              campanhas
-            </span>
-          </div>
+          <div className="text-sm font-semibold text-foreground text-center">Ativações e campanhas</div>
 
           {loadingMetrics ? (
             <div className="flex justify-center py-2">
@@ -475,7 +573,7 @@ export default function ContractorProfile() {
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <MetricCard label="Campanhas" value={metrics.total} icon={<Megaphone className="w-4 h-4 text-primary" />} />
-              <MetricCard label="Ativas" value={metrics.active} icon={<CircleDot className="w-4 h-4 text-accent" />} />
+              <MetricCard label="Ativas" value={metrics.active} icon={<CircleDot className="w-4 h-4 text-primary" />} />
               <MetricCard label="Concluídas" value={metrics.completed} icon={<CheckCircle2 className="w-4 h-4 text-primary" />} />
               <MetricCard label="Encerradas" value={metrics.closed} icon={<FileText className="w-4 h-4 text-muted-foreground" />} />
               <MetricCard label="Rascunhos" value={metrics.draft} hint="Não publicadas" />
@@ -487,20 +585,25 @@ export default function ContractorProfile() {
         {/* Modal Criar/Editar negócio */}
         {orgOpen && (
           <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-            <div className="absolute inset-0 bg-black/60" onClick={() => (orgSaving ? null : setOrgOpen(false))} />
-            <div className="relative w-full md:max-w-md rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5">
+            <div className="absolute inset-0 bg-black/60" onMouseDown={() => (orgSaving ? null : setOrgOpen(false))} />
+            <div
+              className="relative w-full md:max-w-md rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold text-foreground">{isEditingOrg ? "Editar negócio" : "Criar negócio"}</div>
                 <button
                   className="p-2 rounded-xl hover:bg-white/5"
                   onClick={() => (orgSaving ? null : setOrgOpen(false))}
                   title="Fechar"
+                  type="button"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="mt-4 space-y-4">
+              <div className="mt-4 space-y-4 max-h-[70vh] overflow-auto pr-1">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Nome do negócio *</Label>
                   <Input
@@ -562,6 +665,19 @@ export default function ContractorProfile() {
                   />
                 </div>
 
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Descrição (bio)</Label>
+                  <Input
+                    value={orgForm.bio}
+                    onChange={(e) => setOrgForm((s) => ({ ...s, bio: e.target.value }))}
+                    placeholder="Uma descrição curta do seu negócio"
+                    className="text-sm"
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    O header mostra no máximo 3 linhas (use uma descrição curta).
+                  </div>
+                </div>
+
                 <button
                   onClick={handleSaveOrg}
                   disabled={orgSaving}
@@ -572,14 +688,14 @@ export default function ContractorProfile() {
                 </button>
 
                 <div className="text-xs text-muted-foreground">
-                  * Este perfil representa seu negócio para influenciadores e para a Orbty.
+                  Este perfil representa seu negócio para influenciadores e para a Orbty.
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {ctx.error && <div className="text-xs text-muted-foreground">Erro ao carregar contexto premium: {ctx.error}</div>}
+        {ctx.error && <div className="text-xs text-muted-foreground">Erro ao carregar contexto premium: {String(ctx.error)}</div>}
       </div>
     </MobileLayout>
   );
