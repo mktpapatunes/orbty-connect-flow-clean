@@ -393,16 +393,7 @@ function safeCommaListToArray(v?: string | null) {
     .map((s) => s.trim())
     .filter(Boolean)
     .filter((s) => !["null", "undefined", "-", "—"].includes(s.toLowerCase()))
-    .slice(0, 1); // ✅ agora é apenas 1 estilo
-}
-
-function safeArrayToCommaList(arr: string[]) {
-  return (arr || [])
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .filter((s) => !["null", "undefined", "-", "—"].includes(s.toLowerCase()))
-    .slice(0, 1) // ✅ apenas 1 estilo
-    .join(", ");
+    .slice(0, 1);
 }
 
 /* =========================
@@ -446,7 +437,6 @@ function normalizeUF(v: string) {
 async function fetchCitiesByUF(uf: string, signal?: AbortSignal): Promise<string[]> {
   const UF = normalizeUF(uf);
   if (!UF || UF.length !== 2) return [];
-  // IBGE - municípios por UF
   const res = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${UF}/municipios`, { signal });
   if (!res.ok) return [];
   const data = (await res.json()) as Array<{ nome: string }>;
@@ -520,12 +510,10 @@ export default function InfluencerProfile() {
     };
   }, [ctx.data, profile]);
 
-  // Audience extra (idades) — pega do profile primeiro
   const audienceAge = useMemo<ObjNum | null>(() => {
     return parseObjectNumbers((profile as any)?.audience_age) || parseObjectNumbers((ctx.data as any)?.audience_age) || null;
   }, [profile, ctx.data]);
 
-  // Avaliações (safe fallback)
   const ratingValue = useMemo(() => {
     const fromCtx = Number((ctx.data as any)?.ratings?.avg ?? (ctx.data as any)?.rating_avg ?? NaN);
     if (Number.isFinite(fromCtx)) return fromCtx;
@@ -546,7 +534,6 @@ export default function InfluencerProfile() {
     return null;
   }, [ctx.data, profile]);
 
-  // Ativações/campanhas realizadas (SAFE por enquanto: aceites)
   const [orbtyAccepted, setOrbtyAccepted] = useState(0);
   const [loadingOrbty, setLoadingOrbty] = useState(true);
 
@@ -608,10 +595,6 @@ export default function InfluencerProfile() {
   const [bioOpen, setBioOpen] = useState(false);
   const showBioMore = useMemo(() => headerBio.length > 140, [headerBio]);
 
-  /* =========================
-     EDIT PROFILE MODAL
-  ========================= */
-
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -625,7 +608,6 @@ export default function InfluencerProfile() {
     return n > 0 ? String(Math.floor(n)) : "";
   }, [instagram?.followers_count]);
 
-  // form: seguidores como string (digits), gênero como string (permite vazio), idade como sliders
   const [form, setForm] = useState(() => ({
     name: (profile as any)?.name ?? "",
     state: (profile as any)?.state ?? "",
@@ -635,19 +617,17 @@ export default function InfluencerProfile() {
 
     instagram_username: (profile as any)?.instagram ?? "",
 
-    followers_digits: initialFollowersDigits, // ✅ sem setinhas, com formatação
+    followers_digits: initialFollowersDigits,
 
-    female_str: String(femalePct), // ✅ permite vazio durante digitação
+    female_str: String(femalePct),
     male_str: String(malePct),
 
-    // ✅ idade editável (0..100 step 10)
     age_18_24: clampInt(Number(audienceAge?.["18-24"] ?? 0), 0, 100),
     age_25_34: clampInt(Number(audienceAge?.["25-34"] ?? 0), 0, 100),
     age_35_44: clampInt(Number(audienceAge?.["35-44"] ?? 0), 0, 100),
     age_45_54: clampInt(Number(audienceAge?.["45-54"] ?? 0), 0, 100),
     age_55_64: clampInt(Number(audienceAge?.["55-64"] ?? 0), 0, 100),
 
-    // ✅ apenas 1 estilo
     content_style_one: safeCommaListToArray((profile as any)?.content_style ?? "")?.[0] ?? "",
   }));
 
@@ -683,14 +663,12 @@ export default function InfluencerProfile() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editOpen]);
 
-  // sugestões de cidade via IBGE (com debounce + cache)
   useEffect(() => {
     if (!editOpen) return;
 
     const uf = normalizeUF(form.state);
     const q = (form.city || "").trim().toLowerCase();
 
-    // limpa suggestions se não tem UF
     if (!uf || uf.length !== 2) {
       setCitySuggestions([]);
       return;
@@ -701,9 +679,7 @@ export default function InfluencerProfile() {
       try {
         if (!alive) return;
 
-        // usa cache
         if (!citiesCacheRef.current[uf]) {
-          // abort anterior
           if (cityFetchAbortRef.current) cityFetchAbortRef.current.abort();
           const ac = new AbortController();
           cityFetchAbortRef.current = ac;
@@ -713,10 +689,7 @@ export default function InfluencerProfile() {
         }
 
         const list = citiesCacheRef.current[uf] || [];
-        const filtered =
-          q.length < 1
-            ? list.slice(0, 25)
-            : list.filter((name) => name.toLowerCase().startsWith(q)).slice(0, 25);
+        const filtered = q.length < 1 ? list.slice(0, 25) : list.filter((name) => name.toLowerCase().startsWith(q)).slice(0, 25);
 
         if (!alive) return;
         setCitySuggestions(filtered);
@@ -732,7 +705,6 @@ export default function InfluencerProfile() {
     };
   }, [editOpen, form.state, form.city]);
 
-  // valores atuais (para render)
   const followersFormatted = useMemo(() => {
     const digits = parseDigitsOnly(form.followers_digits);
     if (!digits) return "";
@@ -740,12 +712,8 @@ export default function InfluencerProfile() {
   }, [form.followers_digits]);
 
   const femaleInput = useMemo(() => parseDigitsOnly(form.female_str).slice(0, 3), [form.female_str]);
-  const maleInput = useMemo(() => parseDigitsOnly(form.male_str).slice(0, 3), [form.male_str]);
-
   const femaleValue = clamp(Number(femaleInput || 0), 0, 100);
-  const maleValue = clamp(Number(maleInput || 0), 0, 100);
 
-  // mantém soma 100 quando editar pelo slider (mais premium)
   const genderFromSlider = useMemo(() => clamp(Number(femaleValue), 0, 100), [femaleValue]);
 
   const saveEditProfile = async () => {
@@ -759,11 +727,9 @@ export default function InfluencerProfile() {
     const uf = normalizeUF(form.state);
     const followersNum = Number(parseDigitsOnly(form.followers_digits) || 0);
 
-    // gênero
     const female = clamp(Number(parseDigitsOnly(form.female_str) || 0), 0, 100);
-    const male = clamp(100 - female, 0, 100); // ✅ garante consistência
+    const male = clamp(100 - female, 0, 100);
 
-    // idade (0..100 step 10)
     const ageObj: Record<string, number> = {
       "18-24": clampInt(form.age_18_24, 0, 100),
       "25-34": clampInt(form.age_25_34, 0, 100),
@@ -786,19 +752,15 @@ export default function InfluencerProfile() {
           instagram: form.instagram_username.trim() || null,
           followers: String(Math.max(0, followersNum)),
 
-          // ✅ só 1 estilo
           content_style: form.content_style_one?.trim() ? form.content_style_one.trim() : null,
 
           audience_gender: { female, male },
-
-          // ✅ faixa etária conectada
           audience_age: ageObj,
         })
         .eq("id", profile.id);
 
       if (pErr) throw pErr;
 
-      // mantém seu fluxo (stats)
       await updateMyInstagramStats({
         instagram_username: form.instagram_username,
         followers_count: Math.max(0, followersNum),
@@ -820,7 +782,6 @@ export default function InfluencerProfile() {
     }
   };
 
-  // Dados para exibir nos chips de localização (agora: estado/cidade/bairro)
   const stateLabel = (profile?.state || "—").toString();
   const cityLabel = (profile?.city || "—").toString();
   const neighborhoodLabel = ((profile as any)?.neighborhood || "—").toString();
@@ -965,11 +926,12 @@ export default function InfluencerProfile() {
             value={primaryStyle}
             title={`Estilo: ${primaryStyle}`}
           />
+          {/* ✅ Agora puxa CIDADE e label "Localização" */}
           <MicroChip
             icon={<MapPin className="w-4 h-4" />}
-            label="Região"
-            value={stateLabel !== "—" ? stateLabel : "—"}
-            title={`Estado: ${stateLabel}`}
+            label="Localização"
+            value={cityLabel || "—"}
+            title={`Cidade: ${cityLabel}`}
           />
         </div>
 
@@ -981,7 +943,6 @@ export default function InfluencerProfile() {
             <AgeBarsCard data={audienceAge} buckets={[...AGE_BARS_BUCKETS]} />
           </div>
 
-          {/* Principais localizações: estado/cidade/bairro */}
           <div className="mt-4">
             <div className="text-xs text-muted-foreground mb-2">Principais localizações</div>
 
@@ -1135,13 +1096,61 @@ export default function InfluencerProfile() {
                   </div>
                 </div>
 
+                {/* ✅ Estilo de conteúdo agora vem ANTES de Audiência */}
+                <div className="space-y-3">
+                  <div className="text-xs text-muted-foreground uppercase tracking-widest">Estilo de conteúdo</div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      "Lifestyle",
+                      "Beleza",
+                      "Moda",
+                      "Educação",
+                      "Fitness",
+                      "Gastronomia",
+                      "Viagem",
+                      "Tech",
+                      "Games",
+                      "Maternidade",
+                      "Negócios",
+                      "Humor",
+                      "Música",
+                    ].map((opt) => {
+                      const active = form.content_style_one === opt;
+
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() =>
+                            setForm((s) => ({
+                              ...s,
+                              content_style_one: active ? "" : opt,
+                            }))
+                          }
+                          className={`text-xs px-3 py-2 rounded-full border transition ${
+                            active
+                              ? "border-primary/30 bg-primary/10 text-primary"
+                              : "border-border/50 bg-white/5 text-muted-foreground hover:text-foreground hover:bg-white/10"
+                          }`}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="text-[11px] text-muted-foreground">
+                    Selecionado: <span className="text-foreground font-medium">{form.content_style_one || "—"}</span>
+                  </div>
+                </div>
+
                 {/* Audiência */}
                 <div className="space-y-3">
                   <div className="text-xs text-muted-foreground uppercase tracking-widest">Audiência</div>
 
                   <div className="text-[11px] text-muted-foreground">Preencha com base nos dados do seu público do Instagram</div>
 
-                  {/* Gênero: inputs limpos (sem setinhas) + slider */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Feminino (%)</Label>
@@ -1203,7 +1212,6 @@ export default function InfluencerProfile() {
                     />
                   </div>
 
-                  {/* Faixa etária editável (step 10) */}
                   <div className="rounded-2xl border border-border/50 bg-white/5 p-4">
                     <div className="text-xs text-muted-foreground mb-3">Faixa etária</div>
 
@@ -1233,56 +1241,6 @@ export default function InfluencerProfile() {
                         />
                       </div>
                     ))}
-                  </div>
-                </div>
-
-                {/* Estilo (apenas 1) */}
-                <div className="space-y-3">
-                  <div className="text-xs text-muted-foreground uppercase tracking-widest">Estilo de conteúdo</div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      "Lifestyle",
-                      "Beleza",
-                      "Moda",
-                      "Educação",
-                      "Fitness",
-                      "Gastronomia",
-                      "Viagem",
-                      "Tech",
-                      "Games",
-                      "Maternidade",
-                      "Negócios",
-                      "Humor",
-                      "Música",
-                    ].map((opt) => {
-                      const active = form.content_style_one === opt;
-
-                      return (
-                        <button
-                          key={opt}
-                          type="button"
-                          onClick={() =>
-                            setForm((s) => ({
-                              ...s,
-                              content_style_one: active ? "" : opt,
-                            }))
-                          }
-                          className={`text-xs px-3 py-2 rounded-full border transition ${
-                            active
-                              ? "border-primary/30 bg-primary/10 text-primary"
-                              : "border-border/50 bg-white/5 text-muted-foreground hover:text-foreground hover:bg-white/10"
-                          }`}
-                        >
-                          {opt}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="text-[11px] text-muted-foreground">
-                    Selecionado:{" "}
-                    <span className="text-foreground font-medium">{form.content_style_one || "—"}</span>
                   </div>
                 </div>
 
