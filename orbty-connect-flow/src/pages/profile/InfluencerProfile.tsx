@@ -8,7 +8,22 @@ import { updateMyInstagramStats } from "@/services/profile";
 import { updateMyAvatarWithUpload } from "@/services/profileAvatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Instagram, Users, MapPin, Save, X, Camera, Pencil, Shield, Sparkles } from "lucide-react";
+import {
+  Loader2,
+  Instagram,
+  Users,
+  MapPin,
+  Save,
+  X,
+  Camera,
+  Pencil,
+  Shield,
+  Sparkles,
+  Map,
+  Building2,
+  Home,
+  ExternalLink,
+} from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,6 +77,12 @@ function openInstagram(handle?: string | null) {
       }
     }, 450);
   }
+}
+
+function openMapsQuery(query: string) {
+  const q = encodeURIComponent((query || "").trim());
+  if (!q) return;
+  window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
 }
 
 /** Formatação estilo Instagram:
@@ -160,17 +181,36 @@ function MicroChip(props: { icon: React.ReactNode; label: string; value: string;
   );
 }
 
-/** ✅ Chip minimalista para localizações (estado/cidade/bairro) */
-function LocationChip(props: { icon?: React.ReactNode; label: string; title?: string }) {
+/** ✅ Chip de localização com label+valor + clique (maps) */
+function LocationInfoChip(props: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  title?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  const disabled = props.disabled || !props.onClick;
+
   return (
-    <div
+    <button
+      type="button"
       title={props.title}
-      className="h-10 min-w-0 flex items-center gap-2 rounded-2xl border border-border/50 bg-white/5 px-3
-      text-xs text-foreground/90 shadow-sm"
+      onClick={disabled ? undefined : props.onClick}
+      disabled={disabled}
+      className={`h-12 min-w-0 flex items-center gap-2 rounded-2xl border border-border/50 bg-white/5 px-3
+      text-[11px] text-foreground/90 shadow-sm transition
+      ${disabled ? "opacity-70" : "hover:bg-white/10 hover:shadow-md active:scale-[0.99]"}`}
     >
-      <span className="text-primary shrink-0">{props.icon ?? <MapPin className="w-4 h-4" />}</span>
-      <span className="truncate whitespace-nowrap">{props.label}</span>
-    </div>
+      <span className="text-primary shrink-0">{props.icon}</span>
+
+      <div className="min-w-0 leading-tight text-left">
+        <div className="text-[10px] text-muted-foreground whitespace-nowrap">{props.label}:</div>
+        <div className="text-xs font-semibold truncate whitespace-nowrap">{props.value || "—"}</div>
+      </div>
+
+      {!disabled ? <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : null}
+    </button>
   );
 }
 
@@ -448,6 +488,12 @@ function normalizeUF(v: string) {
   return (v || "").trim().toUpperCase().slice(0, 2);
 }
 
+function ufToName(uf: string) {
+  const U = normalizeUF(uf);
+  const found = UF_OPTIONS.find((x) => x.uf === U);
+  return found?.name || U || "";
+}
+
 async function fetchCitiesByUF(uf: string, signal?: AbortSignal): Promise<string[]> {
   const UF = normalizeUF(uf);
   if (!UF || UF.length !== 2) return [];
@@ -541,7 +587,6 @@ export default function InfluencerProfile() {
 
       setLoadingRatings(true);
       try {
-        // maybeSingle: se não existir linha, retorna null (sem erro)
         const { data, error } = await supabase
           .from("influencer_rating_summary")
           .select("avg_rating, rating_count")
@@ -834,9 +879,19 @@ export default function InfluencerProfile() {
     }
   };
 
-  const stateLabel = (profile?.state || "—").toString();
+  const stateUF = (profile?.state || "").toString();
+  const stateName = ufToName(stateUF) || "—";
   const cityLabel = (profile?.city || "—").toString();
   const neighborhoodLabel = ((profile as any)?.neighborhood || "—").toString();
+
+  const stateMapsQuery = stateUF ? `${stateName}, Brasil` : "";
+  const cityMapsQuery = stateUF && cityLabel && cityLabel !== "—" ? `${cityLabel}, ${stateUF}, Brasil` : cityLabel !== "—" ? `${cityLabel}, Brasil` : "";
+  const neighborhoodMapsQuery =
+    stateUF && cityLabel && neighborhoodLabel && neighborhoodLabel !== "—"
+      ? `${neighborhoodLabel}, ${cityLabel}, ${stateUF}, Brasil`
+      : neighborhoodLabel !== "—"
+        ? `${neighborhoodLabel}, Brasil`
+        : "";
 
   return (
     <MobileLayout title="Meu perfil" showBack navType="influencer">
@@ -894,9 +949,7 @@ export default function InfluencerProfile() {
               {/* infos */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 min-w-0">
-                  <h1 className="text-xl font-semibold text-foreground leading-tight break-words">
-                    {profile?.name || "Creator"}
-                  </h1>
+                  <h1 className="text-xl font-semibold text-foreground leading-tight break-words">{profile?.name || "Creator"}</h1>
                   {isVerifiedInfluencer ? (
                     <span className="shrink-0">
                       <VerifiedBadge size="sm" />
@@ -966,9 +1019,24 @@ export default function InfluencerProfile() {
 
         {/* 3 CHIPS */}
         <div className="grid grid-cols-3 gap-2">
-          <MicroChip icon={<Users className="w-4 h-4" />} label="Seguidores" value={followersCompact} title={`Seguidores: ${followersLabel}`} />
-          <MicroChip icon={<Sparkles className="w-4 h-4" />} label="Conteúdo" value={primaryStyle} title={`Estilo: ${primaryStyle}`} />
-          <MicroChip icon={<MapPin className="w-4 h-4" />} label="Localização" value={cityLabel || "—"} title={`Cidade: ${cityLabel}`} />
+          <MicroChip
+            icon={<Users className="w-4 h-4" />}
+            label="Seguidores"
+            value={followersCompact}
+            title={`Seguidores: ${followersLabel}`}
+          />
+          <MicroChip
+            icon={<Sparkles className="w-4 h-4" />}
+            label="Conteúdo"
+            value={primaryStyle}
+            title={`Estilo: ${primaryStyle}`}
+          />
+          <MicroChip
+            icon={<MapPin className="w-4 h-4" />}
+            label="Localização"
+            value={cityLabel || "—"}
+            title={`Cidade: ${cityLabel}`}
+          />
         </div>
 
         {/* AUDIÊNCIA */}
@@ -979,13 +1047,32 @@ export default function InfluencerProfile() {
             <AgeBarsCard data={audienceAge} buckets={[...AGE_BARS_BUCKETS]} />
           </div>
 
+          {/* ✅ Principais localizações: com label/resultado + ícones diferentes + clique Maps */}
           <div className="mt-4">
             <div className="text-xs text-muted-foreground mb-2">Principais localizações</div>
 
             <div className="grid grid-cols-3 gap-2">
-              <LocationChip label={stateLabel || "—"} title="Estado" />
-              <LocationChip label={cityLabel || "—"} title="Cidade" />
-              <LocationChip label={neighborhoodLabel || "—"} title="Bairro" />
+              <LocationInfoChip
+                icon={<Map className="w-4 h-4" />}
+                label="Estado"
+                value={stateUF ? stateUF : "—"}
+                title={stateUF ? `Abrir no Maps: ${stateName}` : "Estado não informado"}
+                onClick={stateUF ? () => openMapsQuery(stateMapsQuery) : undefined}
+              />
+              <LocationInfoChip
+                icon={<Building2 className="w-4 h-4" />}
+                label="Cidade"
+                value={cityLabel || "—"}
+                title={cityLabel && cityLabel !== "—" ? `Abrir no Maps: ${cityLabel}` : "Cidade não informada"}
+                onClick={cityLabel && cityLabel !== "—" ? () => openMapsQuery(cityMapsQuery) : undefined}
+              />
+              <LocationInfoChip
+                icon={<Home className="w-4 h-4" />}
+                label="Bairro"
+                value={neighborhoodLabel || "—"}
+                title={neighborhoodLabel && neighborhoodLabel !== "—" ? `Abrir no Maps: ${neighborhoodLabel}` : "Bairro não informado"}
+                onClick={neighborhoodLabel && neighborhoodLabel !== "—" ? () => openMapsQuery(neighborhoodMapsQuery) : undefined}
+              />
             </div>
           </div>
         </SectionShell>
@@ -1020,11 +1107,7 @@ export default function InfluencerProfile() {
                     Dados pessoais
                   </button>
 
-                  <button
-                    className="p-2 rounded-xl hover:bg-white/5"
-                    onClick={() => (saving ? null : setEditOpen(false))}
-                    type="button"
-                  >
+                  <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => (saving ? null : setEditOpen(false))} type="button">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -1037,7 +1120,11 @@ export default function InfluencerProfile() {
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Nome *</Label>
-                    <Input value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} className="text-sm" />
+                    <Input
+                      value={form.name}
+                      onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
+                      className="text-sm"
+                    />
                   </div>
 
                   {/* Estado / Cidade / Bairro (3 campos alinhados) */}
@@ -1095,7 +1182,11 @@ export default function InfluencerProfile() {
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Bio</Label>
-                    <Input value={form.bio} onChange={(e) => setForm((s) => ({ ...s, bio: e.target.value }))} className="text-sm" />
+                    <Input
+                      value={form.bio}
+                      onChange={(e) => setForm((s) => ({ ...s, bio: e.target.value }))}
+                      className="text-sm"
+                    />
                     <div className="text-[11px] text-muted-foreground">O header mostra no máximo 3 linhas (use uma bio curta).</div>
                   </div>
                 </div>
@@ -1232,7 +1323,9 @@ export default function InfluencerProfile() {
                     <Label className="text-xs text-muted-foreground">Ajuste rápido (Feminino)</Label>
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>Feminino: {clamp(Number(parseDigitsOnly(form.female_str) || 0), 0, 100)}%</span>
-                      <span>Masculino: {clamp(100 - clamp(Number(parseDigitsOnly(form.female_str) || 0), 0, 100), 0, 100)}%</span>
+                      <span>
+                        Masculino: {clamp(100 - clamp(Number(parseDigitsOnly(form.female_str) || 0), 0, 100), 0, 100)}%
+                      </span>
                     </div>
                     <Slider
                       value={[genderFromSlider]}
@@ -1267,7 +1360,13 @@ export default function InfluencerProfile() {
                         <div className="h-2 rounded-full bg-white/10 overflow-hidden mb-2">
                           <div className="h-full bg-white/30" style={{ width: `${clampInt(row.val, 0, 100)}%` }} />
                         </div>
-                        <Slider value={[clampInt(row.val, 0, 100)]} onValueChange={(v) => row.set(clampInt(v[0], 0, 100))} min={0} max={100} step={10} />
+                        <Slider
+                          value={[clampInt(row.val, 0, 100)]}
+                          onValueChange={(v) => row.set(clampInt(v[0], 0, 100))}
+                          min={0}
+                          max={100}
+                          step={10}
+                        />
                       </div>
                     ))}
                   </div>
