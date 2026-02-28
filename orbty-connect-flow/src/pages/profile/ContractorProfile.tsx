@@ -143,19 +143,17 @@ function MetricCard(props: { label: string; value: React.ReactNode; icon?: React
   );
 }
 
-/** ✅ Selo verificado OURO premium (apenas contratante).
- * Não mexe no VerifiedBadge global (influencer continua azul).
+/** ✅ Selo verificado do CONTRATANTE em amarelo luxo
+ * - Apenas recolorir o badge (sem borda / fundo / glow)
+ * - Influencer permanece azul pois não mexemos no componente global
  */
 function ContractorVerifiedBadge() {
   return (
     <span
-      className="shrink-0 inline-flex items-center rounded-full px-1.5 py-0.5
-      border border-amber-400/20 bg-amber-500/10 shadow-sm"
+      className="shrink-0 inline-flex items-center"
       style={{
-        // Ajuste fino: puxa pro dourado (menos laranja)
-        filter: "hue-rotate(190deg) saturate(145%) brightness(128%) contrast(105%)",
-        // glow bem sutil
-        boxShadow: "0 0 0 1px rgba(251,191,36,0.10), 0 0 18px rgba(251,191,36,0.12)",
+        // Azul (~210°) -> Amarelo (~60°): -150deg
+        filter: "hue-rotate(-150deg) saturate(170%) brightness(125%)",
       }}
       title="Conta aprovada"
     >
