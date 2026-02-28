@@ -143,11 +143,26 @@ function MetricCard(props: { label: string; value: React.ReactNode; icon?: React
   );
 }
 
-/** ✅ Selo verificado amarelo (apenas contratante)
- * Mantém o componente original (influencer não muda).
- * A forma mais segura sem mexer no VerifiedBadge é aplicar filter no wrapper.
+/** ✅ Selo verificado OURO premium (apenas contratante).
+ * Não mexe no VerifiedBadge global (influencer continua azul).
  */
-
+function ContractorVerifiedBadge() {
+  return (
+    <span
+      className="shrink-0 inline-flex items-center rounded-full px-1.5 py-0.5
+      border border-amber-400/20 bg-amber-500/10 shadow-sm"
+      style={{
+        // Ajuste fino: puxa pro dourado (menos laranja)
+        filter: "hue-rotate(190deg) saturate(145%) brightness(128%) contrast(105%)",
+        // glow bem sutil
+        boxShadow: "0 0 0 1px rgba(251,191,36,0.10), 0 0 18px rgba(251,191,36,0.12)",
+      }}
+      title="Conta aprovada"
+    >
+      <VerifiedBadge size="sm" />
+    </span>
+  );
+}
 
 /* =========================
    Avaliações (negócio)
@@ -384,8 +399,8 @@ export default function ContractorProfile() {
 
   /* -------------------------
      Avaliações (negócio) - leitura segura
-     View esperada: organization_rating_summary (organization_id, avg_rating, rating_count)
-     Se não existir: não quebra e mostra vazio.
+     View esperada: organization_rating_summary
+     (organization_id, avg_rating, rating_count)
   ------------------------- */
   const [ratingAvg, setRatingAvg] = useState<number>(0);
   const [ratingCount, setRatingCount] = useState<number | null>(null);
@@ -614,7 +629,12 @@ export default function ContractorProfile() {
                 <div className="absolute -inset-2 rounded-3xl bg-primary/10 blur-lg opacity-60" />
                 <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-primary/20 bg-white/5 flex items-center justify-center">
                   {org?.logo_url ? (
-                    <img src={org.logo_url} alt="Logo" className="w-full h-full object-cover block" referrerPolicy="no-referrer" />
+                    <img
+                      src={org.logo_url}
+                      alt="Logo"
+                      className="w-full h-full object-cover block"
+                      referrerPolicy="no-referrer"
+                    />
                   ) : (
                     <span className="text-primary font-bold">{initials(title)}</span>
                   )}
@@ -636,7 +656,13 @@ export default function ContractorProfile() {
                   )}
                 </button>
 
-                <input ref={logoRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleLogoFile(e.target.files?.[0])} />
+                <input
+                  ref={logoRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleLogoFile(e.target.files?.[0])}
+                />
               </div>
 
               {/* Infos */}
@@ -655,7 +681,11 @@ export default function ContractorProfile() {
                     <>
                       <span className="line-clamp-3">{headerBio}</span>
                       {showBioMore ? (
-                        <button type="button" onClick={() => setBioOpen(true)} className="mt-1 text-xs text-primary hover:opacity-90 transition">
+                        <button
+                          type="button"
+                          onClick={() => setBioOpen(true)}
+                          className="mt-1 text-xs text-primary hover:opacity-90 transition"
+                        >
                           Ver mais
                         </button>
                       ) : null}
@@ -700,7 +730,9 @@ export default function ContractorProfile() {
             </button>
 
             {!org && (
-              <div className="mt-3 text-xs text-muted-foreground">Para exibir o negócio completo e permitir envio de logo, crie o perfil do seu negócio.</div>
+              <div className="mt-3 text-xs text-muted-foreground">
+                Para exibir o negócio completo e permitir envio de logo, crie o perfil do seu negócio.
+              </div>
             )}
           </div>
         </div>
@@ -735,9 +767,7 @@ export default function ContractorProfile() {
             onClick={openMaps}
             clickable
           />
-
           <MicroChip icon={<Building2 className="w-4 h-4" />} label="Categoria" value={category} title={category} />
-
           <MicroChip icon={<Package className="w-4 h-4" />} label="Produto" value={product} title={product} />
         </div>
 
@@ -759,7 +789,7 @@ export default function ContractorProfile() {
           )}
         </div>
 
-        {/* ✅ AVALIAÇÕES (voltou) */}
+        {/* AVALIAÇÕES */}
         <RatingsCard rating={ratingAvg} count={ratingCount} loading={loadingRatings} />
 
         {/* Modal Criar/Editar negócio */}
@@ -773,7 +803,12 @@ export default function ContractorProfile() {
             >
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold text-foreground">{isEditingOrg ? "Editar negócio" : "Criar negócio"}</div>
-                <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => (orgSaving ? null : setOrgOpen(false))} title="Fechar" type="button">
+                <button
+                  className="p-2 rounded-xl hover:bg-white/5"
+                  onClick={() => (orgSaving ? null : setOrgOpen(false))}
+                  title="Fechar"
+                  type="button"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -781,7 +816,11 @@ export default function ContractorProfile() {
               <div className="mt-4 space-y-4 max-h-[70vh] overflow-auto pr-1">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Nome do negócio *</Label>
-                  <Input value={orgForm.name} onChange={(e) => setOrgForm((s) => ({ ...s, name: e.target.value }))} className="text-sm" />
+                  <Input
+                    value={orgForm.name}
+                    onChange={(e) => setOrgForm((s) => ({ ...s, name: e.target.value }))}
+                    className="text-sm"
+                  />
                 </div>
 
                 {/* BIO abaixo do nome */}
@@ -793,17 +832,27 @@ export default function ContractorProfile() {
                     placeholder="Uma descrição curta do seu negócio"
                     className="text-sm"
                   />
-                  <div className="text-[11px] text-muted-foreground">O header mostra no máximo 3 linhas (use uma descrição curta).</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    O header mostra no máximo 3 linhas (use uma descrição curta).
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Cidade</Label>
-                    <Input value={orgForm.region_city} onChange={(e) => setOrgForm((s) => ({ ...s, region_city: e.target.value }))} className="text-sm" />
+                    <Input
+                      value={orgForm.region_city}
+                      onChange={(e) => setOrgForm((s) => ({ ...s, region_city: e.target.value }))}
+                      className="text-sm"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Estado</Label>
-                    <Input value={orgForm.region_state} onChange={(e) => setOrgForm((s) => ({ ...s, region_state: e.target.value }))} className="text-sm" />
+                    <Input
+                      value={orgForm.region_state}
+                      onChange={(e) => setOrgForm((s) => ({ ...s, region_state: e.target.value }))}
+                      className="text-sm"
+                    />
                   </div>
                 </div>
 
@@ -811,18 +860,30 @@ export default function ContractorProfile() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Rua</Label>
-                    <Input value={orgForm.address_street} onChange={(e) => setOrgForm((s) => ({ ...s, address_street: e.target.value }))} className="text-sm" />
+                    <Input
+                      value={orgForm.address_street}
+                      onChange={(e) => setOrgForm((s) => ({ ...s, address_street: e.target.value }))}
+                      className="text-sm"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Número</Label>
-                    <Input value={orgForm.address_number} onChange={(e) => setOrgForm((s) => ({ ...s, address_number: e.target.value }))} className="text-sm" />
+                    <Input
+                      value={orgForm.address_number}
+                      onChange={(e) => setOrgForm((s) => ({ ...s, address_number: e.target.value }))}
+                      className="text-sm"
+                    />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Complemento</Label>
-                    <Input value={orgForm.address_complement} onChange={(e) => setOrgForm((s) => ({ ...s, address_complement: e.target.value }))} className="text-sm" />
+                    <Input
+                      value={orgForm.address_complement}
+                      onChange={(e) => setOrgForm((s) => ({ ...s, address_complement: e.target.value }))}
+                      className="text-sm"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">CEP</Label>
@@ -880,12 +941,22 @@ export default function ContractorProfile() {
 
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Instagram</Label>
-                  <Input value={orgForm.instagram} onChange={(e) => setOrgForm((s) => ({ ...s, instagram: e.target.value }))} placeholder="@seunegocio" className="text-sm" />
+                  <Input
+                    value={orgForm.instagram}
+                    onChange={(e) => setOrgForm((s) => ({ ...s, instagram: e.target.value }))}
+                    placeholder="@seunegocio"
+                    className="text-sm"
+                  />
                 </div>
 
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Site</Label>
-                  <Input value={orgForm.website_url} onChange={(e) => setOrgForm((s) => ({ ...s, website_url: e.target.value }))} placeholder="https://..." className="text-sm" />
+                  <Input
+                    value={orgForm.website_url}
+                    onChange={(e) => setOrgForm((s) => ({ ...s, website_url: e.target.value }))}
+                    placeholder="https://..."
+                    className="text-sm"
+                  />
                 </div>
 
                 <button
@@ -897,13 +968,17 @@ export default function ContractorProfile() {
                   {orgSaving ? "Salvando..." : "Salvar"}
                 </button>
 
-                <div className="text-xs text-muted-foreground">Este perfil representa seu negócio para influenciadores e para a Orbty.</div>
+                <div className="text-xs text-muted-foreground">
+                  Este perfil representa seu negócio para influenciadores e para a Orbty.
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {ctx.error && <div className="text-xs text-muted-foreground">Erro ao carregar contexto premium: {String(ctx.error)}</div>}
+        {ctx.error && (
+          <div className="text-xs text-muted-foreground">Erro ao carregar contexto premium: {String(ctx.error)}</div>
+        )}
       </div>
     </MobileLayout>
   );
