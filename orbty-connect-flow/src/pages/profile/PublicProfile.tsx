@@ -257,9 +257,6 @@ function DualDonutChart(props: { aPct: number; bPct: number; label: string; aLab
   const aDash = (a / 100) * c;
   const bDash = (b / 100) * c;
 
-  const aOffset = 0;
-  const bOffset = aDash;
-
   return (
     <div className="rounded-2xl border border-border/50 bg-white/5 p-4 shadow-sm transition hover:bg-white/10 hover:shadow-md hover:-translate-y-[1px] active:scale-[0.99]">
       <div className="flex items-center justify-between">
@@ -498,6 +495,8 @@ export default function PublicProfile() {
   const backTo = userRole === "contractor" ? "/dashboard-contratante" : "/dashboard-influenciadora";
 
   const [loading, setLoading] = useState(true);
+  const [loadedId, setLoadedId] = useState<string | null>(null); // ✅ evita "flash" ao trocar /u/:id
+
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [org, setOrg] = useState<OrgRow | null>(null);
   const [role, setRole] = useState<"influencer" | "contractor">("influencer");
@@ -520,10 +519,15 @@ export default function PublicProfile() {
     (async () => {
       if (!id) {
         setLoading(false);
+        setLoadedId(null);
         setProfile(null);
         setOrg(null);
         return;
       }
+
+      // ✅ reset imediato evita 1 frame com estado anterior
+      setLoadedId(null);
+      setBioOpen(false);
 
       setLoading(true);
       setLoadingRatings(true);
@@ -539,6 +543,7 @@ export default function PublicProfile() {
           setLoading(false);
           setLoadingRatings(false);
           setLoadingAccepted(false);
+          setLoadedId(id);
           return;
         }
 
@@ -605,7 +610,9 @@ export default function PublicProfile() {
           }
         }
 
+        if (!alive) return;
         setLoading(false);
+        setLoadedId(id); // ✅ marca que o conteúdo renderizado pertence ao id atual
       } catch (e: any) {
         console.error("PUBLIC_PROFILE_ERROR", e);
         if (!alive) return;
@@ -615,6 +622,7 @@ export default function PublicProfile() {
         setLoading(false);
         setLoadingRatings(false);
         setLoadingAccepted(false);
+        setLoadedId(id);
         toast.error(e?.message || "Erro ao carregar perfil.");
       }
     })();
@@ -623,6 +631,8 @@ export default function PublicProfile() {
       alive = false;
     };
   }, [id]);
+
+  const isViewReady = !!id && loadedId === id; // ✅ guard anti-flash
 
   const isVerified = useMemo(() => String((profile as any)?.approval_status ?? "").toLowerCase() === "approved", [profile]);
 
@@ -747,7 +757,7 @@ export default function PublicProfile() {
           Voltar
         </button>
 
-        {loading ? (
+        {loading || !isViewReady ? (
           <div className="flex justify-center py-16">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
