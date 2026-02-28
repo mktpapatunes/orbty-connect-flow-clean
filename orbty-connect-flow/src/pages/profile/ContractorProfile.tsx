@@ -22,6 +22,7 @@ import {
   Globe,
   Package,
   Instagram,
+  ArrowUpRight,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -121,7 +122,13 @@ function MicroChip(props: {
         <div className="text-[10px] text-muted-foreground whitespace-nowrap">{props.label}:</div>
         <div className="text-xs font-semibold truncate whitespace-nowrap">{props.value}</div>
       </div>
-      {clickable ? <span className="ml-auto text-[10px] text-muted-foreground">↗</span> : null}
+
+      {/* ✅ seta clean (sem emoji) */}
+      {clickable ? (
+        <span className="ml-auto text-muted-foreground">
+          <ArrowUpRight className="w-4 h-4" />
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -238,7 +245,8 @@ const BUSINESS_CATEGORIES = [
   "Academia / Fitness",
   "Clínica / Saúde",
   "Hotelaria / Turismo",
-  "Eventos",
+  "Gravadora", // ✅ novo
+  "Eventos",   // (já existia)
   "Imobiliária",
   "Auto / Serviços",
   "Mercado / Varejo",
@@ -256,6 +264,7 @@ const PRODUCTS_BY_CATEGORY: Record<string, string[]> = {
   "Academia / Fitness": ["Plano", "Desafio", "Aula", "Promoção"],
   "Clínica / Saúde": ["Serviço", "Consulta", "Programa", "Especialidade"],
   "Hotelaria / Turismo": ["Hospedagem", "Pacote", "Experiência", "Promoção"],
+  Gravadora: ["Artista", "Lançamento", "Single", "EP", "Álbum", "Divulgação", "Show"], // ✅ novo
   Eventos: ["Evento", "Ingresso", "Lote", "Divulgação"],
   Imobiliária: ["Imóvel", "Lançamento", "Open house", "Captação"],
   "Auto / Serviços": ["Serviço", "Revisão", "Promoção", "Campanha"],
