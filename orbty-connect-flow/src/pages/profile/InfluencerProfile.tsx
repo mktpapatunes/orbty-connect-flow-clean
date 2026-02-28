@@ -198,7 +198,21 @@ function StarRating(props: { value: number; max?: number; className?: string }) 
   );
 }
 
-function RatingsCard(props: { rating: number; count?: number | null }) {
+function RatingsCard(props: { rating: number; count?: number | null; loading?: boolean }) {
+  if (props.loading) {
+    return (
+      <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
+        <div className="text-sm font-semibold text-foreground text-center">Avaliações</div>
+        <div className="mt-4 flex justify-center">
+          <SkeletonLine w="180px" h={22} />
+        </div>
+        <div className="mt-3 flex justify-center">
+          <SkeletonLine w="140px" h={10} />
+        </div>
+      </div>
+    );
+  }
+
   const safeRating = Math.max(0, Math.min(5, Number(props.rating ?? 0)));
   const count = props.count ?? null;
 
@@ -514,25 +528,62 @@ export default function InfluencerProfile() {
     return parseObjectNumbers((profile as any)?.audience_age) || parseObjectNumbers((ctx.data as any)?.audience_age) || null;
   }, [profile, ctx.data]);
 
-  const ratingValue = useMemo(() => {
-    const fromCtx = Number((ctx.data as any)?.ratings?.avg ?? (ctx.data as any)?.rating_avg ?? NaN);
-    if (Number.isFinite(fromCtx)) return fromCtx;
+  // ✅ Avaliações reais (via view influencer_rating_summary)
+  const [ratingAvg, setRatingAvg] = useState<number>(0);
+  const [ratingCount, setRatingCount] = useState<number | null>(null);
+  const [loadingRatings, setLoadingRatings] = useState<boolean>(true);
 
-    const fromProfile = Number((profile as any)?.rating_avg ?? (profile as any)?.rating ?? NaN);
-    if (Number.isFinite(fromProfile)) return fromProfile;
+  useEffect(() => {
+    let alive = true;
 
-    return 0;
-  }, [ctx.data, profile]);
+    (async () => {
+      if (!profile?.id) return;
 
-  const ratingCount = useMemo(() => {
-    const fromCtx = Number((ctx.data as any)?.ratings?.count ?? (ctx.data as any)?.rating_count ?? NaN);
-    if (Number.isFinite(fromCtx)) return fromCtx;
+      setLoadingRatings(true);
+      try {
+        // maybeSingle: se não existir linha, retorna null (sem erro)
+        const { data, error } = await supabase
+          .from("influencer_rating_summary")
+          .select("avg_rating, rating_count")
+          .eq("influencer_id", profile.id)
+          .maybeSingle();
 
-    const fromProfile = Number((profile as any)?.rating_count ?? NaN);
-    if (Number.isFinite(fromProfile)) return fromProfile;
+        if (!alive) return;
 
-    return null;
-  }, [ctx.data, profile]);
+        if (error) {
+          console.error("Erro ao buscar influencer_rating_summary:", error);
+          setRatingAvg(0);
+          setRatingCount(null);
+          setLoadingRatings(false);
+          return;
+        }
+
+        if (!data) {
+          setRatingAvg(0);
+          setRatingCount(null);
+          setLoadingRatings(false);
+          return;
+        }
+
+        const avg = Number((data as any).avg_rating ?? 0);
+        const cnt = Number((data as any).rating_count ?? 0);
+
+        setRatingAvg(Number.isFinite(avg) ? avg : 0);
+        setRatingCount(Number.isFinite(cnt) ? cnt : null);
+        setLoadingRatings(false);
+      } catch (e) {
+        if (!alive) return;
+        console.error(e);
+        setRatingAvg(0);
+        setRatingCount(null);
+        setLoadingRatings(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [profile?.id]);
 
   const [orbtyAccepted, setOrbtyAccepted] = useState(0);
   const [loadingOrbty, setLoadingOrbty] = useState(true);
@@ -689,7 +740,8 @@ export default function InfluencerProfile() {
         }
 
         const list = citiesCacheRef.current[uf] || [];
-        const filtered = q.length < 1 ? list.slice(0, 25) : list.filter((name) => name.toLowerCase().startsWith(q)).slice(0, 25);
+        const filtered =
+          q.length < 1 ? list.slice(0, 25) : list.filter((name) => name.toLowerCase().startsWith(q)).slice(0, 25);
 
         if (!alive) return;
         setCitySuggestions(filtered);
@@ -914,25 +966,9 @@ export default function InfluencerProfile() {
 
         {/* 3 CHIPS */}
         <div className="grid grid-cols-3 gap-2">
-          <MicroChip
-            icon={<Users className="w-4 h-4" />}
-            label="Seguidores"
-            value={followersCompact}
-            title={`Seguidores: ${followersLabel}`}
-          />
-          <MicroChip
-            icon={<Sparkles className="w-4 h-4" />}
-            label="Conteúdo"
-            value={primaryStyle}
-            title={`Estilo: ${primaryStyle}`}
-          />
-          {/* ✅ Agora puxa CIDADE e label "Localização" */}
-          <MicroChip
-            icon={<MapPin className="w-4 h-4" />}
-            label="Localização"
-            value={cityLabel || "—"}
-            title={`Cidade: ${cityLabel}`}
-          />
+          <MicroChip icon={<Users className="w-4 h-4" />} label="Seguidores" value={followersCompact} title={`Seguidores: ${followersLabel}`} />
+          <MicroChip icon={<Sparkles className="w-4 h-4" />} label="Conteúdo" value={primaryStyle} title={`Estilo: ${primaryStyle}`} />
+          <MicroChip icon={<MapPin className="w-4 h-4" />} label="Localização" value={cityLabel || "—"} title={`Cidade: ${cityLabel}`} />
         </div>
 
         {/* AUDIÊNCIA */}
@@ -954,8 +990,8 @@ export default function InfluencerProfile() {
           </div>
         </SectionShell>
 
-        {/* AVALIAÇÕES */}
-        <RatingsCard rating={ratingValue} count={ratingCount} />
+        {/* ✅ AVALIAÇÕES (REAIS) */}
+        <RatingsCard rating={ratingAvg} count={ratingCount} loading={loadingRatings} />
 
         {/* ATIVAÇÕES E CAMPANHAS */}
         <SingleStatCard title="Ativações e campanhas" label="Realizadas:" value={orbtyAccepted} loading={loadingOrbty} />
@@ -1096,7 +1132,7 @@ export default function InfluencerProfile() {
                   </div>
                 </div>
 
-                {/* ✅ Estilo de conteúdo agora vem ANTES de Audiência */}
+                {/* Estilo de conteúdo */}
                 <div className="space-y-3">
                   <div className="text-xs text-muted-foreground uppercase tracking-widest">Estilo de conteúdo</div>
 
@@ -1148,7 +1184,6 @@ export default function InfluencerProfile() {
                 {/* Audiência */}
                 <div className="space-y-3">
                   <div className="text-xs text-muted-foreground uppercase tracking-widest">Audiência</div>
-
                   <div className="text-[11px] text-muted-foreground">Preencha com base nos dados do seu público do Instagram</div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -1232,13 +1267,7 @@ export default function InfluencerProfile() {
                         <div className="h-2 rounded-full bg-white/10 overflow-hidden mb-2">
                           <div className="h-full bg-white/30" style={{ width: `${clampInt(row.val, 0, 100)}%` }} />
                         </div>
-                        <Slider
-                          value={[clampInt(row.val, 0, 100)]}
-                          onValueChange={(v) => row.set(clampInt(v[0], 0, 100))}
-                          min={0}
-                          max={100}
-                          step={10}
-                        />
+                        <Slider value={[clampInt(row.val, 0, 100)]} onValueChange={(v) => row.set(clampInt(v[0], 0, 100))} min={0} max={100} step={10} />
                       </div>
                     ))}
                   </div>
