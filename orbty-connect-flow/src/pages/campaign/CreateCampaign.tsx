@@ -24,8 +24,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
-const PUBLIC_PROFILE_ROUTE_PREFIX = "/u"; // ✅ conforme App.tsx
+/* =========================
+   Consts
+========================= */
 
+const PUBLIC_PROFILE_ROUTE_PREFIX = "/u"; // ✅ conforme App.tsx
 const STEP_STORAGE_KEY = "orbty:create_campaign:step:v1";
 
 const campaignTypes = [
@@ -65,6 +68,10 @@ const segmentOptions = [
 
 type SegmentOption = (typeof segmentOptions)[number];
 
+/* =========================
+   Types
+========================= */
+
 interface UploadedFile {
   file: File;
   preview?: string;
@@ -95,16 +102,37 @@ type CreatorListItem = {
   name: string | null;
   city: string | null;
   state: string | null;
+  neighborhood?: string | null;
   followers: string | null;
   content_style: string | null;
   approval_status?: string | null;
   desired_role?: string | null;
 };
 
+/* =========================
+   Helpers
+========================= */
+
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function normalizeText(v: any) {
+  return String(v ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function followersToNumber(raw: any) {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  const n = Number(s.replace(/[^\d]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Formatação estilo Instagram */
 function formatIGCount(input: number | null | undefined) {
   const n = Number(input ?? 0);
   if (!Number.isFinite(n) || n <= 0) return "—";
@@ -130,19 +158,42 @@ function formatIGCount(input: number | null | undefined) {
   return `${Math.floor(m)}M`;
 }
 
+function formatDateBR(value?: string | null) {
+  if (!value) return "-";
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
+}
+
+function diffDaysInclusive(startISO?: string, endISO?: string) {
+  if (!startISO || !endISO) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startISO) || !/^\d{4}-\d{2}-\d{2}$/.test(endISO)) return null;
+
+  const s = new Date(`${startISO}T00:00:00Z`).getTime();
+  const e = new Date(`${endISO}T00:00:00Z`).getTime();
+  if (!Number.isFinite(s) || !Number.isFinite(e) || e < s) return null;
+
+  const days = Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1;
+  return days > 0 ? days : null;
+}
+
+/* =========================
+   Page
+========================= */
+
 export default function CreateCampaign() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { data, updateData, resetData } = useCampaign();
 
-  // ✅ restaura step
+  // ✅ step persistente
   const [step, setStep] = useState<number>(() => {
     const raw = localStorage.getItem(STEP_STORAGE_KEY);
     const n = Number(raw);
     return Number.isFinite(n) ? clamp(Math.floor(n), 1, 3) : 1;
   });
 
-  // persiste step
   useEffect(() => {
     try {
       localStorage.setItem(STEP_STORAGE_KEY, String(step));
@@ -155,10 +206,6 @@ export default function CreateCampaign() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  /* =========================================
-     Datas
-  ========================================= */
-
   const todayISO = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -168,29 +215,9 @@ export default function CreateCampaign() {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  const formatDateBR = (value?: string | null) => {
-    if (!value) return "-";
-    const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
-    const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
-    if (Number.isNaN(d.getTime())) return "-";
-    return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
-  };
-
-  const diffDaysInclusive = (startISO?: string, endISO?: string) => {
-    if (!startISO || !endISO) return null;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(startISO) || !/^\d{4}-\d{2}-\d{2}$/.test(endISO)) return null;
-
-    const s = new Date(`${startISO}T00:00:00Z`).getTime();
-    const e = new Date(`${endISO}T00:00:00Z`).getTime();
-    if (!Number.isFinite(s) || !Number.isFinite(e) || e < s) return null;
-
-    const days = Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1;
-    return days > 0 ? days : null;
-  };
-
-  /* =========================================
-     Objetivos (chips)
-  ========================================= */
+  /* =========================
+     Objetivos (chips) - usa briefPublic como storage
+  ========================= */
 
   const parseObjectives = (raw: string): ObjectiveOption[] => {
     const parts = (raw || "")
@@ -224,9 +251,9 @@ export default function CreateCampaign() {
     updateData({ briefPublic: [...current, opt].join(", ") });
   };
 
-  /* =========================================
-     Segmentos (chips)
-  ========================================= */
+  /* =========================
+     Segmentos (chips) - usa data.contentSegments
+  ========================= */
 
   const parseSegments = (raw: string): SegmentOption[] => {
     const parts = (raw || "")
@@ -243,32 +270,34 @@ export default function CreateCampaign() {
     return picked;
   };
 
-  const selectedSegments = useMemo(() => parseSegments(data.contentSegments || ""), [data.contentSegments]);
+  const selectedSegments = useMemo(() => parseSegments((data as any).contentSegments || ""), [(data as any).contentSegments]);
 
   const toggleSegment = (seg: SegmentOption) => {
     const current = selectedSegments.slice();
     const exists = current.includes(seg);
 
     if (exists) {
-      updateData({ contentSegments: current.filter((x) => x !== seg).join(", ") });
+      updateData({ contentSegments: current.filter((x) => x !== seg).join(", ") } as any);
       return;
     }
     if (current.length >= 3) {
       toast.error("Você pode selecionar no máximo 3 segmentos.");
       return;
     }
-    updateData({ contentSegments: [...current, seg].join(", ") });
+    updateData({ contentSegments: [...current, seg].join(", ") } as any);
   };
 
-  /* =========================================
-     Quantidade creators (input sem spinner + permite vazio)
-  ========================================= */
+  /* =========================
+     Quantidade creators (sem spinner + permite apagar)
+  ========================= */
 
-  const [creatorsNeededInput, setCreatorsNeededInput] = useState<string>(String(data.creatorsNeeded || 1));
+  const creatorsNeededFromData = Number((data as any).creatorsNeeded ?? 1) || 1;
+
+  const [creatorsNeededInput, setCreatorsNeededInput] = useState<string>(String(creatorsNeededFromData));
 
   useEffect(() => {
-    setCreatorsNeededInput(String(data.creatorsNeeded || 1));
-  }, [data.creatorsNeeded]);
+    setCreatorsNeededInput(String(Number((data as any).creatorsNeeded ?? 1) || 1));
+  }, [(data as any).creatorsNeeded]);
 
   const creatorsNeededNumber = useMemo(() => {
     const raw = creatorsNeededInput.trim();
@@ -280,9 +309,11 @@ export default function CreateCampaign() {
 
   const creatorsNeededOk = creatorsNeededNumber !== null && creatorsNeededNumber >= 1 && creatorsNeededNumber <= 50;
 
-  /* =========================================
-     Localização (busca + mapa) + region completo
-  ========================================= */
+  const currentLimit = creatorsNeededNumber ?? creatorsNeededFromData;
+
+  /* =========================
+     Localização (Nominatim + mapa)
+  ========================= */
 
   const [locationQuery, setLocationQuery] = useState("");
   const [locationResults, setLocationResults] = useState<NominatimItem[]>([]);
@@ -295,13 +326,14 @@ export default function CreateCampaign() {
   const autocompleteWrapRef = useRef<HTMLDivElement | null>(null);
 
   const displayLocationLabel = useMemo(() => {
-    const reg = (data.region || "").trim();
+    const reg = String((data as any).region || "").trim();
     if (reg) return reg;
-    const c = (data.selectedCity || "").trim();
-    const s = (data.selectedState || "").trim();
+
+    const c = String((data as any).selectedCity || "").trim();
+    const s = String((data as any).selectedState || "").trim();
     if (c && s) return `${c}, ${s}`;
     return c || "";
-  }, [data.region, data.selectedCity, data.selectedState]);
+  }, [(data as any).region, (data as any).selectedCity, (data as any).selectedState]);
 
   useEffect(() => {
     if (!locationQuery && displayLocationLabel) setLocationQuery(displayLocationLabel);
@@ -381,7 +413,7 @@ export default function CreateCampaign() {
       selectedCity: city || "",
       selectedState: state || "",
       region: full,
-    });
+    } as any);
 
     setLocationQuery(full);
     setLocationOpen(false);
@@ -399,18 +431,22 @@ export default function CreateCampaign() {
     setLocationLat(null);
     setLocationLon(null);
     setLocationOpen(false);
-    updateData({ selectedCity: "", selectedState: "", region: "" });
+    updateData({ selectedCity: "", selectedState: "", region: "" } as any);
   };
 
+  // hidrata lat/lon quando já tem cidade/estado (volta do app etc)
   const [hydratingMap, setHydratingMap] = useState(false);
   useEffect(() => {
     let alive = true;
 
+    const city = String((data as any).selectedCity || "").trim();
+    const state = String((data as any).selectedState || "").trim();
+
     const shouldHydrate =
       step === 1 &&
-      !!data.selectedCity &&
-      !!data.selectedState &&
-      (locationLat === null || locationLon === null || !(data.region || "").trim()) &&
+      !!city &&
+      !!state &&
+      (locationLat === null || locationLon === null) &&
       !hydratingMap;
 
     if (!shouldHydrate) return;
@@ -418,7 +454,7 @@ export default function CreateCampaign() {
     (async () => {
       try {
         setHydratingMap(true);
-        const q = (data.region || "").trim() || `${data.selectedCity}, ${data.selectedState}, Brasil`;
+        const q = String((data as any).region || "").trim() || `${city}, ${state}, Brasil`;
 
         const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&countrycodes=br&q=${encodeURIComponent(
           q
@@ -435,8 +471,9 @@ export default function CreateCampaign() {
           setLocationLat(Number.isFinite(lat) ? lat : null);
           setLocationLon(Number.isFinite(lon) ? lon : null);
 
-          if (!(data.region || "").trim()) {
-            updateData({ region: buildFullLocationLabel(first) });
+          // ✅ garante region completo (bairro/cidade/estado)
+          if (!String((data as any).region || "").trim()) {
+            updateData({ region: buildFullLocationLabel(first) } as any);
           }
         }
       } catch {
@@ -450,7 +487,7 @@ export default function CreateCampaign() {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, data.selectedCity, data.selectedState]);
+  }, [step, (data as any).selectedCity, (data as any).selectedState]);
 
   const mapSrc = useMemo(() => {
     if (locationLat !== null && locationLon !== null) {
@@ -463,32 +500,33 @@ export default function CreateCampaign() {
     return `https://www.openstreetmap.org/export/embed.html?bbox=-74.0,-34.0,-34.0,5.0&layer=mapnik`;
   }, [locationLat, locationLon]);
 
-  /* =========================================
-     Período
-  ========================================= */
+  /* =========================
+     Período (modal)
+  ========================= */
 
   const [periodOpen, setPeriodOpen] = useState(false);
   const [tmpStart, setTmpStart] = useState<string>("");
   const [tmpEnd, setTmpEnd] = useState<string>("");
 
   const openPeriodModal = () => {
-    setTmpStart(data.campaignDate || "");
-    setTmpEnd(data.applyDeadline || "");
+    setTmpStart(String((data as any).campaignDate || ""));
+    setTmpEnd(String((data as any).applyDeadline || ""));
     setPeriodOpen(true);
   };
 
   const closePeriodModal = () => setPeriodOpen(false);
 
-  const periodDays = useMemo(() => diffDaysInclusive(data.campaignDate, data.applyDeadline), [data.campaignDate, data.applyDeadline]);
+  const campaignStart = String((data as any).campaignDate || "");
+  const campaignEnd = String((data as any).applyDeadline || "");
+
+  const periodDays = useMemo(() => diffDaysInclusive(campaignStart, campaignEnd), [campaignStart, campaignEnd]);
 
   const periodLabel = useMemo(() => {
-    const s = data.campaignDate;
-    const e = data.applyDeadline;
-    if (!s || !e) return "";
-    const days = diffDaysInclusive(s, e);
+    if (!campaignStart || !campaignEnd) return "";
+    const days = diffDaysInclusive(campaignStart, campaignEnd);
     const daysLabel = days ? ` • ${days} dia${days > 1 ? "s" : ""}` : "";
-    return `${formatDateBR(s)} → ${formatDateBR(e)}${daysLabel}`;
-  }, [data.campaignDate, data.applyDeadline]);
+    return `${formatDateBR(campaignStart)} → ${formatDateBR(campaignEnd)}${daysLabel}`;
+  }, [campaignStart, campaignEnd]);
 
   const confirmPeriod = () => {
     const s = tmpStart;
@@ -498,21 +536,24 @@ export default function CreateCampaign() {
     if (s < todayISO) return toast.error("A data de início deve ser a partir de hoje.");
     if (e < s) return toast.error("A data final deve ser igual ou após a data de início.");
 
-    updateData({ campaignDate: s, applyDeadline: e });
+    updateData({ campaignDate: s, applyDeadline: e } as any);
     setPeriodOpen(false);
   };
 
-  /* =========================================
-     Step 2: creators sugeridos + seleção
-  ========================================= */
+  /* =========================
+     Step 2: sugestões de creators (FIX real)
+  ========================= */
 
   const [creatorLoading, setCreatorLoading] = useState(false);
   const [creatorList, setCreatorList] = useState<CreatorListItem[]>([]);
 
+  const selectedCity = String((data as any).selectedCity || "").trim();
+  const selectedState = String((data as any).selectedState || "").trim();
+
   useEffect(() => {
     let alive = true;
 
-    const hasFilters = !!(data.selectedCity || "").trim() && !!(data.selectedState || "").trim() && selectedSegments.length > 0;
+    const hasFilters = !!selectedCity && !!selectedState && selectedSegments.length > 0;
 
     if (step !== 2) return;
 
@@ -525,30 +566,50 @@ export default function CreateCampaign() {
       try {
         setCreatorLoading(true);
 
-        let q = supabase
+        // ✅ Busca aberta (pra não falhar por SP vs São Paulo / acento / role/status nulo)
+        const res = await supabase
           .from("profiles")
-          .select("id, name, city, state, followers, content_style, approval_status, desired_role")
-          .eq("approval_status", "approved")
-          .eq("desired_role", "influencer")
-          .eq("state", data.selectedState)
-          .eq("city", data.selectedCity)
-          .limit(50);
+          .select("id, name, city, state, neighborhood, followers, content_style, approval_status, desired_role")
+          .limit(300);
 
-        const res = await q;
         if (!alive) return;
-
         if (res.error) throw res.error;
 
         const rows = (res.data as any[] | null) ?? [];
 
-        const segsLower = selectedSegments.map((s) => s.toLowerCase());
-        const filtered = rows.filter((r) => {
-          const cs = String(r?.content_style ?? "").toLowerCase();
-          if (!cs) return false;
-          return segsLower.some((s) => cs.includes(s));
-        });
+        const cityWanted = normalizeText(selectedCity);
+        const stateWanted = normalizeText(selectedState);
+        const segsLower = selectedSegments.map((s) => normalizeText(s));
 
-        setCreatorList(filtered.slice(0, 30));
+        const filtered = rows
+          .filter((r) => {
+            // role/status tolerantes (pra teste)
+            const role = normalizeText(r?.desired_role);
+            const status = normalizeText(r?.approval_status);
+
+            const roleOk = role === "influencer" || role === "" || role === "creator";
+            const statusOk = status === "approved" || status === "" || status === "pending";
+
+            if (!roleOk) return false;
+            if (!statusOk) return false;
+
+            const c = normalizeText(r?.city);
+            const s = normalizeText(r?.state);
+
+            // match tolerante
+            const cityOk = cityWanted ? c.includes(cityWanted) || cityWanted.includes(c) : true;
+            const stateOk = stateWanted ? s.includes(stateWanted) || stateWanted.includes(s) : true;
+            if (!cityOk || !stateOk) return false;
+
+            const cs = normalizeText(r?.content_style);
+            if (!cs) return false;
+
+            return segsLower.some((seg) => cs.includes(seg));
+          })
+          .sort((a, b) => (followersToNumber(b.followers) ?? 0) - (followersToNumber(a.followers) ?? 0))
+          .slice(0, 30);
+
+        setCreatorList(filtered);
       } catch (e) {
         console.error("CREATORS_SUGGEST_ERROR", e);
         setCreatorList([]);
@@ -560,30 +621,28 @@ export default function CreateCampaign() {
     return () => {
       alive = false;
     };
-  }, [step, data.selectedCity, data.selectedState, selectedSegments]);
+  }, [step, selectedCity, selectedState, selectedSegments]);
 
-  const selectedCreatorIds = data.selectedCreatorIds || [];
+  const selectedCreatorIds: string[] = ((data as any).selectedCreatorIds || []) as string[];
 
   const selectedCreators = useMemo(() => {
     const map = new Map(creatorList.map((c) => [c.id, c]));
     return selectedCreatorIds.map((id) => map.get(id)).filter(Boolean) as CreatorListItem[];
   }, [creatorList, selectedCreatorIds]);
 
-  const currentLimit = creatorsNeededNumber ?? data.creatorsNeeded ?? 1;
-
   const toggleSelectCreator = (id: string) => {
     const current = selectedCreatorIds.slice();
     const exists = current.includes(id);
 
-    // se o usuário digitou um número válido, persistimos antes de selecionar
-    if (creatorsNeededNumber !== null && creatorsNeededNumber !== data.creatorsNeeded) {
-      updateData({ creatorsNeeded: creatorsNeededNumber });
+    // persiste creatorsNeeded válido antes de selecionar
+    if (creatorsNeededNumber !== null && creatorsNeededNumber !== creatorsNeededFromData) {
+      updateData({ creatorsNeeded: creatorsNeededNumber } as any);
     }
 
-    const limit = creatorsNeededNumber ?? data.creatorsNeeded ?? 1;
+    const limit = creatorsNeededNumber ?? creatorsNeededFromData;
 
     if (exists) {
-      updateData({ selectedCreatorIds: current.filter((x) => x !== id) });
+      updateData({ selectedCreatorIds: current.filter((x) => x !== id) } as any);
       return;
     }
 
@@ -592,44 +651,41 @@ export default function CreateCampaign() {
       return;
     }
 
-    updateData({ selectedCreatorIds: [...current, id] });
+    updateData({ selectedCreatorIds: [...current, id] } as any);
   };
 
   const removeSelectedCreator = (id: string) => {
-    updateData({ selectedCreatorIds: selectedCreatorIds.filter((x) => x !== id) });
+    updateData({ selectedCreatorIds: selectedCreatorIds.filter((x) => x !== id) } as any);
   };
 
   const openCreatorProfile = (id: string) => {
     window.open(`${PUBLIC_PROFILE_ROUTE_PREFIX}/${id}`, "_blank", "noopener,noreferrer");
   };
 
-  /* =========================================
+  /* =========================
      Validations
-  ========================================= */
+  ========================= */
 
   const canStep2 =
-    data.title &&
-    data.campaignType &&
-    data.selectedState &&
-    data.selectedCity &&
-    data.campaignDate &&
-    data.applyDeadline &&
+    !!String((data as any).title || "").trim() &&
+    !!String((data as any).campaignType || "").trim() &&
+    !!selectedState &&
+    !!selectedCity &&
+    !!campaignStart &&
+    !!campaignEnd &&
     selectedObjectives.length > 0;
-
-  const desiredCountOk = Number.isFinite(Number(currentLimit)) && currentLimit >= 1 && currentLimit <= 50;
 
   const canStep3 =
     selectedSegments.length > 0 &&
     creatorsNeededOk &&
-    desiredCountOk &&
     selectedCreatorIds.length > 0 &&
     selectedCreatorIds.length <= currentLimit;
 
   const canPublish = canStep2 && canStep3;
 
-  /* =========================================
+  /* =========================
      Files
-  ========================================= */
+  ========================= */
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files;
@@ -645,23 +701,33 @@ export default function CreateCampaign() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  /* =========================================
+  /* =========================
      Publish
-  ========================================= */
+  ========================= */
 
   const handlePublish = async () => {
     if (!user || !canPublish) return;
     setIsSubmitting(true);
 
     try {
-      const region = (data.region || "").trim() || `${data.selectedCity}, ${data.selectedState}`;
-      const creatorsNeededFinal = creatorsNeededNumber ?? data.creatorsNeeded ?? 1;
+      const region = String((data as any).region || "").trim() || `${selectedCity}, ${selectedState}`;
+      const creatorsNeededFinal = creatorsNeededNumber ?? creatorsNeededFromData;
 
       const requirements = {
-        posts: data.posts,
-        format: data.format,
-        hashtags: data.hashtags ? data.hashtags.split(",").map((h) => h.trim()) : [],
-        mentions: data.mentions ? data.mentions.split(",").map((m) => m.trim()) : [],
+        posts: Number((data as any).posts ?? 1),
+        format: String((data as any).format || "stories"),
+        hashtags: String((data as any).hashtags || "")
+          ? String((data as any).hashtags)
+              .split(",")
+              .map((h) => h.trim())
+              .filter(Boolean)
+          : [],
+        mentions: String((data as any).mentions || "")
+          ? String((data as any).mentions)
+              .split(",")
+              .map((m) => m.trim())
+              .filter(Boolean)
+          : [],
         creators_needed: creatorsNeededFinal,
         content_segments: selectedSegments,
         selected_creator_ids: selectedCreatorIds,
@@ -669,15 +735,15 @@ export default function CreateCampaign() {
 
       const { data: campaignId, error: campaignError } = await supabase.rpc("create_campaign", {
         payload: {
-          title: data.title,
-          type: data.campaignType,
+          title: String((data as any).title || ""),
+          type: String((data as any).campaignType || ""),
           region,
-          state: data.selectedState,
-          city: data.selectedCity,
-          campaign_date: data.campaignDate || null,
-          apply_deadline: data.applyDeadline,
-          brief_public: data.briefPublic,
-          brief_private: data.briefPrivate || null,
+          state: selectedState,
+          city: selectedCity,
+          campaign_date: campaignStart || null,
+          apply_deadline: campaignEnd,
+          brief_public: String((data as any).briefPublic || ""), // objetivos em chips (csv)
+          brief_private: String((data as any).briefPrivate || "") || null,
           requirements,
         },
       });
@@ -721,38 +787,44 @@ export default function CreateCampaign() {
     }
   };
 
+  /* =========================
+     UI
+  ========================= */
+
   return (
     <MobileLayout title="Nova campanha" showBack backTo="/dashboard-contratante" showNav={false} showHome homeRoute="/dashboard-contratante">
       <CampaignProgress currentStep={step} />
 
-      {/* Step 1 */}
+      {/* =========================
+          STEP 1
+      ========================= */}
       {step === 1 && (
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Informações da campanha</h3>
 
-          {/* Título */}
+          {/* Title */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Título</label>
             <input
               type="text"
-              value={data.title}
-              onChange={(e) => updateData({ title: e.target.value })}
+              value={String((data as any).title || "")}
+              onChange={(e) => updateData({ title: e.target.value } as any)}
               placeholder="Ex: Festa de lançamento XYZ"
               className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
 
-          {/* Tipo */}
+          {/* Type */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Tipo</label>
             <div className="grid grid-cols-3 gap-2">
               {campaignTypes.map((type) => {
-                const selected = data.campaignType === type.id;
+                const selected = String((data as any).campaignType || "") === type.id;
                 return (
                   <button
                     key={type.id}
                     type="button"
-                    onClick={() => updateData({ campaignType: selected ? "" : type.id })}
+                    onClick={() => updateData({ campaignType: selected ? "" : type.id } as any)}
                     className={`p-3 rounded-xl border text-center transition-all ${
                       selected ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
                     }`}
@@ -766,7 +838,7 @@ export default function CreateCampaign() {
             <p className="mt-2 text-[11px] text-muted-foreground">Dica: clique novamente no tipo selecionado para remover.</p>
           </div>
 
-          {/* Localização */}
+          {/* Location */}
           <div className="space-y-2" ref={autocompleteWrapRef}>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1 block">Localização</label>
 
@@ -844,7 +916,7 @@ export default function CreateCampaign() {
             ) : null}
           </div>
 
-          {/* Período */}
+          {/* Period */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Período de campanha *</label>
 
@@ -869,7 +941,7 @@ export default function CreateCampaign() {
             )}
           </div>
 
-          {/* Objetivos */}
+          {/* Objectives */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
               Objetivo da campanha * <span className="normal-case tracking-normal text-muted-foreground">(até 3)</span>
@@ -898,7 +970,7 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Modal Período */}
+          {/* Period Modal */}
           {periodOpen && (
             <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
               <div className="absolute inset-0 bg-black/60" onMouseDown={closePeriodModal} />
@@ -914,6 +986,7 @@ export default function CreateCampaign() {
                   </button>
                 </div>
 
+                {/* ✅ corrigido mobile: 1 coluna no mobile, 2 no desktop */}
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Início</label>
@@ -972,12 +1045,14 @@ export default function CreateCampaign() {
         </div>
       )}
 
-      {/* Step 2 */}
+      {/* =========================
+          STEP 2
+      ========================= */}
       {step === 2 && (
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Requisitos da campanha</h3>
 
-          {/* Segmento */}
+          {/* Segments */}
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Layers className="w-4 h-4 text-primary" />
@@ -1009,7 +1084,7 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Quantidade */}
+          {/* Quantity */}
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Users className="w-4 h-4 text-primary" />
@@ -1026,11 +1101,11 @@ export default function CreateCampaign() {
               }}
               onBlur={() => {
                 const safe = creatorsNeededNumber ?? 1;
-                updateData({ creatorsNeeded: safe });
+                updateData({ creatorsNeeded: safe } as any);
 
                 // se reduziu, corta selecionados
                 const cut = selectedCreatorIds.slice(0, safe);
-                if (cut.length !== selectedCreatorIds.length) updateData({ selectedCreatorIds: cut });
+                if (cut.length !== selectedCreatorIds.length) updateData({ selectedCreatorIds: cut } as any);
 
                 setCreatorsNeededInput(String(safe));
               }}
@@ -1051,7 +1126,7 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Selecionados */}
+          {/* Selected creators */}
           <div className="glass-card p-4">
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators selecionados</div>
@@ -1081,7 +1156,7 @@ export default function CreateCampaign() {
             )}
           </div>
 
-          {/* Lista sugerida */}
+          {/* Suggested creators */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators sugeridos</div>
@@ -1093,26 +1168,20 @@ export default function CreateCampaign() {
               ) : null}
             </div>
 
-            {(!data.selectedCity || !data.selectedState || selectedSegments.length === 0) ? (
+            {(!selectedCity || !selectedState || selectedSegments.length === 0) ? (
               <div className="glass-card p-4 text-sm text-muted-foreground">
                 Defina <span className="text-foreground font-medium">Localização</span> e pelo menos{" "}
                 <span className="text-foreground font-medium">1 segmento</span> para ver sugestões.
               </div>
             ) : creatorList.length === 0 && !creatorLoading ? (
-              <div className="glass-card p-4 text-sm text-muted-foreground">Nenhum creator encontrado para os filtros atuais.</div>
+              <div className="glass-card p-4 text-sm text-muted-foreground">
+                Nenhum creator encontrado para os filtros atuais. (Agora o filtro é tolerante — se ainda não aparecer, o perfil do creator está com city/state/content_style vazio.)
+              </div>
             ) : (
               <div className="space-y-2">
                 {creatorList.map((c) => {
                   const selected = selectedCreatorIds.includes(c.id);
-
-                  const followersNum = (() => {
-                    const raw = String(c.followers ?? "").trim();
-                    if (!raw) return null;
-                    const n = Number(raw.replace(/[^\d]/g, ""));
-                    return Number.isFinite(n) && n > 0 ? n : null;
-                  })();
-
-                  const followersLabel = formatIGCount(followersNum);
+                  const followersLabel = formatIGCount(followersToNumber(c.followers));
 
                   return (
                     <div key={c.id} className={`glass-card p-3 flex items-center gap-3 transition ${selected ? "border-primary/60 bg-primary/5" : ""}`}>
@@ -1153,8 +1222,8 @@ export default function CreateCampaign() {
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Briefing privado (só para confirmados)</label>
             <textarea
-              value={data.briefPrivate}
-              onChange={(e) => updateData({ briefPrivate: e.target.value })}
+              value={String((data as any).briefPrivate || "")}
+              onChange={(e) => updateData({ briefPrivate: e.target.value } as any)}
               placeholder="Instruções detalhadas visíveis somente após confirmação..."
               rows={4}
               className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
@@ -1163,21 +1232,26 @@ export default function CreateCampaign() {
         </div>
       )}
 
-      {/* Step 3 */}
+      {/* =========================
+          STEP 3
+      ========================= */}
       {step === 3 && (
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Arquivos & Publicação</h3>
 
+          {/* Upload */}
           <input ref={fileInputRef} type="file" multiple accept="image/*,video/*,.pdf" onChange={handleFileSelect} className="hidden" />
           <button
             onClick={() => fileInputRef.current?.click()}
             className="w-full border-2 border-dashed border-border/60 rounded-xl p-6 flex flex-col items-center gap-2 text-center hover:border-primary/30 transition-colors"
+            type="button"
           >
             <Upload className="w-7 h-7 text-muted-foreground" />
             <p className="text-sm text-foreground/80 font-medium">Enviar arquivos</p>
             <p className="text-xs text-muted-foreground/60">Imagens, vídeos ou PDFs</p>
           </button>
 
+          {/* File list */}
           {files.length > 0 && (
             <div className="space-y-2">
               {files.map((f, i) => (
@@ -1193,7 +1267,7 @@ export default function CreateCampaign() {
                     <p className="text-xs text-foreground truncate">{f.file.name}</p>
                     <p className="text-[10px] text-muted-foreground">{(f.file.size / 1024).toFixed(0)} KB</p>
                   </div>
-                  <button onClick={() => removeFile(i)} className="text-muted-foreground hover:text-destructive transition-colors">
+                  <button onClick={() => removeFile(i)} className="text-muted-foreground hover:text-destructive transition-colors" type="button">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -1201,12 +1275,53 @@ export default function CreateCampaign() {
             </div>
           )}
 
+          {/* Summary (igual ao seu estilo anterior) */}
+          <div className="glass-card p-4 space-y-2">
+            <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Resumo</h4>
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Título</span>
+                <span className="text-foreground font-medium truncate ml-4">{String((data as any).title || "")}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Tipo</span>
+                <span className="text-foreground font-medium capitalize">{String((data as any).campaignType || "")}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Região</span>
+                <span className="text-foreground font-medium truncate ml-4">{String((data as any).region || "") || `${selectedCity}, ${selectedState}`}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Período</span>
+                <span className="text-foreground font-medium truncate ml-4">{periodLabel || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Objetivos</span>
+                <span className="text-foreground font-medium truncate ml-4">{selectedObjectives.length ? selectedObjectives.join(", ") : "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Segmentos</span>
+                <span className="text-foreground font-medium truncate ml-4">{selectedSegments.length ? selectedSegments.join(", ") : "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Creators</span>
+                <span className="text-foreground font-medium">{selectedCreatorIds.length}/{currentLimit}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Arquivos</span>
+                <span className="text-foreground font-medium">{files.length}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Publish */}
           <button
             onClick={handlePublish}
             disabled={!canPublish || isSubmitting}
             className={`w-full py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
               canPublish && !isSubmitting ? "bg-gradient-neon text-primary-foreground glow-blue" : "bg-secondary text-muted-foreground"
             }`}
+            type="button"
           >
             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
             {isSubmitting ? "Publicando..." : "Publicar campanha"}
@@ -1217,7 +1332,11 @@ export default function CreateCampaign() {
       {/* Bottom navigation */}
       <div className="sticky bottom-0 px-6 py-4 bg-background/80 backdrop-blur-xl border-t border-border/30 flex gap-3">
         {step > 1 && (
-          <button onClick={() => setStep(step - 1)} className="flex-1 py-4 rounded-xl border border-border/50 text-muted-foreground font-medium text-sm">
+          <button
+            onClick={() => setStep(step - 1)}
+            className="flex-1 py-4 rounded-xl border border-border/50 text-muted-foreground font-medium text-sm"
+            type="button"
+          >
             Voltar
           </button>
         )}
@@ -1229,6 +1348,7 @@ export default function CreateCampaign() {
             className={`flex-[2] py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
               (step === 1 ? canStep2 : canStep3) ? "bg-gradient-neon text-primary-foreground glow-blue" : "bg-secondary text-muted-foreground"
             }`}
+            type="button"
           >
             Avançar
           </button>
