@@ -160,7 +160,7 @@ const CreateCampaign = () => {
   const [locationLat, setLocationLat] = useState<number | null>(null);
   const [locationLon, setLocationLon] = useState<number | null>(null);
 
-  // ✅ novo: label completo (bairro + cidade + estado)
+  // label completo (bairro + cidade + estado) para UX
   const [locationFullLabel, setLocationFullLabel] = useState<string>("");
 
   const autocompleteWrapRef = useRef<HTMLDivElement | null>(null);
@@ -174,8 +174,11 @@ const CreateCampaign = () => {
   }, [data.selectedCity, data.selectedState]);
 
   const displayLocationLabel = useMemo(() => {
+    // ✅ agora prioriza data.region (persistido no context)
+    const reg = (data.region || "").trim();
+    if (reg) return reg;
     return (locationFullLabel || locationLabelFallback || "").trim();
-  }, [locationFullLabel, locationLabelFallback]);
+  }, [data.region, locationFullLabel, locationLabelFallback]);
 
   // preencher input se vazio
   useEffect(() => {
@@ -250,10 +253,8 @@ const CreateCampaign = () => {
     const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
     const state = addr.state || addr.state_district || addr.region || "";
 
-    // ✅ Queremos: "Moema, São Paulo, São Paulo"
     const parts = [neighborhood, city, state].map((x) => (x || "").trim()).filter(Boolean);
     if (parts.length >= 2) return parts.join(", ");
-    // fallback
     return item.display_name;
   };
 
@@ -262,14 +263,16 @@ const CreateCampaign = () => {
     const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
     const state = addr.state || addr.state_district || addr.region || "";
 
+    const full = buildFullLocationLabel(item);
+
+    // ✅ agora também salvamos o completo em data.region
     updateData({
       selectedCity: city || data.selectedCity || "",
       selectedState: state || data.selectedState || "",
+      region: full,
     });
 
-    const full = buildFullLocationLabel(item);
     setLocationFullLabel(full);
-
     setLocationQuery(full);
     setLocationOpen(false);
     setLocationResults([]);
@@ -287,10 +290,10 @@ const CreateCampaign = () => {
     setLocationLon(null);
     setLocationOpen(false);
     setLocationFullLabel("");
-    updateData({ selectedCity: "", selectedState: "" });
+    updateData({ selectedCity: "", selectedState: "", region: "" });
   };
 
-  // re-hidrata mapa e label (se tiver city/state)
+  // re-hidrata mapa e tenta recompor label/region
   const [hydratingMap, setHydratingMap] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -299,7 +302,7 @@ const CreateCampaign = () => {
       step === 1 &&
       !!data.selectedCity &&
       !!data.selectedState &&
-      (locationLat === null || locationLon === null || !locationFullLabel) &&
+      (locationLat === null || locationLon === null || !(data.region || "").trim()) &&
       !hydratingMap;
 
     if (!shouldHydrate) return;
@@ -307,7 +310,11 @@ const CreateCampaign = () => {
     (async () => {
       try {
         setHydratingMap(true);
-        const q = locationQuery.trim() || `${data.selectedCity}, ${data.selectedState}, Brasil`;
+
+        const q =
+          locationQuery.trim() ||
+          (data.region || "").trim() ||
+          `${data.selectedCity}, ${data.selectedState}, Brasil`;
 
         const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&countrycodes=br&q=${encodeURIComponent(
           q
@@ -325,9 +332,14 @@ const CreateCampaign = () => {
           setLocationLat(Number.isFinite(lat) ? lat : null);
           setLocationLon(Number.isFinite(lon) ? lon : null);
 
-          // tenta recompor label completo
           const full = buildFullLocationLabel(first);
           setLocationFullLabel(full);
+
+          // ✅ se ainda não tem region persistido, salva
+          if (!(data.region || "").trim()) {
+            updateData({ region: full });
+          }
+
           if (!locationQuery) setLocationQuery(full);
         }
       } catch {
@@ -413,7 +425,7 @@ const CreateCampaign = () => {
     data.selectedCity &&
     data.campaignDate &&
     data.applyDeadline &&
-    selectedObjectives.length > 0; // agora depende de objetivos
+    selectedObjectives.length > 0;
 
   const canStep3 = data.posts >= 1;
   const canPublish = canStep2 && canStep3;
@@ -445,7 +457,9 @@ const CreateCampaign = () => {
     setIsSubmitting(true);
 
     try {
-      const region = `${data.selectedCity}, ${data.selectedState}`;
+      // ✅ region agora é o completo (bairro/cidade/estado) se existir
+      const region = (data.region || "").trim() || `${data.selectedCity}, ${data.selectedState}`;
+
       const requirements = {
         posts: data.posts,
         format: data.format,
@@ -462,7 +476,7 @@ const CreateCampaign = () => {
           city: data.selectedCity,
           campaign_date: data.campaignDate || null,
           apply_deadline: data.applyDeadline,
-          brief_public: data.briefPublic, // agora: "Novos clientes, Engajamento..."
+          brief_public: data.briefPublic,
           brief_private: data.briefPrivate || null,
           requirements,
         },
@@ -551,6 +565,7 @@ const CreateCampaign = () => {
                 );
               })}
             </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">Dica: clique novamente no tipo selecionado para remover.</p>
           </div>
 
           {/* Localização */}
@@ -610,7 +625,7 @@ const CreateCampaign = () => {
                   )}
 
                   <div className="px-4 py-2 border-t border-border/30 text-[11px] text-muted-foreground">
-                    Selecione uma sugestão para atualizar o mapa e salvar Estado/Cidade.
+                    Selecione uma sugestão para atualizar o mapa e salvar a localização completa.
                   </div>
                 </div>
               )}
@@ -711,7 +726,8 @@ const CreateCampaign = () => {
                   </button>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-3">
+                {/* ✅ FIX MOBILE: 1 coluna no mobile, 2 no desktop */}
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Início</label>
                     <input
@@ -894,7 +910,7 @@ const CreateCampaign = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Local</span>
-                <span className="text-foreground font-medium truncate ml-4">{displayLocationLabel || "-"}</span>
+                <span className="text-foreground font-medium truncate ml-4">{(data.region || "").trim() || displayLocationLabel || "-"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Período</span>
