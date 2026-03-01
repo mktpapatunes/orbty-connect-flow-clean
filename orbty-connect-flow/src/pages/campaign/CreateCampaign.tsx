@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
   Calendar,
@@ -26,6 +25,17 @@ const campaignTypes = [
   { id: "music", label: "Música", icon: Music },
   { id: "product", label: "Produto/Serviço", icon: ShoppingBag },
 ];
+
+const objectiveOptions = [
+  "Novos clientes",
+  "Novos seguidores",
+  "Novos ouvintes",
+  "Venda/Cliques",
+  "Engajamento",
+  "Visualizações",
+] as const;
+
+type ObjectiveOption = (typeof objectiveOptions)[number];
 
 interface UploadedFile {
   file: File;
@@ -75,7 +85,6 @@ const CreateCampaign = () => {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  // ✅ Formata datas para pt-BR (DD/MM/AAAA) sem bug de fuso em YYYY-MM-DD
   const formatDateBR = (value?: string | null) => {
     if (!value) return "-";
 
@@ -100,6 +109,46 @@ const CreateCampaign = () => {
   };
 
   /* =========================================
+     Objetivos (chips) - persistem em briefPublic
+  ========================================= */
+
+  const parseObjectives = (raw: string): ObjectiveOption[] => {
+    const parts = (raw || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const picked: ObjectiveOption[] = [];
+    for (const p of parts) {
+      const match = objectiveOptions.find((x) => x.toLowerCase() === p.toLowerCase());
+      if (match && !picked.includes(match)) picked.push(match);
+      if (picked.length >= 3) break;
+    }
+    return picked;
+  };
+
+  const selectedObjectives = useMemo(() => parseObjectives(data.briefPublic || ""), [data.briefPublic]);
+
+  const toggleObjective = (opt: ObjectiveOption) => {
+    const current = selectedObjectives.slice();
+    const exists = current.includes(opt);
+
+    if (exists) {
+      const next = current.filter((x) => x !== opt);
+      updateData({ briefPublic: next.join(", ") });
+      return;
+    }
+
+    if (current.length >= 3) {
+      toast.error("Você pode selecionar no máximo 3 objetivos.");
+      return;
+    }
+
+    const next = [...current, opt];
+    updateData({ briefPublic: next.join(", ") });
+  };
+
+  /* =========================================
      Localização (busca + mapa)
   ========================================= */
 
@@ -111,9 +160,12 @@ const CreateCampaign = () => {
   const [locationLat, setLocationLat] = useState<number | null>(null);
   const [locationLon, setLocationLon] = useState<number | null>(null);
 
+  // ✅ novo: label completo (bairro + cidade + estado)
+  const [locationFullLabel, setLocationFullLabel] = useState<string>("");
+
   const autocompleteWrapRef = useRef<HTMLDivElement | null>(null);
 
-  const locationLabel = useMemo(() => {
+  const locationLabelFallback = useMemo(() => {
     const c = (data.selectedCity || "").trim();
     const s = (data.selectedState || "").trim();
     if (c && s) return `${c}, ${s}`;
@@ -121,13 +173,17 @@ const CreateCampaign = () => {
     return "";
   }, [data.selectedCity, data.selectedState]);
 
-  // quando já tiver estado/cidade do contexto, preencher input
-  useEffect(() => {
-    if (!locationQuery && locationLabel) setLocationQuery(locationLabel);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locationLabel]);
+  const displayLocationLabel = useMemo(() => {
+    return (locationFullLabel || locationLabelFallback || "").trim();
+  }, [locationFullLabel, locationLabelFallback]);
 
-  // ✅ click fora fecha dropdown
+  // preencher input se vazio
+  useEffect(() => {
+    if (!locationQuery && displayLocationLabel) setLocationQuery(displayLocationLabel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayLocationLabel]);
+
+  // click fora fecha dropdown
   useEffect(() => {
     const onDown = (e: MouseEvent | TouchEvent) => {
       const el = autocompleteWrapRef.current;
@@ -145,7 +201,7 @@ const CreateCampaign = () => {
     };
   }, []);
 
-  // Debounce de busca (só quando dropdown aberto)
+  // Debounce de busca
   useEffect(() => {
     let alive = true;
     const q = locationQuery.trim();
@@ -188,6 +244,19 @@ const CreateCampaign = () => {
     };
   }, [locationQuery, locationOpen]);
 
+  const buildFullLocationLabel = (item: NominatimItem) => {
+    const addr = item.address || {};
+    const neighborhood = addr.neighbourhood || addr.suburb || "";
+    const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
+    const state = addr.state || addr.state_district || addr.region || "";
+
+    // ✅ Queremos: "Moema, São Paulo, São Paulo"
+    const parts = [neighborhood, city, state].map((x) => (x || "").trim()).filter(Boolean);
+    if (parts.length >= 2) return parts.join(", ");
+    // fallback
+    return item.display_name;
+  };
+
   const applyLocationFromNominatim = (item: NominatimItem) => {
     const addr = item.address || {};
     const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
@@ -198,7 +267,10 @@ const CreateCampaign = () => {
       selectedState: state || data.selectedState || "",
     });
 
-    setLocationQuery(city && state ? `${city}, ${state}` : item.display_name);
+    const full = buildFullLocationLabel(item);
+    setLocationFullLabel(full);
+
+    setLocationQuery(full);
     setLocationOpen(false);
     setLocationResults([]);
 
@@ -214,11 +286,11 @@ const CreateCampaign = () => {
     setLocationLat(null);
     setLocationLon(null);
     setLocationOpen(false);
+    setLocationFullLabel("");
     updateData({ selectedCity: "", selectedState: "" });
   };
 
-  // ✅ Re-hidrata mapa quando volta pro step 1 (sem mexer no context)
-  // Se já tiver cidade/estado, mas coords locais zeradas, faz 1 geocode silencioso.
+  // re-hidrata mapa e label (se tiver city/state)
   const [hydratingMap, setHydratingMap] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -227,7 +299,7 @@ const CreateCampaign = () => {
       step === 1 &&
       !!data.selectedCity &&
       !!data.selectedState &&
-      (locationLat === null || locationLon === null) &&
+      (locationLat === null || locationLon === null || !locationFullLabel) &&
       !hydratingMap;
 
     if (!shouldHydrate) return;
@@ -235,7 +307,8 @@ const CreateCampaign = () => {
     (async () => {
       try {
         setHydratingMap(true);
-        const q = `${data.selectedCity}, ${data.selectedState}, Brasil`;
+        const q = locationQuery.trim() || `${data.selectedCity}, ${data.selectedState}, Brasil`;
+
         const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&countrycodes=br&q=${encodeURIComponent(
           q
         )}`;
@@ -251,6 +324,11 @@ const CreateCampaign = () => {
           const lon = Number(first.lon);
           setLocationLat(Number.isFinite(lat) ? lat : null);
           setLocationLon(Number.isFinite(lon) ? lon : null);
+
+          // tenta recompor label completo
+          const full = buildFullLocationLabel(first);
+          setLocationFullLabel(full);
+          if (!locationQuery) setLocationQuery(full);
         }
       } catch {
         // ignora
@@ -262,7 +340,8 @@ const CreateCampaign = () => {
     return () => {
       alive = false;
     };
-  }, [step, data.selectedCity, data.selectedState, locationLat, locationLon, hydratingMap]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, data.selectedCity, data.selectedState]);
 
   const mapSrc = useMemo(() => {
     if (locationLat !== null && locationLon !== null) {
@@ -272,15 +351,11 @@ const CreateCampaign = () => {
       const bbox = `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`;
       return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}`;
     }
-    // fallback Brasil geral
     return `https://www.openstreetmap.org/export/embed.html?bbox=-74.0,-34.0,-34.0,5.0&layer=mapnik`;
   }, [locationLat, locationLon]);
 
   /* =========================================
      Período de campanha (date range)
-     - Mantém campos existentes:
-       campaignDate = início
-       applyDeadline = fim
   ========================================= */
 
   const [periodOpen, setPeriodOpen] = useState(false);
@@ -295,10 +370,7 @@ const CreateCampaign = () => {
 
   const closePeriodModal = () => setPeriodOpen(false);
 
-  const periodDays = useMemo(
-    () => diffDaysInclusive(data.campaignDate, data.applyDeadline),
-    [data.campaignDate, data.applyDeadline]
-  );
+  const periodDays = useMemo(() => diffDaysInclusive(data.campaignDate, data.applyDeadline), [data.campaignDate, data.applyDeadline]);
 
   const periodLabel = useMemo(() => {
     const s = data.campaignDate;
@@ -339,9 +411,9 @@ const CreateCampaign = () => {
     data.campaignType &&
     data.selectedState &&
     data.selectedCity &&
-    data.campaignDate && // início
-    data.applyDeadline && // fim
-    data.briefPublic; // objetivo
+    data.campaignDate &&
+    data.applyDeadline &&
+    selectedObjectives.length > 0; // agora depende de objetivos
 
   const canStep3 = data.posts >= 1;
   const canPublish = canStep2 && canStep3;
@@ -388,11 +460,9 @@ const CreateCampaign = () => {
           region,
           state: data.selectedState,
           city: data.selectedCity,
-          // início/fim do período
           campaign_date: data.campaignDate || null,
           apply_deadline: data.applyDeadline,
-          // objetivo
-          brief_public: data.briefPublic,
+          brief_public: data.briefPublic, // agora: "Novos clientes, Engajamento..."
           brief_private: data.briefPrivate || null,
           requirements,
         },
@@ -443,7 +513,7 @@ const CreateCampaign = () => {
     >
       <CampaignProgress currentStep={step} />
 
-      {/* Step 1: Basic Info */}
+      {/* Step 1 */}
       {step === 1 && (
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Informações da campanha</h3>
@@ -484,7 +554,7 @@ const CreateCampaign = () => {
             <p className="mt-2 text-[11px] text-muted-foreground">Dica: clique novamente no tipo selecionado para remover.</p>
           </div>
 
-          {/* Localização (input + sugestões + mapa) */}
+          {/* Localização */}
           <div className="space-y-2" ref={autocompleteWrapRef}>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1 block">Localização</label>
 
@@ -500,7 +570,7 @@ const CreateCampaign = () => {
                 placeholder="Digite cidade, bairro ou endereço (ex: Moema, São Paulo)"
                 className="w-full bg-input border border-border/50 rounded-xl pl-9 pr-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
-              {(locationQuery || locationLabel) && (
+              {(locationQuery || displayLocationLabel) && (
                 <button
                   type="button"
                   onClick={clearLocation}
@@ -511,7 +581,6 @@ const CreateCampaign = () => {
                 </button>
               )}
 
-              {/* Dropdown sugestões */}
               {locationOpen && (locationLoading || locationResults.length > 0) && (
                 <div className="absolute z-20 mt-2 w-full rounded-xl border border-border/50 bg-background/95 backdrop-blur-xl shadow-lg overflow-hidden">
                   {locationLoading ? (
@@ -522,11 +591,7 @@ const CreateCampaign = () => {
                   ) : (
                     <div className="max-h-64 overflow-auto">
                       {locationResults.map((r) => {
-                        const addr = r.address || {};
-                        const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
-                        const state = addr.state || addr.state_district || addr.region || "";
-                        const line = city && state ? `${city}, ${state}` : r.display_name;
-
+                        const line = buildFullLocationLabel(r);
                         return (
                           <button
                             key={String(r.place_id)}
@@ -546,37 +611,37 @@ const CreateCampaign = () => {
                   )}
 
                   <div className="px-4 py-2 border-t border-border/30 text-[11px] text-muted-foreground">
-                    Selecione uma sugestão para atualizar Estado/Cidade automaticamente.
+                    Selecione uma sugestão para atualizar o mapa e salvar Estado/Cidade.
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Preview do estado/cidade que vai salvar */}
             <div className="flex items-center justify-between gap-3 text-xs">
               <div className="text-muted-foreground">
-                Estado/Cidade selecionados:
-                <span className="ml-2 text-foreground font-medium">{locationLabel || "—"}</span>
+                Localização selecionada:
+                <span className="ml-2 text-foreground font-medium">{displayLocationLabel || "—"}</span>
               </div>
-              {locationLabel ? (
+              {displayLocationLabel ? (
                 <button type="button" onClick={() => setLocationOpen((v) => !v)} className="text-primary hover:opacity-90 transition">
                   {locationOpen ? "Fechar" : "Editar"}
                 </button>
               ) : null}
             </div>
 
-            {/* Mapa */}
             <div className="rounded-2xl overflow-hidden border border-border/50 bg-card/60">
               <iframe title="Mapa" src={mapSrc} className="w-full h-44" loading="lazy" referrerPolicy="no-referrer" />
             </div>
 
-            {hydratingMap ? <div className="text-[11px] text-muted-foreground flex items-center gap-2">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Atualizando mapa...
-            </div> : null}
+            {hydratingMap ? (
+              <div className="text-[11px] text-muted-foreground flex items-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Atualizando mapa...
+              </div>
+            ) : null}
           </div>
 
-          {/* Período de campanha */}
+          {/* Período */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Período de campanha *</label>
 
@@ -601,16 +666,34 @@ const CreateCampaign = () => {
             )}
           </div>
 
-          {/* Objetivo da campanha (briefPublic) */}
+          {/* Objetivos (chips) */}
           <div>
-            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Objetivo da campanha *</label>
-            <textarea
-              value={data.briefPublic}
-              onChange={(e) => updateData({ briefPublic: e.target.value })}
-              placeholder="Ex: atrair novos clientes, gerar cliques no link, aumentar seguidores, atrair novos ouvintes..."
-              rows={3}
-              className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-            />
+            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+              Objetivo da campanha * <span className="normal-case tracking-normal text-muted-foreground">(selecione até 3)</span>
+            </label>
+
+            <div className="grid grid-cols-2 gap-2">
+              {objectiveOptions.map((opt) => {
+                const selected = selectedObjectives.includes(opt);
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => toggleObjective(opt)}
+                    className={`px-3 py-3 rounded-xl border text-sm font-medium transition-all text-center ${
+                      selected ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              Selecionados:{" "}
+              <span className="text-foreground font-medium">{selectedObjectives.length ? selectedObjectives.join(", ") : "—"}</span>
+            </div>
           </div>
 
           {/* Modal Período */}
@@ -695,7 +778,7 @@ const CreateCampaign = () => {
         </div>
       )}
 
-      {/* Step 2: Requirements */}
+      {/* Step 2 */}
       {step === 2 && (
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Requisitos da campanha</h3>
@@ -761,7 +844,7 @@ const CreateCampaign = () => {
         </div>
       )}
 
-      {/* Step 3: Files & Publish */}
+      {/* Step 3 */}
       {step === 3 && (
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Arquivos & Publicação</h3>
@@ -811,14 +894,18 @@ const CreateCampaign = () => {
                 <span className="text-foreground font-medium capitalize">{data.campaignType}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Região</span>
-                <span className="text-foreground font-medium">
-                  {data.selectedCity}, {data.selectedState}
-                </span>
+                <span className="text-muted-foreground">Local</span>
+                <span className="text-foreground font-medium truncate ml-4">{displayLocationLabel || "-"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Período</span>
                 <span className="text-foreground font-medium">{periodLabel ? periodLabel : "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Objetivos</span>
+                <span className="text-foreground font-medium truncate ml-4">
+                  {selectedObjectives.length ? selectedObjectives.join(", ") : "-"}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Posts</span>
