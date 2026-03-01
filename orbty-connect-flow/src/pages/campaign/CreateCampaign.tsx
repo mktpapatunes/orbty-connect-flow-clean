@@ -1,3 +1,4 @@
+// src/pages/CreateCampaign.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -12,6 +13,8 @@ import {
   CheckCircle2,
   X,
   Search,
+  Users,
+  Layers,
 } from "lucide-react";
 import MobileLayout from "@/components/MobileLayout";
 import CampaignProgress from "@/components/CampaignProgress";
@@ -36,6 +39,27 @@ const objectiveOptions = [
 ] as const;
 
 type ObjectiveOption = (typeof objectiveOptions)[number];
+
+// ✅ Segmentos (compatíveis com o content_style do creator — geralmente string com vírgulas)
+const segmentOptions = [
+  "Humor",
+  "Educação",
+  "Música",
+  "Beleza",
+  "Moda",
+  "Gastronomia",
+  "Fitness",
+  "Lifestyle",
+  "Viagem",
+  "Tecnologia",
+  "Games",
+  "Negócios",
+  "Arte",
+  "Família",
+  "Pets",
+] as const;
+
+type SegmentOption = (typeof segmentOptions)[number];
 
 interface UploadedFile {
   file: File;
@@ -87,12 +111,9 @@ const CreateCampaign = () => {
 
   const formatDateBR = (value?: string | null) => {
     if (!value) return "-";
-
     const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
     const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
-
     if (Number.isNaN(d.getTime())) return "-";
-
     return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
   };
 
@@ -134,22 +155,54 @@ const CreateCampaign = () => {
     const exists = current.includes(opt);
 
     if (exists) {
-      const next = current.filter((x) => x !== opt);
-      updateData({ briefPublic: next.join(", ") });
+      updateData({ briefPublic: current.filter((x) => x !== opt).join(", ") });
       return;
     }
-
     if (current.length >= 3) {
       toast.error("Você pode selecionar no máximo 3 objetivos.");
       return;
     }
-
-    const next = [...current, opt];
-    updateData({ briefPublic: next.join(", ") });
+    updateData({ briefPublic: [...current, opt].join(", ") });
   };
 
   /* =========================================
-     Localização (busca + mapa)
+     Segmentos (chips) - persistem em contentSegments
+  ========================================= */
+
+  const parseSegments = (raw: string): SegmentOption[] => {
+    const parts = (raw || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const picked: SegmentOption[] = [];
+    for (const p of parts) {
+      const match = segmentOptions.find((x) => x.toLowerCase() === p.toLowerCase());
+      if (match && !picked.includes(match)) picked.push(match);
+      if (picked.length >= 3) break;
+    }
+    return picked;
+  };
+
+  const selectedSegments = useMemo(() => parseSegments(data.contentSegments || ""), [data.contentSegments]);
+
+  const toggleSegment = (seg: SegmentOption) => {
+    const current = selectedSegments.slice();
+    const exists = current.includes(seg);
+
+    if (exists) {
+      updateData({ contentSegments: current.filter((x) => x !== seg).join(", ") });
+      return;
+    }
+    if (current.length >= 3) {
+      toast.error("Você pode selecionar no máximo 3 segmentos.");
+      return;
+    }
+    updateData({ contentSegments: [...current, seg].join(", ") });
+  };
+
+  /* =========================================
+     Localização (busca + mapa) + region completo
   ========================================= */
 
   const [locationQuery, setLocationQuery] = useState("");
@@ -159,9 +212,6 @@ const CreateCampaign = () => {
 
   const [locationLat, setLocationLat] = useState<number | null>(null);
   const [locationLon, setLocationLon] = useState<number | null>(null);
-
-  // label completo (bairro + cidade + estado) para UX
-  const [locationFullLabel, setLocationFullLabel] = useState<string>("");
 
   const autocompleteWrapRef = useRef<HTMLDivElement | null>(null);
 
@@ -174,26 +224,21 @@ const CreateCampaign = () => {
   }, [data.selectedCity, data.selectedState]);
 
   const displayLocationLabel = useMemo(() => {
-    // ✅ agora prioriza data.region (persistido no context)
     const reg = (data.region || "").trim();
     if (reg) return reg;
-    return (locationFullLabel || locationLabelFallback || "").trim();
-  }, [data.region, locationFullLabel, locationLabelFallback]);
+    return locationLabelFallback;
+  }, [data.region, locationLabelFallback]);
 
-  // preencher input se vazio
   useEffect(() => {
     if (!locationQuery && displayLocationLabel) setLocationQuery(displayLocationLabel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayLocationLabel]);
 
-  // click fora fecha dropdown
   useEffect(() => {
     const onDown = (e: MouseEvent | TouchEvent) => {
       const el = autocompleteWrapRef.current;
       if (!el) return;
-      if (e.target instanceof Node && !el.contains(e.target)) {
-        setLocationOpen(false);
-      }
+      if (e.target instanceof Node && !el.contains(e.target)) setLocationOpen(false);
     };
 
     document.addEventListener("mousedown", onDown);
@@ -204,7 +249,6 @@ const CreateCampaign = () => {
     };
   }, []);
 
-  // Debounce de busca
   useEffect(() => {
     let alive = true;
     const q = locationQuery.trim();
@@ -225,10 +269,7 @@ const CreateCampaign = () => {
           q
         )}`;
 
-        const res = await fetch(url, {
-          headers: { "Accept-Language": "pt-BR" },
-        });
-
+        const res = await fetch(url, { headers: { "Accept-Language": "pt-BR" } });
         const json = (await res.json()) as NominatimItem[];
         if (!alive) return;
 
@@ -252,7 +293,6 @@ const CreateCampaign = () => {
     const neighborhood = addr.neighbourhood || addr.suburb || "";
     const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
     const state = addr.state || addr.state_district || addr.region || "";
-
     const parts = [neighborhood, city, state].map((x) => (x || "").trim()).filter(Boolean);
     if (parts.length >= 2) return parts.join(", ");
     return item.display_name;
@@ -262,17 +302,14 @@ const CreateCampaign = () => {
     const addr = item.address || {};
     const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
     const state = addr.state || addr.state_district || addr.region || "";
-
     const full = buildFullLocationLabel(item);
 
-    // ✅ agora também salvamos o completo em data.region
     updateData({
       selectedCity: city || data.selectedCity || "",
       selectedState: state || data.selectedState || "",
-      region: full,
+      region: full, // ✅ completo
     });
 
-    setLocationFullLabel(full);
     setLocationQuery(full);
     setLocationOpen(false);
     setLocationResults([]);
@@ -289,11 +326,9 @@ const CreateCampaign = () => {
     setLocationLat(null);
     setLocationLon(null);
     setLocationOpen(false);
-    setLocationFullLabel("");
     updateData({ selectedCity: "", selectedState: "", region: "" });
   };
 
-  // re-hidrata mapa e tenta recompor label/region
   const [hydratingMap, setHydratingMap] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -310,11 +345,7 @@ const CreateCampaign = () => {
     (async () => {
       try {
         setHydratingMap(true);
-
-        const q =
-          locationQuery.trim() ||
-          (data.region || "").trim() ||
-          `${data.selectedCity}, ${data.selectedState}, Brasil`;
+        const q = (data.region || "").trim() || `${data.selectedCity}, ${data.selectedState}, Brasil`;
 
         const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&countrycodes=br&q=${encodeURIComponent(
           q
@@ -322,7 +353,6 @@ const CreateCampaign = () => {
 
         const res = await fetch(url, { headers: { "Accept-Language": "pt-BR" } });
         const json = (await res.json()) as NominatimItem[];
-
         if (!alive) return;
 
         const first = Array.isArray(json) ? json[0] : null;
@@ -332,18 +362,12 @@ const CreateCampaign = () => {
           setLocationLat(Number.isFinite(lat) ? lat : null);
           setLocationLon(Number.isFinite(lon) ? lon : null);
 
-          const full = buildFullLocationLabel(first);
-          setLocationFullLabel(full);
-
-          // ✅ se ainda não tem region persistido, salva
           if (!(data.region || "").trim()) {
-            updateData({ region: full });
+            updateData({ region: buildFullLocationLabel(first) });
           }
-
-          if (!locationQuery) setLocationQuery(full);
         }
       } catch {
-        // ignora
+        // ignore
       } finally {
         if (alive) setHydratingMap(false);
       }
@@ -367,7 +391,7 @@ const CreateCampaign = () => {
   }, [locationLat, locationLon]);
 
   /* =========================================
-     Período de campanha (date range)
+     Período de campanha
   ========================================= */
 
   const [periodOpen, setPeriodOpen] = useState(false);
@@ -397,18 +421,9 @@ const CreateCampaign = () => {
     const s = tmpStart;
     const e = tmpEnd;
 
-    if (!s || !e) {
-      toast.error("Selecione a data de início e a data final.");
-      return;
-    }
-    if (s < todayISO) {
-      toast.error("A data de início deve ser a partir de hoje.");
-      return;
-    }
-    if (e < s) {
-      toast.error("A data final deve ser igual ou após a data de início.");
-      return;
-    }
+    if (!s || !e) return toast.error("Selecione a data de início e a data final.");
+    if (s < todayISO) return toast.error("A data de início deve ser a partir de hoje.");
+    if (e < s) return toast.error("A data final deve ser igual ou após a data de início.");
 
     updateData({ campaignDate: s, applyDeadline: e });
     setPeriodOpen(false);
@@ -418,6 +433,7 @@ const CreateCampaign = () => {
      Validations
   ========================================= */
 
+  // Step 1
   const canStep2 =
     data.title &&
     data.campaignType &&
@@ -427,7 +443,11 @@ const CreateCampaign = () => {
     data.applyDeadline &&
     selectedObjectives.length > 0;
 
-  const canStep3 = data.posts >= 1;
+  // Step 2
+  const creatorsNeededOk = Number.isFinite(Number(data.creatorsNeeded)) && data.creatorsNeeded >= 1 && data.creatorsNeeded <= 50;
+  const canStep3 = selectedSegments.length > 0 && creatorsNeededOk;
+
+  // Publish
   const canPublish = canStep2 && canStep3;
 
   /* =========================================
@@ -457,14 +477,17 @@ const CreateCampaign = () => {
     setIsSubmitting(true);
 
     try {
-      // ✅ region agora é o completo (bairro/cidade/estado) se existir
       const region = (data.region || "").trim() || `${data.selectedCity}, ${data.selectedState}`;
 
+      // ✅ requirements agora carrega os novos campos
       const requirements = {
         posts: data.posts,
         format: data.format,
         hashtags: data.hashtags ? data.hashtags.split(",").map((h) => h.trim()) : [],
         mentions: data.mentions ? data.mentions.split(",").map((m) => m.trim()) : [],
+
+        creators_needed: data.creatorsNeeded,
+        content_segments: selectedSegments, // array
       };
 
       const { data: campaignId, error: campaignError } = await supabase.rpc("create_campaign", {
@@ -517,14 +540,7 @@ const CreateCampaign = () => {
   };
 
   return (
-    <MobileLayout
-      title="Nova campanha"
-      showBack
-      backTo="/dashboard-contratante"
-      showNav={false}
-      showHome
-      homeRoute="/dashboard-contratante"
-    >
+    <MobileLayout title="Nova campanha" showBack backTo="/dashboard-contratante" showNav={false} showHome homeRoute="/dashboard-contratante">
       <CampaignProgress currentStep={step} />
 
       {/* Step 1 */}
@@ -532,7 +548,7 @@ const CreateCampaign = () => {
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Informações da campanha</h3>
 
-          {/* Title */}
+          {/* Título */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Título</label>
             <input
@@ -544,7 +560,7 @@ const CreateCampaign = () => {
             />
           </div>
 
-          {/* Type */}
+          {/* Tipo */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Tipo</label>
             <div className="grid grid-cols-3 gap-2">
@@ -623,7 +639,6 @@ const CreateCampaign = () => {
                       })}
                     </div>
                   )}
-
                   <div className="px-4 py-2 border-t border-border/30 text-[11px] text-muted-foreground">
                     Selecione uma sugestão para atualizar o mapa e salvar a localização completa.
                   </div>
@@ -636,11 +651,6 @@ const CreateCampaign = () => {
                 Localização selecionada:
                 <span className="ml-2 text-foreground font-medium">{displayLocationLabel || "—"}</span>
               </div>
-              {displayLocationLabel ? (
-                <button type="button" onClick={() => setLocationOpen((v) => !v)} className="text-primary hover:opacity-90 transition">
-                  {locationOpen ? "Fechar" : "Editar"}
-                </button>
-              ) : null}
             </div>
 
             <div className="rounded-2xl overflow-hidden border border-border/50 bg-card/60">
@@ -680,10 +690,10 @@ const CreateCampaign = () => {
             )}
           </div>
 
-          {/* Objetivos (chips) */}
+          {/* Objetivos */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
-              Objetivo da campanha * <span className="normal-case tracking-normal text-muted-foreground">(selecione até 3)</span>
+              Objetivo da campanha * <span className="normal-case tracking-normal text-muted-foreground">(até 3)</span>
             </label>
 
             <div className="grid grid-cols-2 gap-2">
@@ -705,8 +715,7 @@ const CreateCampaign = () => {
             </div>
 
             <div className="mt-2 text-[11px] text-muted-foreground">
-              Selecionados:{" "}
-              <span className="text-foreground font-medium">{selectedObjectives.length ? selectedObjectives.join(", ") : "—"}</span>
+              Selecionados: <span className="text-foreground font-medium">{selectedObjectives.length ? selectedObjectives.join(", ") : "—"}</span>
             </div>
           </div>
 
@@ -726,7 +735,6 @@ const CreateCampaign = () => {
                   </button>
                 </div>
 
-                {/* ✅ FIX MOBILE: 1 coluna no mobile, 2 no desktop */}
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Início</label>
@@ -772,18 +780,10 @@ const CreateCampaign = () => {
                 </div>
 
                 <div className="mt-5 flex gap-3">
-                  <button
-                    type="button"
-                    onClick={closePeriodModal}
-                    className="flex-1 py-3 rounded-xl border border-border/50 text-muted-foreground font-medium text-sm"
-                  >
+                  <button type="button" onClick={closePeriodModal} className="flex-1 py-3 rounded-xl border border-border/50 text-muted-foreground font-medium text-sm">
                     Cancelar
                   </button>
-                  <button
-                    type="button"
-                    onClick={confirmPeriod}
-                    className="flex-[2] py-3 rounded-xl font-semibold text-sm bg-gradient-neon text-primary-foreground glow-blue"
-                  >
+                  <button type="button" onClick={confirmPeriod} className="flex-[2] py-3 rounded-xl font-semibold text-sm bg-gradient-neon text-primary-foreground glow-blue">
                     OK
                   </button>
                 </div>
@@ -798,60 +798,70 @@ const CreateCampaign = () => {
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Requisitos da campanha</h3>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Nº de posts *</label>
-              <input
-                type="number"
-                min={1}
-                value={data.posts}
-                onChange={(e) => updateData({ posts: parseInt(e.target.value) || 1 })}
-                className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
+          {/* Segmento do conteúdo */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Layers className="w-4 h-4 text-primary" />
+              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block">
+                Segmento do conteúdo * <span className="normal-case tracking-normal text-muted-foreground">(até 3)</span>
+              </label>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Formato</label>
-              <select
-                value={data.format}
-                onChange={(e) => updateData({ format: e.target.value })}
-                className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-              >
-                <option value="stories">Stories</option>
-                <option value="feed">Feed</option>
-                <option value="reels">Reels</option>
-                <option value="misto">Misto</option>
-              </select>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {segmentOptions.map((seg) => {
+                const selected = selectedSegments.includes(seg);
+                return (
+                  <button
+                    key={seg}
+                    type="button"
+                    onClick={() => toggleSegment(seg)}
+                    className={`px-3 py-3 rounded-xl border text-sm font-medium transition-all text-center ${
+                      selected ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
+                    }`}
+                  >
+                    {seg}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              Selecionados: <span className="text-foreground font-medium">{selectedSegments.length ? selectedSegments.join(", ") : "—"}</span>
             </div>
           </div>
 
+          {/* Quantidade de creators */}
           <div>
-            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Hashtags (separadas por vírgula)</label>
+            <div className="flex items-center gap-2 mb-2">
+              <Users className="w-4 h-4 text-primary" />
+              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block">Quantidade de creators *</label>
+            </div>
+
             <input
-              type="text"
-              value={data.hashtags}
-              onChange={(e) => updateData({ hashtags: e.target.value })}
-              placeholder="#festa, #evento"
-              className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              type="number"
+              min={1}
+              max={50}
+              value={data.creatorsNeeded}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                const safe = Number.isFinite(n) ? Math.max(1, Math.min(50, Math.floor(n))) : 1;
+                updateData({ creatorsNeeded: safe });
+              }}
+              className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
+
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              A campanha irá buscar até <span className="text-foreground font-medium">{data.creatorsNeeded}</span> creator{data.creatorsNeeded > 1 ? "s" : ""} com base nos filtros.
+            </div>
           </div>
 
+          {/* Briefing privado (mantém) */}
           <div>
-            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Menções (separadas por vírgula)</label>
-            <input
-              type="text"
-              value={data.mentions}
-              onChange={(e) => updateData({ mentions: e.target.value })}
-              placeholder="@marca, @evento"
-              className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Briefing privado (só para aceitas)</label>
+            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Briefing privado (só para confirmados)</label>
             <textarea
               value={data.briefPrivate}
               onChange={(e) => updateData({ briefPrivate: e.target.value })}
-              placeholder="Instruções detalhadas visíveis somente após aprovação..."
+              placeholder="Instruções detalhadas visíveis somente após confirmação..."
               rows={4}
               className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
             />
@@ -910,7 +920,7 @@ const CreateCampaign = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Local</span>
-                <span className="text-foreground font-medium truncate ml-4">{(data.region || "").trim() || displayLocationLabel || "-"}</span>
+                <span className="text-foreground font-medium truncate ml-4">{(data.region || "").trim() || "-"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Período</span>
@@ -923,10 +933,14 @@ const CreateCampaign = () => {
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Posts</span>
-                <span className="text-foreground font-medium">
-                  {data.posts}x {data.format}
+                <span className="text-muted-foreground">Segmentos</span>
+                <span className="text-foreground font-medium truncate ml-4">
+                  {selectedSegments.length ? selectedSegments.join(", ") : "-"}
                 </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Creators</span>
+                <span className="text-foreground font-medium">{data.creatorsNeeded}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Arquivos</span>

@@ -1,3 +1,4 @@
+// src/contexts/CampaignContext.tsx
 import { createContext, useContext, useState, ReactNode } from "react";
 
 export interface CampaignFormData {
@@ -5,11 +6,24 @@ export interface CampaignFormData {
   campaignType: string;
   selectedState: string;
   selectedCity: string;
+
+  // ✅ Agora usamos region como "bairro, cidade, estado"
   region: string;
-  campaignDate: string;
-  applyDeadline: string;
+
+  // Período
+  campaignDate: string; // início
+  applyDeadline: string; // fim
+
+  // Objetivos (chips) persistem aqui
   briefPublic: string;
+
   briefPrivate: string;
+
+  // ✅ NOVOS (Etapa 2)
+  contentSegments: string; // "Humor, Educação, Música"
+  creatorsNeeded: number; // 1..50
+
+  // Mantidos (por compatibilidade com requirements atual)
   posts: number;
   format: string;
   hashtags: string;
@@ -32,6 +46,12 @@ const initialData: CampaignFormData = {
   applyDeadline: "",
   briefPublic: "",
   briefPrivate: "",
+
+  // ✅ novos
+  contentSegments: "",
+  creatorsNeeded: 1,
+
+  // mantidos
   posts: 1,
   format: "stories",
   hashtags: "",
@@ -55,9 +75,5 @@ export const CampaignProvider = ({ children }: { children: ReactNode }) => {
 
   const resetData = () => setData(initialData);
 
-  return (
-    <CampaignContext.Provider value={{ data, updateData, resetData }}>
-      {children}
-    </CampaignContext.Provider>
-  );
+  return <CampaignContext.Provider value={{ data, updateData, resetData }}>{children}</CampaignContext.Provider>;
 };
