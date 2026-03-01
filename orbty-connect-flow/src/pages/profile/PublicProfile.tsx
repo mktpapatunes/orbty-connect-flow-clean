@@ -20,7 +20,6 @@ import {
   Home,
   Globe,
   Package,
-  X,
 } from "lucide-react";
 
 /* =========================
@@ -511,9 +510,6 @@ export default function PublicProfile() {
   const [acceptedCount, setAcceptedCount] = useState(0);
   const [loadingAccepted, setLoadingAccepted] = useState(true);
 
-  // bio modal
-  const [bioOpen, setBioOpen] = useState(false);
-
   /**
    * ✅ CORREÇÃO DO "FLASH":
    * useLayoutEffect roda ANTES do browser pintar quando o :id muda.
@@ -535,8 +531,6 @@ export default function PublicProfile() {
 
     setAcceptedCount(0);
     setLoadingAccepted(true);
-
-    setBioOpen(false);
   }, [id]);
 
   useEffect(() => {
@@ -661,12 +655,16 @@ export default function PublicProfile() {
     return (profile?.name || "Creator").toString();
   }, [role, org?.name, profile?.name]);
 
+  // ✅ label cinza abaixo do nome
+  const roleLabel = useMemo(() => {
+    return role === "contractor" ? "Marca/Negócios" : "Creator";
+  }, [role]);
+
+  // ✅ bio completa (não cortamos string aqui)
   const headerBio = useMemo(() => {
     const b = role === "contractor" ? org?.bio : profile?.bio;
     return (b || "").trim();
   }, [role, org?.bio, profile?.bio]);
-
-  const showBioMore = useMemo(() => headerBio.length > 140, [headerBio]);
 
   const igHandle = useMemo(() => {
     const raw = role === "contractor" ? org?.instagram : profile?.instagram;
@@ -829,16 +827,13 @@ export default function PublicProfile() {
                       ) : null}
                     </div>
 
+                    {/* ✅ texto cinza abaixo do nome */}
+                    <div className="mt-1 text-xs text-muted-foreground">{roleLabel}</div>
+
+                    {/* ✅ Bio (mantém completa, só clampa visual 1 linha) */}
                     <div className="mt-2 text-sm text-foreground/90 leading-relaxed">
                       {headerBio ? (
-                        <>
-                          <span className="line-clamp-3">{headerBio}</span>
-                          {showBioMore ? (
-                            <button type="button" onClick={() => setBioOpen(true)} className="mt-1 text-xs text-primary hover:opacity-90 transition">
-                              Ver mais
-                            </button>
-                          ) : null}
-                        </>
+                        <span className="block line-clamp-1">{headerBio}</span>
                       ) : (
                         <span className="text-muted-foreground">Sem descrição.</span>
                       )}
@@ -876,26 +871,6 @@ export default function PublicProfile() {
                 </div>
               </div>
             </div>
-
-            {/* MODAL Bio */}
-            {bioOpen && (
-              <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-                <div className="absolute inset-0 bg-black/60" onMouseDown={() => setBioOpen(false)} />
-                <div
-                  className="relative w-full md:max-w-lg rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold text-foreground">{role === "contractor" ? "Sobre" : "Bio"}</div>
-                    <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => setBioOpen(false)} type="button" aria-label="Fechar">
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="mt-3 text-sm text-foreground leading-relaxed whitespace-pre-line">{headerBio}</div>
-                </div>
-              </div>
-            )}
 
             {/* CHIPS */}
             {role === "contractor" ? (
