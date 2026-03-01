@@ -1,6 +1,5 @@
-// src/pages/profile/ContractorProfile.tsx
-
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,6 +24,7 @@ import {
   Package,
   Instagram,
   ArrowUpRight,
+  Lock,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -277,31 +277,18 @@ const PRODUCTS_BY_CATEGORY: Record<string, string[]> = {
 ========================= */
 
 export default function ContractorProfile() {
+  const navigate = useNavigate();
+
   // ⚠️ Mantém compatível
   const auth = useAuth() as any;
   const profile = auth?.profile;
   const userRole = auth?.userRole;
   const approvalStatus = auth?.approvalStatus;
 
-  const ctx = useMyProfileContext() as any;
+  const ctx = useMyProfileContext();
   const org = (ctx.data as any)?.organization;
 
   const isVerifiedContractor = userRole === "contractor" && approvalStatus === "approved";
-
-  /**
-   * ✅ CORREÇÃO DEFINITIVA DO FLASH:
-   * Enquanto o contexto premium ainda está carregando, NÃO renderiza nada do perfil.
-   * Isso evita renderizar 1 frame com fallback de profile (pessoa) e depois trocar para org (negócio).
-   */
-  if (ctx?.loading) {
-    return (
-      <MobileLayout title="Meu negócio" showBack navType="contractor">
-        <div className="px-6 py-16 flex justify-center">
-          <Loader2 className="w-7 h-7 animate-spin text-primary" />
-        </div>
-      </MobileLayout>
-    );
-  }
 
   /* -------------------------
      Upload logo
@@ -503,7 +490,6 @@ export default function ContractorProfile() {
   useEffect(() => {
     if (!orgOpen) return;
 
-    // ✅ aqui pode usar profile como sugestão de preenchimento do FORM (não é exibido na tela)
     setOrgForm({
       name: org?.name ?? "",
       region_city: org?.region_city ?? profile?.city ?? "",
@@ -581,21 +567,17 @@ export default function ContractorProfile() {
   };
 
   /* -------------------------
-     Dados exibidos (SEM fallback pro profile!)
-     -> evita 100% do "flash"
+     Dados exibidos
   ------------------------- */
-
-  const title = useMemo(() => {
-    return org?.name || "Meu negócio";
-  }, [org?.name]);
+  const title = useMemo(() => org?.name || profile?.name || "Meu negócio", [org?.name, profile?.name]);
 
   const locationLabel = useMemo(() => {
-    const city = org?.region_city;
-    const state = org?.region_state;
+    const city = org?.region_city || profile?.city;
+    const state = org?.region_state || profile?.state;
     if (city && state) return `${city}, ${state}`;
     if (city) return city;
     return "—";
-  }, [org?.region_city, org?.region_state]);
+  }, [org?.region_city, org?.region_state, profile?.city, profile?.state]);
 
   const website = useMemo(() => safeUrl(org?.website_url), [org?.website_url]);
   const openWebsite = () => {
@@ -607,15 +589,13 @@ export default function ContractorProfile() {
   const igRaw = buildInstagramLinks(igHandle)?.raw ?? null;
 
   const openMaps = () => {
-    if (!org) return;
-
     const parts = [
       org?.address_street,
       org?.address_number,
       org?.address_complement,
       org?.address_zip,
-      org?.region_city,
-      org?.region_state,
+      org?.region_city || profile?.city,
+      org?.region_state || profile?.state,
     ]
       .map((x: any) => (x || "").toString().trim())
       .filter(Boolean);
@@ -768,14 +748,7 @@ export default function ContractorProfile() {
 
         {/* 3 CHIPS */}
         <div className="grid grid-cols-3 gap-2">
-          <MicroChip
-            icon={<MapPin className="w-4 h-4" />}
-            label="Localização"
-            value={locationLabel}
-            title={org ? "Abrir no Google Maps" : "Crie o negócio para habilitar"}
-            onClick={org ? openMaps : undefined}
-            clickable={!!org}
-          />
+          <MicroChip icon={<MapPin className="w-4 h-4" />} label="Localização" value={locationLabel} title="Abrir no Google Maps" onClick={openMaps} clickable />
           <MicroChip icon={<Building2 className="w-4 h-4" />} label="Categoria" value={category} title={category} />
           <MicroChip icon={<Package className="w-4 h-4" />} label="Produto" value={product} title={product} />
         </div>
@@ -810,16 +783,34 @@ export default function ContractorProfile() {
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between">
+              {/* ✅ HEADER do modal com botão Dados pessoais */}
+              <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-foreground">{isEditingOrg ? "Editar negócio" : "Criar negócio"}</div>
-                <button
-                  className="p-2 rounded-xl hover:bg-white/5"
-                  onClick={() => (orgSaving ? null : setOrgOpen(false))}
-                  title="Fechar"
-                  type="button"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (orgSaving) return;
+                      setOrgOpen(false);
+                      navigate("/perfil-contratante/dados-pessoais");
+                    }}
+                    className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
+                    title="Abrir dados pessoais"
+                  >
+                    <Lock className="w-4 h-4" />
+                    Dados pessoais
+                  </button>
+
+                  <button
+                    className="p-2 rounded-xl hover:bg-white/5"
+                    onClick={() => (orgSaving ? null : setOrgOpen(false))}
+                    title="Fechar"
+                    type="button"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               <div className="mt-4 space-y-4 max-h-[70vh] overflow-auto pr-1">
@@ -843,19 +834,11 @@ export default function ContractorProfile() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Cidade</Label>
-                    <Input
-                      value={orgForm.region_city}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, region_city: e.target.value }))}
-                      className="text-sm"
-                    />
+                    <Input value={orgForm.region_city} onChange={(e) => setOrgForm((s) => ({ ...s, region_city: e.target.value }))} className="text-sm" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Estado</Label>
-                    <Input
-                      value={orgForm.region_state}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, region_state: e.target.value }))}
-                      className="text-sm"
-                    />
+                    <Input value={orgForm.region_state} onChange={(e) => setOrgForm((s) => ({ ...s, region_state: e.target.value }))} className="text-sm" />
                   </div>
                 </div>
 
@@ -863,19 +846,11 @@ export default function ContractorProfile() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Rua</Label>
-                    <Input
-                      value={orgForm.address_street}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, address_street: e.target.value }))}
-                      className="text-sm"
-                    />
+                    <Input value={orgForm.address_street} onChange={(e) => setOrgForm((s) => ({ ...s, address_street: e.target.value }))} className="text-sm" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Número</Label>
-                    <Input
-                      value={orgForm.address_number}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, address_number: e.target.value }))}
-                      className="text-sm"
-                    />
+                    <Input value={orgForm.address_number} onChange={(e) => setOrgForm((s) => ({ ...s, address_number: e.target.value }))} className="text-sm" />
                   </div>
                 </div>
 
@@ -890,12 +865,7 @@ export default function ContractorProfile() {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">CEP</Label>
-                    <Input
-                      value={orgForm.address_zip}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, address_zip: e.target.value }))}
-                      className="text-sm"
-                      inputMode="numeric"
-                    />
+                    <Input value={orgForm.address_zip} onChange={(e) => setOrgForm((s) => ({ ...s, address_zip: e.target.value }))} className="text-sm" inputMode="numeric" />
                   </div>
                 </div>
 
@@ -944,22 +914,12 @@ export default function ContractorProfile() {
 
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Instagram</Label>
-                  <Input
-                    value={orgForm.instagram}
-                    onChange={(e) => setOrgForm((s) => ({ ...s, instagram: e.target.value }))}
-                    placeholder="@seunegocio"
-                    className="text-sm"
-                  />
+                  <Input value={orgForm.instagram} onChange={(e) => setOrgForm((s) => ({ ...s, instagram: e.target.value }))} placeholder="@seunegocio" className="text-sm" />
                 </div>
 
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Site</Label>
-                  <Input
-                    value={orgForm.website_url}
-                    onChange={(e) => setOrgForm((s) => ({ ...s, website_url: e.target.value }))}
-                    placeholder="https://..."
-                    className="text-sm"
-                  />
+                  <Input value={orgForm.website_url} onChange={(e) => setOrgForm((s) => ({ ...s, website_url: e.target.value }))} placeholder="https://..." className="text-sm" />
                 </div>
 
                 <button
