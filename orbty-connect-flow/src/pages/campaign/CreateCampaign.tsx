@@ -1,4 +1,4 @@
-// src/pages/CreateCampaign.tsx
+// src/pages/campaign/CreateCampaign.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -15,6 +15,7 @@ import {
   Search,
   Users,
   Layers,
+  ExternalLink,
 } from "lucide-react";
 import MobileLayout from "@/components/MobileLayout";
 import CampaignProgress from "@/components/CampaignProgress";
@@ -22,6 +23,10 @@ import { useCampaign } from "@/contexts/CampaignContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+
+const PUBLIC_PROFILE_ROUTE_PREFIX = "/u"; // ✅ conforme App.tsx
+
+const STEP_STORAGE_KEY = "orbty:create_campaign:step:v1";
 
 const campaignTypes = [
   { id: "event", label: "Evento", icon: Calendar },
@@ -40,7 +45,6 @@ const objectiveOptions = [
 
 type ObjectiveOption = (typeof objectiveOptions)[number];
 
-// ✅ Segmentos (compatíveis com o content_style do creator — geralmente string com vírgulas)
 const segmentOptions = [
   "Humor",
   "Educação",
@@ -86,12 +90,67 @@ type NominatimItem = {
   };
 };
 
-const CreateCampaign = () => {
+type CreatorListItem = {
+  id: string;
+  name: string | null;
+  city: string | null;
+  state: string | null;
+  followers: string | null;
+  content_style: string | null;
+  approval_status?: string | null;
+  desired_role?: string | null;
+};
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function formatIGCount(input: number | null | undefined) {
+  const n = Number(input ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return "—";
+
+  if (n < 10_000) return Math.floor(n).toLocaleString("pt-BR");
+
+  if (n < 1_000_000) {
+    const k = n / 1000;
+    if (n < 100_000) {
+      const val = Math.floor(k * 10) / 10;
+      const str = val % 1 === 0 ? String(Math.floor(val)) : String(val);
+      return `${str} mil`;
+    }
+    return `${Math.floor(k).toLocaleString("pt-BR")} mil`;
+  }
+
+  const m = n / 1_000_000;
+  if (n < 10_000_000) {
+    const val = Math.floor(m * 10) / 10;
+    const str = val % 1 === 0 ? String(Math.floor(val)) : String(val);
+    return `${str}M`;
+  }
+  return `${Math.floor(m)}M`;
+}
+
+export default function CreateCampaign() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { data, updateData, resetData } = useCampaign();
 
-  const [step, setStep] = useState(1);
+  // ✅ restaura step
+  const [step, setStep] = useState<number>(() => {
+    const raw = localStorage.getItem(STEP_STORAGE_KEY);
+    const n = Number(raw);
+    return Number.isFinite(n) ? clamp(Math.floor(n), 1, 3) : 1;
+  });
+
+  // persiste step
+  useEffect(() => {
+    try {
+      localStorage.setItem(STEP_STORAGE_KEY, String(step));
+    } catch {
+      // ignore
+    }
+  }, [step]);
+
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -130,7 +189,7 @@ const CreateCampaign = () => {
   };
 
   /* =========================================
-     Objetivos (chips) - persistem em briefPublic
+     Objetivos (chips)
   ========================================= */
 
   const parseObjectives = (raw: string): ObjectiveOption[] => {
@@ -166,7 +225,7 @@ const CreateCampaign = () => {
   };
 
   /* =========================================
-     Segmentos (chips) - persistem em contentSegments
+     Segmentos (chips)
   ========================================= */
 
   const parseSegments = (raw: string): SegmentOption[] => {
@@ -202,6 +261,26 @@ const CreateCampaign = () => {
   };
 
   /* =========================================
+     Quantidade creators (input sem spinner + permite vazio)
+  ========================================= */
+
+  const [creatorsNeededInput, setCreatorsNeededInput] = useState<string>(String(data.creatorsNeeded || 1));
+
+  useEffect(() => {
+    setCreatorsNeededInput(String(data.creatorsNeeded || 1));
+  }, [data.creatorsNeeded]);
+
+  const creatorsNeededNumber = useMemo(() => {
+    const raw = creatorsNeededInput.trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return null;
+    return clamp(Math.floor(n), 1, 50);
+  }, [creatorsNeededInput]);
+
+  const creatorsNeededOk = creatorsNeededNumber !== null && creatorsNeededNumber >= 1 && creatorsNeededNumber <= 50;
+
+  /* =========================================
      Localização (busca + mapa) + region completo
   ========================================= */
 
@@ -215,19 +294,14 @@ const CreateCampaign = () => {
 
   const autocompleteWrapRef = useRef<HTMLDivElement | null>(null);
 
-  const locationLabelFallback = useMemo(() => {
-    const c = (data.selectedCity || "").trim();
-    const s = (data.selectedState || "").trim();
-    if (c && s) return `${c}, ${s}`;
-    if (c) return c;
-    return "";
-  }, [data.selectedCity, data.selectedState]);
-
   const displayLocationLabel = useMemo(() => {
     const reg = (data.region || "").trim();
     if (reg) return reg;
-    return locationLabelFallback;
-  }, [data.region, locationLabelFallback]);
+    const c = (data.selectedCity || "").trim();
+    const s = (data.selectedState || "").trim();
+    if (c && s) return `${c}, ${s}`;
+    return c || "";
+  }, [data.region, data.selectedCity, data.selectedState]);
 
   useEffect(() => {
     if (!locationQuery && displayLocationLabel) setLocationQuery(displayLocationLabel);
@@ -240,7 +314,6 @@ const CreateCampaign = () => {
       if (!el) return;
       if (e.target instanceof Node && !el.contains(e.target)) setLocationOpen(false);
     };
-
     document.addEventListener("mousedown", onDown);
     document.addEventListener("touchstart", onDown);
     return () => {
@@ -305,9 +378,9 @@ const CreateCampaign = () => {
     const full = buildFullLocationLabel(item);
 
     updateData({
-      selectedCity: city || data.selectedCity || "",
-      selectedState: state || data.selectedState || "",
-      region: full, // ✅ completo
+      selectedCity: city || "",
+      selectedState: state || "",
+      region: full,
     });
 
     setLocationQuery(full);
@@ -391,7 +464,7 @@ const CreateCampaign = () => {
   }, [locationLat, locationLon]);
 
   /* =========================================
-     Período de campanha
+     Período
   ========================================= */
 
   const [periodOpen, setPeriodOpen] = useState(false);
@@ -430,10 +503,110 @@ const CreateCampaign = () => {
   };
 
   /* =========================================
+     Step 2: creators sugeridos + seleção
+  ========================================= */
+
+  const [creatorLoading, setCreatorLoading] = useState(false);
+  const [creatorList, setCreatorList] = useState<CreatorListItem[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+
+    const hasFilters = !!(data.selectedCity || "").trim() && !!(data.selectedState || "").trim() && selectedSegments.length > 0;
+
+    if (step !== 2) return;
+
+    if (!hasFilters) {
+      setCreatorList([]);
+      return;
+    }
+
+    (async () => {
+      try {
+        setCreatorLoading(true);
+
+        let q = supabase
+          .from("profiles")
+          .select("id, name, city, state, followers, content_style, approval_status, desired_role")
+          .eq("approval_status", "approved")
+          .eq("desired_role", "influencer")
+          .eq("state", data.selectedState)
+          .eq("city", data.selectedCity)
+          .limit(50);
+
+        const res = await q;
+        if (!alive) return;
+
+        if (res.error) throw res.error;
+
+        const rows = (res.data as any[] | null) ?? [];
+
+        const segsLower = selectedSegments.map((s) => s.toLowerCase());
+        const filtered = rows.filter((r) => {
+          const cs = String(r?.content_style ?? "").toLowerCase();
+          if (!cs) return false;
+          return segsLower.some((s) => cs.includes(s));
+        });
+
+        setCreatorList(filtered.slice(0, 30));
+      } catch (e) {
+        console.error("CREATORS_SUGGEST_ERROR", e);
+        setCreatorList([]);
+      } finally {
+        if (alive) setCreatorLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [step, data.selectedCity, data.selectedState, selectedSegments]);
+
+  const selectedCreatorIds = data.selectedCreatorIds || [];
+
+  const selectedCreators = useMemo(() => {
+    const map = new Map(creatorList.map((c) => [c.id, c]));
+    return selectedCreatorIds.map((id) => map.get(id)).filter(Boolean) as CreatorListItem[];
+  }, [creatorList, selectedCreatorIds]);
+
+  const currentLimit = creatorsNeededNumber ?? data.creatorsNeeded ?? 1;
+
+  const toggleSelectCreator = (id: string) => {
+    const current = selectedCreatorIds.slice();
+    const exists = current.includes(id);
+
+    // se o usuário digitou um número válido, persistimos antes de selecionar
+    if (creatorsNeededNumber !== null && creatorsNeededNumber !== data.creatorsNeeded) {
+      updateData({ creatorsNeeded: creatorsNeededNumber });
+    }
+
+    const limit = creatorsNeededNumber ?? data.creatorsNeeded ?? 1;
+
+    if (exists) {
+      updateData({ selectedCreatorIds: current.filter((x) => x !== id) });
+      return;
+    }
+
+    if (current.length >= limit) {
+      toast.error(`Você já selecionou ${limit} creator${limit > 1 ? "s" : ""}. Aumente a quantidade para selecionar mais.`);
+      return;
+    }
+
+    updateData({ selectedCreatorIds: [...current, id] });
+  };
+
+  const removeSelectedCreator = (id: string) => {
+    updateData({ selectedCreatorIds: selectedCreatorIds.filter((x) => x !== id) });
+  };
+
+  const openCreatorProfile = (id: string) => {
+    window.open(`${PUBLIC_PROFILE_ROUTE_PREFIX}/${id}`, "_blank", "noopener,noreferrer");
+  };
+
+  /* =========================================
      Validations
   ========================================= */
 
-  // Step 1
   const canStep2 =
     data.title &&
     data.campaignType &&
@@ -443,11 +616,15 @@ const CreateCampaign = () => {
     data.applyDeadline &&
     selectedObjectives.length > 0;
 
-  // Step 2
-  const creatorsNeededOk = Number.isFinite(Number(data.creatorsNeeded)) && data.creatorsNeeded >= 1 && data.creatorsNeeded <= 50;
-  const canStep3 = selectedSegments.length > 0 && creatorsNeededOk;
+  const desiredCountOk = Number.isFinite(Number(currentLimit)) && currentLimit >= 1 && currentLimit <= 50;
 
-  // Publish
+  const canStep3 =
+    selectedSegments.length > 0 &&
+    creatorsNeededOk &&
+    desiredCountOk &&
+    selectedCreatorIds.length > 0 &&
+    selectedCreatorIds.length <= currentLimit;
+
   const canPublish = canStep2 && canStep3;
 
   /* =========================================
@@ -478,16 +655,16 @@ const CreateCampaign = () => {
 
     try {
       const region = (data.region || "").trim() || `${data.selectedCity}, ${data.selectedState}`;
+      const creatorsNeededFinal = creatorsNeededNumber ?? data.creatorsNeeded ?? 1;
 
-      // ✅ requirements agora carrega os novos campos
       const requirements = {
         posts: data.posts,
         format: data.format,
         hashtags: data.hashtags ? data.hashtags.split(",").map((h) => h.trim()) : [],
         mentions: data.mentions ? data.mentions.split(",").map((m) => m.trim()) : [],
-
-        creators_needed: data.creatorsNeeded,
-        content_segments: selectedSegments, // array
+        creators_needed: creatorsNeededFinal,
+        content_segments: selectedSegments,
+        selected_creator_ids: selectedCreatorIds,
       };
 
       const { data: campaignId, error: campaignError } = await supabase.rpc("create_campaign", {
@@ -530,6 +707,11 @@ const CreateCampaign = () => {
 
       toast.success("Campanha publicada com sucesso!");
       resetData();
+      try {
+        localStorage.removeItem(STEP_STORAGE_KEY);
+      } catch {
+        // ignore
+      }
       navigate("/dashboard-contratante");
     } catch (error: any) {
       console.error("CREATE_CAMPAIGN_ERROR", error);
@@ -646,11 +828,8 @@ const CreateCampaign = () => {
               )}
             </div>
 
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <div className="text-muted-foreground">
-                Localização selecionada:
-                <span className="ml-2 text-foreground font-medium">{displayLocationLabel || "—"}</span>
-              </div>
+            <div className="text-xs text-muted-foreground">
+              Localização selecionada: <span className="text-foreground font-medium">{displayLocationLabel || "—"}</span>
             </div>
 
             <div className="rounded-2xl overflow-hidden border border-border/50 bg-card/60">
@@ -798,7 +977,7 @@ const CreateCampaign = () => {
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Requisitos da campanha</h3>
 
-          {/* Segmento do conteúdo */}
+          {/* Segmento */}
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Layers className="w-4 h-4 text-primary" />
@@ -830,7 +1009,7 @@ const CreateCampaign = () => {
             </div>
           </div>
 
-          {/* Quantidade de creators */}
+          {/* Quantidade */}
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Users className="w-4 h-4 text-primary" />
@@ -838,24 +1017,139 @@ const CreateCampaign = () => {
             </div>
 
             <input
-              type="number"
-              min={1}
-              max={50}
-              value={data.creatorsNeeded}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={creatorsNeededInput}
               onChange={(e) => {
-                const n = Number(e.target.value);
-                const safe = Number.isFinite(n) ? Math.max(1, Math.min(50, Math.floor(n))) : 1;
-                updateData({ creatorsNeeded: safe });
+                const v = e.target.value;
+                if (v === "" || /^\d+$/.test(v)) setCreatorsNeededInput(v);
               }}
-              className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              onBlur={() => {
+                const safe = creatorsNeededNumber ?? 1;
+                updateData({ creatorsNeeded: safe });
+
+                // se reduziu, corta selecionados
+                const cut = selectedCreatorIds.slice(0, safe);
+                if (cut.length !== selectedCreatorIds.length) updateData({ selectedCreatorIds: cut });
+
+                setCreatorsNeededInput(String(safe));
+              }}
+              placeholder="Ex: 5"
+              className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30
+              [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
 
             <div className="mt-2 text-[11px] text-muted-foreground">
-              A campanha irá buscar até <span className="text-foreground font-medium">{data.creatorsNeeded}</span> creator{data.creatorsNeeded > 1 ? "s" : ""} com base nos filtros.
+              Limite: até <span className="text-foreground font-medium">50 creators</span>.{" "}
+              {creatorsNeededOk ? (
+                <>
+                  Você poderá selecionar até <span className="text-foreground font-medium">{currentLimit}</span>.
+                </>
+              ) : (
+                "Digite um número entre 1 e 50."
+              )}
             </div>
           </div>
 
-          {/* Briefing privado (mantém) */}
+          {/* Selecionados */}
+          <div className="glass-card p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators selecionados</div>
+              <div className="text-xs text-muted-foreground">
+                {selectedCreatorIds.length}/{currentLimit}
+              </div>
+            </div>
+
+            {selectedCreatorIds.length === 0 ? (
+              <div className="mt-3 text-sm text-muted-foreground">Nenhum creator selecionado ainda.</div>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selectedCreators.map((c) => (
+                  <div key={c.id} className="inline-flex items-center gap-2 rounded-xl border border-border/50 bg-white/5 px-3 py-2 text-sm">
+                    <span className="text-foreground font-medium truncate max-w-[170px]">{c.name || "Creator"}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeSelectedCreator(c.id)}
+                      className="p-1 rounded-lg hover:bg-white/10 text-muted-foreground"
+                      aria-label="Remover creator"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Lista sugerida */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators sugeridos</div>
+              {creatorLoading ? (
+                <div className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Carregando...
+                </div>
+              ) : null}
+            </div>
+
+            {(!data.selectedCity || !data.selectedState || selectedSegments.length === 0) ? (
+              <div className="glass-card p-4 text-sm text-muted-foreground">
+                Defina <span className="text-foreground font-medium">Localização</span> e pelo menos{" "}
+                <span className="text-foreground font-medium">1 segmento</span> para ver sugestões.
+              </div>
+            ) : creatorList.length === 0 && !creatorLoading ? (
+              <div className="glass-card p-4 text-sm text-muted-foreground">Nenhum creator encontrado para os filtros atuais.</div>
+            ) : (
+              <div className="space-y-2">
+                {creatorList.map((c) => {
+                  const selected = selectedCreatorIds.includes(c.id);
+
+                  const followersNum = (() => {
+                    const raw = String(c.followers ?? "").trim();
+                    if (!raw) return null;
+                    const n = Number(raw.replace(/[^\d]/g, ""));
+                    return Number.isFinite(n) && n > 0 ? n : null;
+                  })();
+
+                  const followersLabel = formatIGCount(followersNum);
+
+                  return (
+                    <div key={c.id} className={`glass-card p-3 flex items-center gap-3 transition ${selected ? "border-primary/60 bg-primary/5" : ""}`}>
+                      <button type="button" onClick={() => toggleSelectCreator(c.id)} className="flex-1 min-w-0 text-left">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-foreground truncate">{c.name || "Creator"}</div>
+                            <div className="text-[11px] text-muted-foreground truncate">
+                              {(c.city && c.state) ? `${c.city}, ${c.state}` : (c.city || c.state || "—")} • {followersLabel} seguidores
+                            </div>
+                          </div>
+
+                          <div className={`text-xs font-semibold px-2 py-1 rounded-lg border ${selected ? "border-primary/60 text-primary" : "border-border/50 text-muted-foreground"}`}>
+                            {selected ? "Selecionado" : "Selecionar"}
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openCreatorProfile(c.id)}
+                        className="p-2 rounded-xl hover:bg-white/5 text-muted-foreground"
+                        aria-label="Ver perfil"
+                        title="Ver perfil"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="text-[11px] text-muted-foreground">Clique em um creator para selecionar. Use o ícone ao lado para ver o perfil.</div>
+          </div>
+
+          {/* Briefing privado */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Briefing privado (só para confirmados)</label>
             <textarea
@@ -907,47 +1201,16 @@ const CreateCampaign = () => {
             </div>
           )}
 
-          <div className="glass-card p-4 space-y-2">
-            <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Resumo</h4>
-            <div className="space-y-1.5 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Título</span>
-                <span className="text-foreground font-medium truncate ml-4">{data.title}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Tipo</span>
-                <span className="text-foreground font-medium capitalize">{data.campaignType}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Local</span>
-                <span className="text-foreground font-medium truncate ml-4">{(data.region || "").trim() || "-"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Período</span>
-                <span className="text-foreground font-medium">{periodLabel ? periodLabel : "-"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Objetivos</span>
-                <span className="text-foreground font-medium truncate ml-4">
-                  {selectedObjectives.length ? selectedObjectives.join(", ") : "-"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Segmentos</span>
-                <span className="text-foreground font-medium truncate ml-4">
-                  {selectedSegments.length ? selectedSegments.join(", ") : "-"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Creators</span>
-                <span className="text-foreground font-medium">{data.creatorsNeeded}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Arquivos</span>
-                <span className="text-foreground font-medium">{files.length}</span>
-              </div>
-            </div>
-          </div>
+          <button
+            onClick={handlePublish}
+            disabled={!canPublish || isSubmitting}
+            className={`w-full py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
+              canPublish && !isSubmitting ? "bg-gradient-neon text-primary-foreground glow-blue" : "bg-secondary text-muted-foreground"
+            }`}
+          >
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            {isSubmitting ? "Publicando..." : "Publicar campanha"}
+          </button>
         </div>
       )}
 
@@ -969,21 +1232,8 @@ const CreateCampaign = () => {
           >
             Avançar
           </button>
-        ) : (
-          <button
-            onClick={handlePublish}
-            disabled={!canPublish || isSubmitting}
-            className={`flex-[2] py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
-              canPublish && !isSubmitting ? "bg-gradient-neon text-primary-foreground glow-blue" : "bg-secondary text-muted-foreground"
-            }`}
-          >
-            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-            {isSubmitting ? "Publicando..." : "Publicar campanha"}
-          </button>
-        )}
+        ) : null}
       </div>
     </MobileLayout>
   );
-};
-
-export default CreateCampaign;
+}
