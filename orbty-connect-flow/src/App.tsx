@@ -41,6 +41,8 @@ import NotFound from "./pages/NotFound";
 // (Opcional) mantém a tela antiga acessível pra você comparar durante migração
 import LegacyProfile from "@/pages/Profile";
 
+import ContractorPersonalData from "@/pages/profile/ContractorPersonalData";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -191,6 +193,15 @@ const App = () => (
                   <ProtectedRoute>
                     <PublicProfileKeyed />
                   </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/perfil-contratante/dados-pessoais"
+                element={
+                  <ProtectedRoute requiredRole="contractor">
+                     <ContractorPersonalData />
+                 </ProtectedRoute>
                 }
               />
 

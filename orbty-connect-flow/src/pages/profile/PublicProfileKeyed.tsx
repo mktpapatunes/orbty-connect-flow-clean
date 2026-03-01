@@ -1,9 +1,8 @@
 import { useParams } from "react-router-dom";
-import PublicProfile from "@/pages/profile/PublicProfile";
+import PublicProfile from "./PublicProfile";
 
 export default function PublicProfileKeyed() {
   const { id } = useParams<{ id: string }>();
-
-  // key força remount quando muda o :id
-  return <PublicProfile key={id || "public-profile"} />;
+  // Remonta o componente sempre que o :id mudar (zera estado anterior 100%)
+  return <PublicProfile key={id || "no-id"} />;
 }
