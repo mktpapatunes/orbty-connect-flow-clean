@@ -1,5 +1,4 @@
 // src/pages/profile/ContractorProfile.tsx
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
@@ -31,6 +30,7 @@ import {
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import CityUfPicker from "@/components/CityUfPicker";
 
 /* =========================
    UI helpers
@@ -474,6 +474,9 @@ export default function ContractorProfile() {
   const [orgOpen, setOrgOpen] = useState(false);
   const [orgSaving, setOrgSaving] = useState(false);
 
+  // ✅ NOVO: validação vinda do CityUfPicker
+  const [orgCityValid, setOrgCityValid] = useState(false);
+
   const [orgForm, setOrgForm] = useState({
     name: "",
     region_city: "",
@@ -492,7 +495,6 @@ export default function ContractorProfile() {
   useEffect(() => {
     if (!orgOpen) return;
 
-    // ✅ usar profile apenas como sugestão de preenchimento do FORM (não exibe isso na tela)
     setOrgForm({
       name: org?.name ?? "",
       region_city: org?.region_city ?? profile?.city ?? "",
@@ -507,6 +509,9 @@ export default function ContractorProfile() {
       address_complement: org?.address_complement ?? "",
       address_zip: org?.address_zip ?? "",
     });
+
+    // assume inválido até escolher
+    setOrgCityValid(false);
   }, [orgOpen, org, profile?.city, profile?.state]);
 
   const isEditingOrg = !!org?.id;
@@ -517,13 +522,30 @@ export default function ContractorProfile() {
       return;
     }
 
+    // ✅ validação forte (IBGE) do local do negócio
+    const uf = (orgForm.region_state || "").trim().toUpperCase().slice(0, 2);
+    if (!uf || uf.length !== 2) {
+      toast.error("Informe uma UF válida (ex: SP, RJ).");
+      return;
+    }
+
+    if (!orgForm.region_city?.trim()) {
+      toast.error("Cidade é obrigatória.");
+      return;
+    }
+
+    if (!orgCityValid) {
+      toast.error("Selecione uma cidade válida (IBGE).");
+      return;
+    }
+
     setOrgSaving(true);
     try {
       if (!isEditingOrg) {
         await createMyOrganization({
           name: orgForm.name.trim(),
           region_city: orgForm.region_city.trim() || undefined,
-          region_state: orgForm.region_state.trim() || undefined,
+          region_state: uf || undefined,
           business_category: orgForm.business_category.trim() || undefined,
           product_or_brand: orgForm.product_or_brand.trim() || undefined,
           website_url: orgForm.website_url.trim() || undefined,
@@ -542,7 +564,7 @@ export default function ContractorProfile() {
           .update({
             name: orgForm.name.trim(),
             region_city: orgForm.region_city.trim() || null,
-            region_state: orgForm.region_state.trim() || null,
+            region_state: uf || null,
             business_category: orgForm.business_category.trim() || null,
             product_or_brand: orgForm.product_or_brand.trim() || null,
             website_url: orgForm.website_url.trim() || null,
@@ -622,12 +644,8 @@ export default function ContractorProfile() {
     return PRODUCTS_BY_CATEGORY[orgForm.business_category] || [];
   }, [orgForm.business_category]);
 
-  /* -------------------------
-     Render
-  ------------------------- */
   return (
     <MobileLayout title="Meu negócio" showBack navType="contractor">
-      {/* ✅ Enquanto carrega o contexto, NÃO renderiza nada de “pessoa” */}
       {ctx?.loading ? (
         <div className="px-6 py-16 flex justify-center">
           <Loader2 className="w-7 h-7 animate-spin text-primary" />
@@ -680,7 +698,6 @@ export default function ContractorProfile() {
                     ) : null}
                   </div>
 
-                  {/* ✅ fixo: tipo de conta/painel */}
                   <div className="mt-0.5 text-xs text-muted-foreground">Marca/Negócios</div>
 
                   <div className="mt-2 text-sm text-foreground/90 leading-relaxed">
@@ -774,7 +791,7 @@ export default function ContractorProfile() {
             <MicroChip icon={<Package className="w-4 h-4" />} label="Produto" value={product} title={product} />
           </div>
 
-          {/* ✅ MINHAS CAMPANHAS (minimalista) */}
+          {/* MINHAS CAMPANHAS */}
           <button
             type="button"
             onClick={() => navigate("/historico")}
@@ -834,36 +851,30 @@ export default function ContractorProfile() {
                     <Input value={orgForm.name} onChange={(e) => setOrgForm((s) => ({ ...s, name: e.target.value }))} className="text-sm" />
                   </div>
 
-                  {/* ✅ BIO com limite de caracteres (sem mostrar número) */}
+                  {/* BIO */}
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Descrição (bio)</Label>
                     <Input
                       value={orgForm.bio}
                       maxLength={28}
-                      onChange={(e) =>
-                        setOrgForm((s) => ({
-                          ...s,
-                          bio: e.target.value.slice(0, 28),
-                        }))
-                      }
+                      onChange={(e) => setOrgForm((s) => ({ ...s, bio: e.target.value.slice(0, 28) }))}
                       placeholder="Uma descrição curta do seu negócio"
                       className="text-sm"
                     />
-                    <div className="text-[11px] text-muted-foreground">
-                      Há um limite de caracteres para a bio.
-                    </div>
+                    <div className="text-[11px] text-muted-foreground">Há um limite de caracteres para a bio.</div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Cidade</Label>
-                      <Input value={orgForm.region_city} onChange={(e) => setOrgForm((s) => ({ ...s, region_city: e.target.value }))} className="text-sm" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Estado</Label>
-                      <Input value={orgForm.region_state} onChange={(e) => setOrgForm((s) => ({ ...s, region_state: e.target.value }))} className="text-sm" />
-                    </div>
-                  </div>
+                  {/* ✅ NOVO: Localização padronizada (UF + cidade IBGE) */}
+                  <CityUfPicker
+                    uf={orgForm.region_state}
+                    city={orgForm.region_city}
+                    required
+                    labels={{ uf: "Estado (UF)", city: "Cidade" }}
+                    onChange={({ uf, city, cityValid }) => {
+                      setOrgForm((s) => ({ ...s, region_state: uf, region_city: city }));
+                      setOrgCityValid(cityValid);
+                    }}
+                  />
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">

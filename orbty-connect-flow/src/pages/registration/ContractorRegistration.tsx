@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { User, Mail, Phone, MapPin, ChevronRight, Lock, Loader2 } from "lucide-react";
+import { User, Mail, Phone, ChevronRight, Lock, Loader2 } from "lucide-react";
 import NetworkBackground from "@/components/NetworkBackground";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import CityUfPicker from "@/components/CityUfPicker";
 
 const ContractorRegistration = () => {
   const navigate = useNavigate();
@@ -15,11 +16,12 @@ const ContractorRegistration = () => {
     email: "",
     password: "",
     phone: "",
+    inviteCode: "",
     city: "",
     state: "",
-    inviteCode: "",
   });
 
+  const [cityValid, setCityValid] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
 
@@ -36,14 +38,21 @@ const ContractorRegistration = () => {
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
+
     if (!form.name.trim()) newErrors.name = "Nome é obrigatório";
+
     if (!form.email.trim()) newErrors.email = "Email é obrigatório";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) newErrors.email = "Email inválido";
+
     if (!form.password.trim()) newErrors.password = "Senha é obrigatória";
     else if (form.password.length < 6) newErrors.password = "Senha deve ter no mínimo 6 caracteres";
+
     if (!form.phone.trim()) newErrors.phone = "Telefone é obrigatório";
+
+    if (!form.state.trim() || form.state.trim().length !== 2) newErrors.state = "UF inválida (ex: SP, RJ)";
     if (!form.city.trim()) newErrors.city = "Cidade é obrigatória";
-    if (!form.state.trim()) newErrors.state = "Estado é obrigatório";
+    if (!cityValid) newErrors.city = "Selecione uma cidade válida na lista (IBGE)";
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -57,9 +66,12 @@ const ContractorRegistration = () => {
       email: form.email,
       phone: form.phone,
       city: form.city,
-      state: form.state,
-      inviteCode: form.inviteCode,
-    });
+      state: form.state, // ✅ UF
+      inviteCode: form.inviteCode || undefined,
+
+      // ✅ FIX: garantir desired_role preenchido
+      desired_role: "contractor",
+    } as any);
 
     if (result.error) {
       const errLower = result.error.toLowerCase();
@@ -79,17 +91,17 @@ const ContractorRegistration = () => {
       toast.success("Cadastro realizado com sucesso!");
       navigate("/aguardando-aprovacao");
     }
+
+    setIsLoading(false);
   };
 
-  const canProceed = form.name && form.email && form.password && form.phone && form.city && form.state;
+  const canProceed = form.name && form.email && form.password && form.phone && form.city && form.state && cityValid;
 
   const fields = [
     { key: "name", label: "Nome completo", icon: User, placeholder: "Seu nome ou nome da empresa", type: "text" },
     { key: "email", label: "Email", icon: Mail, placeholder: "seu@email.com", type: "email" },
     { key: "password", label: "Senha", icon: Lock, placeholder: "Mínimo 6 caracteres", type: "password" },
     { key: "phone", label: "Telefone / WhatsApp", icon: Phone, placeholder: "(00) 00000-0000", type: "tel" },
-    { key: "city", label: "Cidade", icon: MapPin, placeholder: "Sua cidade", type: "text" },
-    { key: "state", label: "Estado", icon: MapPin, placeholder: "Seu estado", type: "text" },
     { key: "inviteCode", label: "Código de convite (opcional)", icon: User, placeholder: "Ex: ORBTY2026", type: "text" },
   ];
 
@@ -139,20 +151,47 @@ const ContractorRegistration = () => {
               <field.icon className="w-3.5 h-3.5" />
               {field.label}
             </label>
+
             <input
               type={field.type}
-              value={form[field.key as keyof typeof form]}
+              value={form[field.key as keyof typeof form] as any}
               onChange={(e) => updateField(field.key, e.target.value)}
               placeholder={field.placeholder}
               className={`w-full bg-input border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all ${
                 errors[field.key] ? "border-destructive/60" : "border-border/50"
               }`}
             />
-            {errors[field.key] && (
-              <p className="text-xs text-destructive mt-1">{errors[field.key]}</p>
-            )}
+
+            {errors[field.key] && <p className="text-xs text-destructive mt-1">{errors[field.key]}</p>}
           </motion.div>
         ))}
+
+        {/* ✅ Localização padronizada */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 + fields.length * 0.08 }}
+        >
+          <CityUfPicker
+            uf={form.state}
+            city={form.city}
+            required
+            onChange={({ uf, city, cityValid }) => {
+              setForm((s) => ({ ...s, state: uf, city }));
+              setCityValid(cityValid);
+
+              setErrors((prev) => {
+                const next = { ...prev };
+                if (next.state) delete next.state;
+                if (next.city) delete next.city;
+                return next;
+              });
+            }}
+          />
+
+          {errors.state && <p className="text-xs text-destructive mt-1">{errors.state}</p>}
+          {errors.city && <p className="text-xs text-destructive mt-1">{errors.city}</p>}
+        </motion.div>
       </div>
 
       {/* Bottom CTA */}
@@ -162,9 +201,7 @@ const ContractorRegistration = () => {
             onClick={handleSubmit}
             disabled={!canProceed || isLoading}
             className={`w-full py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all duration-300 ${
-              canProceed && !isLoading
-                ? "bg-gradient-neon text-primary-foreground glow-blue"
-                : "bg-secondary text-muted-foreground"
+              canProceed && !isLoading ? "bg-gradient-neon text-primary-foreground glow-blue" : "bg-secondary text-muted-foreground"
             }`}
           >
             {isLoading ? (
@@ -176,6 +213,7 @@ const ContractorRegistration = () => {
               </>
             )}
           </button>
+
           <button
             onClick={() => navigate("/welcome")}
             className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"

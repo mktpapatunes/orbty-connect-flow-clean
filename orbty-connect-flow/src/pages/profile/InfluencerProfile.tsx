@@ -378,7 +378,7 @@ function AgeBarsCard(props: { data: Record<string, number> | null; buckets: stri
   const normalized = useMemo(() => {
     const raw = props.data || {};
     const values = props.buckets.map((k) => {
-      const v = Number(raw[k] ?? 0);
+      const v = Number((raw as any)[k] ?? 0);
       return Number.isFinite(v) ? Math.max(0, v) : 0;
     });
     const total = values.reduce((a, b) => a + b, 0);
@@ -807,6 +807,22 @@ export default function InfluencerProfile() {
   const femaleValue = clamp(Number(femaleInput || 0), 0, 100);
   const genderFromSlider = useMemo(() => clamp(Number(femaleValue), 0, 100), [femaleValue]);
 
+  // ✅ NOVO: helper para garantir lista IBGE carregada antes de validar
+  const ensureCitiesLoaded = async (uf: string) => {
+    const U = normalizeUF(uf);
+    if (!U || U.length !== 2) return [];
+    if (citiesCacheRef.current[U]?.length) return citiesCacheRef.current[U];
+
+    // fetch on-demand
+    if (cityFetchAbortRef.current) cityFetchAbortRef.current.abort();
+    const ac = new AbortController();
+    cityFetchAbortRef.current = ac;
+
+    const list = await fetchCitiesByUF(U, ac.signal);
+    citiesCacheRef.current[U] = list;
+    return list;
+  };
+
   const saveEditProfile = async () => {
     if (!profile?.id) return;
 
@@ -815,7 +831,30 @@ export default function InfluencerProfile() {
       return;
     }
 
+    // ✅ validação forte: UF + cidade IBGE
     const uf = normalizeUF(form.state);
+    if (!uf || uf.length !== 2) {
+      toast.error("Informe uma UF válida (ex: SP, RJ).");
+      return;
+    }
+
+    const city = (form.city || "").trim();
+    if (!city) {
+      toast.error("Cidade é obrigatória.");
+      return;
+    }
+
+    try {
+      const list = await ensureCitiesLoaded(uf);
+      if (!list.includes(city)) {
+        toast.error("Selecione uma cidade válida (IBGE).");
+        return;
+      }
+    } catch {
+      toast.error("Não foi possível validar a cidade agora. Tente novamente.");
+      return;
+    }
+
     const followersNum = Number(parseDigitsOnly(form.followers_digits) || 0);
 
     const female = clamp(Number(parseDigitsOnly(form.female_str) || 0), 0, 100);
@@ -835,8 +874,8 @@ export default function InfluencerProfile() {
         .from("profiles")
         .update({
           name: form.name.trim(),
-          state: uf || null,
-          city: form.city.trim() || null,
+          state: uf || null, // ✅ sempre UF
+          city: city || null, // ✅ cidade IBGE
           neighborhood: form.neighborhood.trim() || null,
           bio: form.bio.trim() || null,
 
@@ -952,7 +991,6 @@ export default function InfluencerProfile() {
                   ) : null}
                 </div>
 
-                {/* ✅ FIXO: Creator (cinza) */}
                 <div className="mt-0.5 text-xs text-muted-foreground">Creator</div>
 
                 <div className="mt-2 text-sm text-foreground/90 leading-relaxed">
@@ -1037,7 +1075,7 @@ export default function InfluencerProfile() {
           />
         </div>
 
-        {/* ✅ MINHAS CAMPANHAS (AGORA AQUI: ACIMA DE AUDIÊNCIA) */}
+        {/* MINHAS CAMPANHAS */}
         <button
           type="button"
           onClick={() => navigate("/historico")}
@@ -1172,6 +1210,10 @@ export default function InfluencerProfile() {
                           <option key={c} value={c} />
                         ))}
                       </datalist>
+
+                      <div className="text-[11px] text-muted-foreground">
+                        Selecione uma cidade válida (IBGE). Ao salvar, o app valida automaticamente.
+                      </div>
                     </div>
 
                     <div className="space-y-1.5">
@@ -1185,7 +1227,7 @@ export default function InfluencerProfile() {
                     </div>
                   </div>
 
-                  {/* ✅ BIO COM LIMITE 28 */}
+                  {/* BIO */}
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Bio</Label>
                     <Input
@@ -1197,9 +1239,7 @@ export default function InfluencerProfile() {
                       }}
                       className="text-sm"
                     />
-                    <div className="text-[11px] text-muted-foreground">
-                      Existe um limite de caracteres para este campo.
-                    </div>
+                    <div className="text-[11px] text-muted-foreground">Existe um limite de caracteres para este campo.</div>
                   </div>
                 </div>
 
