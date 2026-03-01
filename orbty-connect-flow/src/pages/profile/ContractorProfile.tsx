@@ -26,7 +26,6 @@ import {
   Package,
   Instagram,
   ArrowUpRight,
-  History as HistoryIcon,
   ChevronRight,
 } from "lucide-react";
 
@@ -276,21 +275,6 @@ const PRODUCTS_BY_CATEGORY: Record<string, string[]> = {
 };
 
 /* =========================
-   Types
-========================= */
-
-interface HistoryCampaign {
-  id: string;
-  title: string;
-  type: string;
-  city: string;
-  state: string;
-  campaign_date: string | null;
-  status: string;
-  created_at: string;
-}
-
-/* =========================
    Page
 ========================= */
 
@@ -299,7 +283,6 @@ export default function ContractorProfile() {
 
   // ⚠️ Mantém compatível
   const auth = useAuth() as any;
-  const user = auth?.user;
   const profile = auth?.profile;
   const userRole = auth?.userRole;
   const approvalStatus = auth?.approvalStatus;
@@ -352,55 +335,6 @@ export default function ContractorProfile() {
       if (logoRef.current) logoRef.current.value = "";
     }
   };
-
-  /* -------------------------
-     ✅ Minhas campanhas (preview)
-  ------------------------- */
-  const [myCampaigns, setMyCampaigns] = useState<HistoryCampaign[]>([]);
-  const [loadingMyCampaigns, setLoadingMyCampaigns] = useState(true);
-
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      if (!user?.id) {
-        if (!alive) return;
-        setMyCampaigns([]);
-        setLoadingMyCampaigns(false);
-        return;
-      }
-
-      setLoadingMyCampaigns(true);
-
-      try {
-        const { data, error } = await supabase
-          .from("campaigns")
-          .select("id,title,type,city,state,campaign_date,status,created_at")
-          .eq("created_by", user.id)
-          .order("created_at", { ascending: false })
-          .limit(3);
-
-        if (!alive) return;
-
-        if (error) {
-          console.warn("MY_CAMPAIGNS_PREVIEW_ERROR", error);
-          setMyCampaigns([]);
-        } else {
-          setMyCampaigns((data || []) as unknown as HistoryCampaign[]);
-        }
-      } catch (e) {
-        if (!alive) return;
-        console.warn("MY_CAMPAIGNS_PREVIEW_UNEXPECTED", e);
-        setMyCampaigns([]);
-      } finally {
-        if (alive) setLoadingMyCampaigns(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [user?.id]);
 
   /* -------------------------
      Métricas campanhas
@@ -837,60 +771,17 @@ export default function ContractorProfile() {
             <MicroChip icon={<Package className="w-4 h-4" />} label="Produto" value={product} title={product} />
           </div>
 
-          {/* ✅ MINHAS CAMPANHAS (NOVO) */}
-          <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <HistoryIcon className="w-4 h-4 text-primary" />
-                <div className="text-sm font-semibold text-foreground">Minhas campanhas</div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => navigate("/historico")}
-                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold bg-gradient-neon text-primary-foreground glow-blue active:scale-[0.99]"
-              >
-                Ver histórico
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            {loadingMyCampaigns ? (
-              <div className="flex justify-center py-2">
-                <Loader2 className="w-4 h-4 text-primary animate-spin" />
-              </div>
-            ) : myCampaigns.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Você ainda não criou campanhas.</div>
-            ) : (
-              <div className="space-y-2">
-                {myCampaigns.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => navigate(`/campanha/${c.id}`)}
-                    className="w-full rounded-2xl border border-border/50 bg-white/5 px-4 py-3 text-left transition
-                    hover:bg-white/10 hover:shadow-sm active:scale-[0.99]"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-foreground truncate">{c.title || "Campanha"}</div>
-                        <div className="mt-1 text-xs text-muted-foreground capitalize">
-                          {c.type || "—"} · {c.city}, {c.state}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground capitalize">{c.status || "—"}</span>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="text-xs text-muted-foreground">Toque em uma campanha para abrir os detalhes.</div>
-          </div>
+          {/* ✅ MINHAS CAMPANHAS (minimalista) */}
+          <button
+            type="button"
+            onClick={() => navigate("/historico")}
+            className="w-full rounded-2xl bg-gradient-neon text-primary-foreground glow-blue
+            px-5 py-4 font-semibold text-base flex items-center justify-between
+            active:scale-[0.99] transition"
+          >
+            <span>Minhas campanhas</span>
+            <ChevronRight className="w-5 h-5 opacity-90" />
+          </button>
 
           {/* ATIVAÇÕES E CAMPANHAS */}
           <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] space-y-3">
@@ -976,11 +867,7 @@ export default function ContractorProfile() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Complemento</Label>
-                      <Input
-                        value={orgForm.address_complement}
-                        onChange={(e) => setOrgForm((s) => ({ ...s, address_complement: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={orgForm.address_complement} onChange={(e) => setOrgForm((s) => ({ ...s, address_complement: e.target.value }))} className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">CEP</Label>
