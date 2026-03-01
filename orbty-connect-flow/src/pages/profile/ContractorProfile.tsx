@@ -680,10 +680,8 @@ export default function ContractorProfile() {
                     ) : null}
                   </div>
 
-                  {/* ✅ NOVO: tipo fixo do painel */}
-                  <div className="mt-1 text-xs font-medium text-primary/90 tracking-wide">
-                    Marca/Negócios
-                  </div>
+                  {/* ✅ fixo: tipo de conta/painel */}
+                  <div className="mt-1 text-xs font-medium text-primary/90 tracking-wide">Marca/Negócios</div>
 
                   <div className="mt-2 text-sm text-foreground/90 leading-relaxed">
                     {headerBio ? (
@@ -836,15 +834,27 @@ export default function ContractorProfile() {
                     <Input value={orgForm.name} onChange={(e) => setOrgForm((s) => ({ ...s, name: e.target.value }))} className="text-sm" />
                   </div>
 
+                  {/* ✅ BIO com limite de caracteres (sem mostrar número) */}
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Descrição (bio)</Label>
                     <Input
                       value={orgForm.bio}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, bio: e.target.value }))}
+                      maxLength={28}
+                      onChange={(e) =>
+                        setOrgForm((s) => ({
+                          ...s,
+                          bio: e.target.value.slice(0, 28),
+                        }))
+                      }
                       placeholder="Uma descrição curta do seu negócio"
                       className="text-sm"
                     />
-                    <div className="text-[11px] text-muted-foreground">O header mostra no máximo 3 linhas (use uma descrição curta).</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Há um limite de caracteres para a bio.
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      O header mostra no máximo 3 linhas (use uma descrição curta).
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
