@@ -551,7 +551,6 @@ const CreateCampaign = () => {
                 );
               })}
             </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">Dica: clique novamente no tipo selecionado para remover.</p>
           </div>
 
           {/* Localização */}
