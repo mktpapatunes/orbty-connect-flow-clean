@@ -1,5 +1,6 @@
+// src/pages/profile/ContractorProfile.tsx
+
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,7 +25,6 @@ import {
   Package,
   Instagram,
   ArrowUpRight,
-  Lock,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -277,15 +277,13 @@ const PRODUCTS_BY_CATEGORY: Record<string, string[]> = {
 ========================= */
 
 export default function ContractorProfile() {
-  const navigate = useNavigate();
-
   // ⚠️ Mantém compatível
   const auth = useAuth() as any;
   const profile = auth?.profile;
   const userRole = auth?.userRole;
   const approvalStatus = auth?.approvalStatus;
 
-  const ctx = useMyProfileContext();
+  const ctx = useMyProfileContext() as any;
   const org = (ctx.data as any)?.organization;
 
   const isVerifiedContractor = userRole === "contractor" && approvalStatus === "approved";
@@ -490,6 +488,7 @@ export default function ContractorProfile() {
   useEffect(() => {
     if (!orgOpen) return;
 
+    // ✅ usar profile apenas como sugestão de preenchimento do FORM (não exibe isso na tela)
     setOrgForm({
       name: org?.name ?? "",
       region_city: org?.region_city ?? profile?.city ?? "",
@@ -567,17 +566,19 @@ export default function ContractorProfile() {
   };
 
   /* -------------------------
-     Dados exibidos
+     Dados exibidos (SÓ DO NEGÓCIO)
+     -> evita o flash de “perfil pessoal”
   ------------------------- */
-  const title = useMemo(() => org?.name || profile?.name || "Meu negócio", [org?.name, profile?.name]);
+
+  const title = useMemo(() => org?.name || "Meu negócio", [org?.name]);
 
   const locationLabel = useMemo(() => {
-    const city = org?.region_city || profile?.city;
-    const state = org?.region_state || profile?.state;
+    const city = org?.region_city;
+    const state = org?.region_state;
     if (city && state) return `${city}, ${state}`;
     if (city) return city;
     return "—";
-  }, [org?.region_city, org?.region_state, profile?.city, profile?.state]);
+  }, [org?.region_city, org?.region_state]);
 
   const website = useMemo(() => safeUrl(org?.website_url), [org?.website_url]);
   const openWebsite = () => {
@@ -589,13 +590,15 @@ export default function ContractorProfile() {
   const igRaw = buildInstagramLinks(igHandle)?.raw ?? null;
 
   const openMaps = () => {
+    if (!org) return;
+
     const parts = [
       org?.address_street,
       org?.address_number,
       org?.address_complement,
       org?.address_zip,
-      org?.region_city || profile?.city,
-      org?.region_state || profile?.state,
+      org?.region_city,
+      org?.region_state,
     ]
       .map((x: any) => (x || "").toString().trim())
       .filter(Boolean);
@@ -616,192 +619,191 @@ export default function ContractorProfile() {
     return PRODUCTS_BY_CATEGORY[orgForm.business_category] || [];
   }, [orgForm.business_category]);
 
+  /* -------------------------
+     Render
+  ------------------------- */
   return (
     <MobileLayout title="Meu negócio" showBack navType="contractor">
-      <div className="px-6 py-6 space-y-6">
-        {/* HEADER PREMIUM */}
-        <div className="relative overflow-hidden rounded-3xl border border-border/50 bg-white/5 shadow-sm">
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5" />
-            <div className="absolute inset-0 opacity-[0.06] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:16px_16px]" />
+      {/* ✅ Enquanto carrega o contexto, NÃO renderiza nada de “pessoa” */}
+      {ctx?.loading ? (
+        <div className="px-6 py-16 flex justify-center">
+          <Loader2 className="w-7 h-7 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="px-6 py-6 space-y-6">
+          {/* HEADER PREMIUM */}
+          <div className="relative overflow-hidden rounded-3xl border border-border/50 bg-white/5 shadow-sm">
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5" />
+              <div className="absolute inset-0 opacity-[0.06] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:16px_16px]" />
+            </div>
+
+            <div className="relative p-5">
+              <div className="flex items-start gap-4">
+                {/* Logo */}
+                <div className="relative shrink-0">
+                  <div className="absolute -inset-2 rounded-3xl bg-primary/10 blur-lg opacity-60" />
+                  <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-primary/20 bg-white/5 flex items-center justify-center">
+                    {org?.logo_url ? (
+                      <img src={org.logo_url} alt="Logo" className="w-full h-full object-cover block" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="text-primary font-bold">{initials(title)}</span>
+                    )}
+                  </div>
+
+                  <div className="pointer-events-none absolute inset-0 rounded-3xl ring-2 ring-white/10" />
+
+                  <button
+                    type="button"
+                    onClick={handlePickLogo}
+                    disabled={logoUploading || !org?.id}
+                    className="absolute -bottom-2 -right-2 w-9 h-9 rounded-full bg-primary flex items-center justify-center disabled:opacity-60 shadow-md"
+                    title="Trocar logo"
+                  >
+                    {logoUploading ? (
+                      <Loader2 className="w-4 h-4 text-primary-foreground animate-spin" />
+                    ) : (
+                      <ImagePlus className="w-4 h-4 text-primary-foreground" />
+                    )}
+                  </button>
+
+                  <input ref={logoRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleLogoFile(e.target.files?.[0])} />
+                </div>
+
+                {/* Infos */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h1 className="text-xl font-semibold text-foreground leading-tight break-words">{title}</h1>
+                    {isVerifiedContractor ? (
+                      <span className="shrink-0">
+                        <ContractorVerifiedBadge />
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-2 text-sm text-foreground/90 leading-relaxed">
+                    {headerBio ? (
+                      <>
+                        <span className="line-clamp-3">{headerBio}</span>
+                        {showBioMore ? (
+                          <button type="button" onClick={() => setBioOpen(true)} className="mt-1 text-xs text-primary hover:opacity-90 transition">
+                            Ver mais
+                          </button>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">Adicione uma descrição do seu negócio.</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* ações (editar + instagram) */}
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <IconButton
+                  icon={<Pencil className="w-4 h-4" />}
+                  label={org ? "Editar negócio" : "Criar negócio"}
+                  onClick={() => setOrgOpen(true)}
+                  className="w-full justify-center"
+                />
+
+                <IconButton
+                  icon={<Instagram className="w-4 h-4" />}
+                  label={igRaw ? `@${igRaw}` : "Instagram"}
+                  onClick={() => openInstagram(igHandle)}
+                  disabled={!igRaw}
+                  className="w-full justify-center"
+                />
+              </div>
+
+              {/* botão full: Site */}
+              <button
+                type="button"
+                onClick={openWebsite}
+                disabled={!website}
+                className={`mt-3 w-full rounded-xl border px-3 py-2 text-sm transition flex items-center justify-center gap-2 ${
+                  website ? "border-border/50 bg-white/5 hover:bg-white/10" : "border-border/30 bg-white/5 opacity-60"
+                }`}
+                title={website ? "Abrir site em nova aba" : "Informe o site no Editar negócio"}
+              >
+                <Globe className="w-4 h-4 text-primary" />
+                Site
+              </button>
+
+              {!org && (
+                <div className="mt-3 text-xs text-muted-foreground">
+                  Para exibir o negócio completo e permitir envio de logo, crie o perfil do seu negócio.
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="relative p-5">
-            <div className="flex items-start gap-4">
-              {/* Logo */}
-              <div className="relative shrink-0">
-                <div className="absolute -inset-2 rounded-3xl bg-primary/10 blur-lg opacity-60" />
-                <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-primary/20 bg-white/5 flex items-center justify-center">
-                  {org?.logo_url ? (
-                    <img src={org.logo_url} alt="Logo" className="w-full h-full object-cover block" referrerPolicy="no-referrer" />
-                  ) : (
-                    <span className="text-primary font-bold">{initials(title)}</span>
-                  )}
+          {/* MODAL Bio */}
+          {bioOpen && (
+            <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
+              <div className="absolute inset-0 bg-black/60" onMouseDown={() => setBioOpen(false)} />
+              <div
+                className="relative w-full md:max-w-lg rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold text-foreground">Sobre</div>
+                  <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => setBioOpen(false)} type="button">
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-
-                <div className="pointer-events-none absolute inset-0 rounded-3xl ring-2 ring-white/10" />
-
-                <button
-                  type="button"
-                  onClick={handlePickLogo}
-                  disabled={logoUploading || !org?.id}
-                  className="absolute -bottom-2 -right-2 w-9 h-9 rounded-full bg-primary flex items-center justify-center disabled:opacity-60 shadow-md"
-                  title="Trocar logo"
-                >
-                  {logoUploading ? (
-                    <Loader2 className="w-4 h-4 text-primary-foreground animate-spin" />
-                  ) : (
-                    <ImagePlus className="w-4 h-4 text-primary-foreground" />
-                  )}
-                </button>
-
-                <input ref={logoRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleLogoFile(e.target.files?.[0])} />
-              </div>
-
-              {/* Infos */}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 min-w-0">
-                  <h1 className="text-xl font-semibold text-foreground leading-tight break-words">{title}</h1>
-                  {isVerifiedContractor ? (
-                    <span className="shrink-0">
-                      <ContractorVerifiedBadge />
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="mt-2 text-sm text-foreground/90 leading-relaxed">
-                  {headerBio ? (
-                    <>
-                      <span className="line-clamp-3">{headerBio}</span>
-                      {showBioMore ? (
-                        <button type="button" onClick={() => setBioOpen(true)} className="mt-1 text-xs text-primary hover:opacity-90 transition">
-                          Ver mais
-                        </button>
-                      ) : null}
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground">Adicione uma descrição do seu negócio.</span>
-                  )}
-                </div>
+                <div className="mt-3 text-sm text-foreground leading-relaxed whitespace-pre-line">{headerBio}</div>
               </div>
             </div>
+          )}
 
-            {/* ações (editar + instagram) */}
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <IconButton
-                icon={<Pencil className="w-4 h-4" />}
-                label={org ? "Editar negócio" : "Criar negócio"}
-                onClick={() => setOrgOpen(true)}
-                className="w-full justify-center"
-              />
+          {/* 3 CHIPS */}
+          <div className="grid grid-cols-3 gap-2">
+            <MicroChip
+              icon={<MapPin className="w-4 h-4" />}
+              label="Localização"
+              value={locationLabel}
+              title={org ? "Abrir no Google Maps" : "Crie o negócio para habilitar"}
+              onClick={org ? openMaps : undefined}
+              clickable={!!org}
+            />
+            <MicroChip icon={<Building2 className="w-4 h-4" />} label="Categoria" value={category} title={category} />
+            <MicroChip icon={<Package className="w-4 h-4" />} label="Produto" value={product} title={product} />
+          </div>
 
-              <IconButton
-                icon={<Instagram className="w-4 h-4" />}
-                label={igRaw ? `@${igRaw}` : "Instagram"}
-                onClick={() => openInstagram(igHandle)}
-                disabled={!igRaw}
-                className="w-full justify-center"
-              />
-            </div>
+          {/* ATIVAÇÕES E CAMPANHAS */}
+          <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] space-y-3">
+            <div className="text-sm font-semibold text-foreground text-center">Ativações e campanhas</div>
 
-            {/* botão full: Site */}
-            <button
-              type="button"
-              onClick={openWebsite}
-              disabled={!website}
-              className={`mt-3 w-full rounded-xl border px-3 py-2 text-sm transition flex items-center justify-center gap-2 ${
-                website ? "border-border/50 bg-white/5 hover:bg-white/10" : "border-border/30 bg-white/5 opacity-60"
-              }`}
-              title={website ? "Abrir site em nova aba" : "Informe o site no Editar negócio"}
-            >
-              <Globe className="w-4 h-4 text-primary" />
-              Site
-            </button>
-
-            {!org && (
-              <div className="mt-3 text-xs text-muted-foreground">
-                Para exibir o negócio completo e permitir envio de logo, crie o perfil do seu negócio.
+            {loadingMetrics ? (
+              <div className="flex justify-center py-2">
+                <Loader2 className="w-4 h-4 text-primary animate-spin" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <MetricCard label="Campanhas" value={metrics.total} icon={<Megaphone className="w-4 h-4 text-primary" />} />
+                <MetricCard label="Ativas" value={metrics.active} icon={<CircleDot className="w-4 h-4 text-primary" />} />
+                <MetricCard label="Concluídas" value={metrics.completed} icon={<CheckCircle2 className="w-4 h-4 text-primary" />} />
+                <MetricCard label="Encerradas" value={metrics.closed} icon={<FileText className="w-4 h-4 text-muted-foreground" />} />
               </div>
             )}
           </div>
-        </div>
 
-        {/* MODAL Bio */}
-        {bioOpen && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-            <div className="absolute inset-0 bg-black/60" onMouseDown={() => setBioOpen(false)} />
-            <div
-              className="relative w-full md:max-w-lg rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold text-foreground">Sobre</div>
-                <button className="p-2 rounded-xl hover:bg-white/5" onClick={() => setBioOpen(false)} type="button">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="mt-3 text-sm text-foreground leading-relaxed whitespace-pre-line">{headerBio}</div>
-            </div>
-          </div>
-        )}
+          {/* AVALIAÇÕES */}
+          <RatingsCard rating={ratingAvg} count={ratingCount} loading={loadingRatings} />
 
-        {/* 3 CHIPS */}
-        <div className="grid grid-cols-3 gap-2">
-          <MicroChip icon={<MapPin className="w-4 h-4" />} label="Localização" value={locationLabel} title="Abrir no Google Maps" onClick={openMaps} clickable />
-          <MicroChip icon={<Building2 className="w-4 h-4" />} label="Categoria" value={category} title={category} />
-          <MicroChip icon={<Package className="w-4 h-4" />} label="Produto" value={product} title={product} />
-        </div>
-
-        {/* ATIVAÇÕES E CAMPANHAS */}
-        <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] space-y-3">
-          <div className="text-sm font-semibold text-foreground text-center">Ativações e campanhas</div>
-
-          {loadingMetrics ? (
-            <div className="flex justify-center py-2">
-              <Loader2 className="w-4 h-4 text-primary animate-spin" />
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <MetricCard label="Campanhas" value={metrics.total} icon={<Megaphone className="w-4 h-4 text-primary" />} />
-              <MetricCard label="Ativas" value={metrics.active} icon={<CircleDot className="w-4 h-4 text-primary" />} />
-              <MetricCard label="Concluídas" value={metrics.completed} icon={<CheckCircle2 className="w-4 h-4 text-primary" />} />
-              <MetricCard label="Encerradas" value={metrics.closed} icon={<FileText className="w-4 h-4 text-muted-foreground" />} />
-            </div>
-          )}
-        </div>
-
-        {/* AVALIAÇÕES */}
-        <RatingsCard rating={ratingAvg} count={ratingCount} loading={loadingRatings} />
-
-        {/* Modal Criar/Editar negócio */}
-        {orgOpen && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-            <div className="absolute inset-0 bg-black/60" onMouseDown={() => (orgSaving ? null : setOrgOpen(false))} />
-            <div
-              className="relative w-full md:max-w-md rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* ✅ HEADER do modal com botão Dados pessoais */}
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-semibold text-foreground">{isEditingOrg ? "Editar negócio" : "Criar negócio"}</div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (orgSaving) return;
-                      setOrgOpen(false);
-                      navigate("/perfil-contratante/dados-pessoais");
-                    }}
-                    className="text-xs px-3 py-2 rounded-xl border border-border/50 bg-white/5 hover:bg-white/10 transition text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
-                    title="Abrir dados pessoais"
-                  >
-                    <Lock className="w-4 h-4" />
-                    Dados pessoais
-                  </button>
-
+          {/* Modal Criar/Editar negócio */}
+          {orgOpen && (
+            <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
+              <div className="absolute inset-0 bg-black/60" onMouseDown={() => (orgSaving ? null : setOrgOpen(false))} />
+              <div
+                className="relative w-full md:max-w-md rounded-t-3xl md:rounded-3xl border border-border/50 bg-background p-5"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold text-foreground">{isEditingOrg ? "Editar negócio" : "Criar negócio"}</div>
                   <button
                     className="p-2 rounded-xl hover:bg-white/5"
                     onClick={() => (orgSaving ? null : setOrgOpen(false))}
@@ -811,134 +813,161 @@ export default function ContractorProfile() {
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-              </div>
 
-              <div className="mt-4 space-y-4 max-h-[70vh] overflow-auto pr-1">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Nome do negócio *</Label>
-                  <Input value={orgForm.name} onChange={(e) => setOrgForm((s) => ({ ...s, name: e.target.value }))} className="text-sm" />
-                </div>
-
-                {/* BIO abaixo do nome */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Descrição (bio)</Label>
-                  <Input
-                    value={orgForm.bio}
-                    onChange={(e) => setOrgForm((s) => ({ ...s, bio: e.target.value }))}
-                    placeholder="Uma descrição curta do seu negócio"
-                    className="text-sm"
-                  />
-                  <div className="text-[11px] text-muted-foreground">O header mostra no máximo 3 linhas (use uma descrição curta).</div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
+                <div className="mt-4 space-y-4 max-h-[70vh] overflow-auto pr-1">
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Cidade</Label>
-                    <Input value={orgForm.region_city} onChange={(e) => setOrgForm((s) => ({ ...s, region_city: e.target.value }))} className="text-sm" />
+                    <Label className="text-xs text-muted-foreground">Nome do negócio *</Label>
+                    <Input value={orgForm.name} onChange={(e) => setOrgForm((s) => ({ ...s, name: e.target.value }))} className="text-sm" />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Estado</Label>
-                    <Input value={orgForm.region_state} onChange={(e) => setOrgForm((s) => ({ ...s, region_state: e.target.value }))} className="text-sm" />
-                  </div>
-                </div>
 
-                {/* Endereço (Maps) */}
-                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Rua</Label>
-                    <Input value={orgForm.address_street} onChange={(e) => setOrgForm((s) => ({ ...s, address_street: e.target.value }))} className="text-sm" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Número</Label>
-                    <Input value={orgForm.address_number} onChange={(e) => setOrgForm((s) => ({ ...s, address_number: e.target.value }))} className="text-sm" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Complemento</Label>
+                    <Label className="text-xs text-muted-foreground">Descrição (bio)</Label>
                     <Input
-                      value={orgForm.address_complement}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, address_complement: e.target.value }))}
+                      value={orgForm.bio}
+                      onChange={(e) => setOrgForm((s) => ({ ...s, bio: e.target.value }))}
+                      placeholder="Uma descrição curta do seu negócio"
+                      className="text-sm"
+                    />
+                    <div className="text-[11px] text-muted-foreground">O header mostra no máximo 3 linhas (use uma descrição curta).</div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Cidade</Label>
+                      <Input
+                        value={orgForm.region_city}
+                        onChange={(e) => setOrgForm((s) => ({ ...s, region_city: e.target.value }))}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Estado</Label>
+                      <Input
+                        value={orgForm.region_state}
+                        onChange={(e) => setOrgForm((s) => ({ ...s, region_state: e.target.value }))}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Rua</Label>
+                      <Input
+                        value={orgForm.address_street}
+                        onChange={(e) => setOrgForm((s) => ({ ...s, address_street: e.target.value }))}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Número</Label>
+                      <Input
+                        value={orgForm.address_number}
+                        onChange={(e) => setOrgForm((s) => ({ ...s, address_number: e.target.value }))}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Complemento</Label>
+                      <Input
+                        value={orgForm.address_complement}
+                        onChange={(e) => setOrgForm((s) => ({ ...s, address_complement: e.target.value }))}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">CEP</Label>
+                      <Input
+                        value={orgForm.address_zip}
+                        onChange={(e) => setOrgForm((s) => ({ ...s, address_zip: e.target.value }))}
+                        className="text-sm"
+                        inputMode="numeric"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Categoria</Label>
+                    <select
+                      value={orgForm.business_category}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const products = PRODUCTS_BY_CATEGORY[v] || [];
+                        setOrgForm((s) => ({
+                          ...s,
+                          business_category: v,
+                          product_or_brand: products.includes(s.product_or_brand) ? s.product_or_brand : "",
+                        }));
+                      }}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      <option value="">Selecione</option>
+                      {BUSINESS_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Produto</Label>
+                    <Input
+                      value={orgForm.product_or_brand}
+                      onChange={(e) => setOrgForm((s) => ({ ...s, product_or_brand: e.target.value }))}
+                      placeholder={productsForSelectedCategory.length ? "Selecione ou digite" : "Selecione a categoria primeiro"}
+                      className="text-sm"
+                      list="business-product-list"
+                      disabled={!orgForm.business_category}
+                    />
+                    <datalist id="business-product-list">
+                      {productsForSelectedCategory.map((p) => (
+                        <option key={p} value={p} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Instagram</Label>
+                    <Input
+                      value={orgForm.instagram}
+                      onChange={(e) => setOrgForm((s) => ({ ...s, instagram: e.target.value }))}
+                      placeholder="@seunegocio"
                       className="text-sm"
                     />
                   </div>
+
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">CEP</Label>
-                    <Input value={orgForm.address_zip} onChange={(e) => setOrgForm((s) => ({ ...s, address_zip: e.target.value }))} className="text-sm" inputMode="numeric" />
+                    <Label className="text-xs text-muted-foreground">Site</Label>
+                    <Input
+                      value={orgForm.website_url}
+                      onChange={(e) => setOrgForm((s) => ({ ...s, website_url: e.target.value }))}
+                      placeholder="https://..."
+                      className="text-sm"
+                    />
                   </div>
-                </div>
 
-                {/* Categoria */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Categoria</Label>
-                  <select
-                    value={orgForm.business_category}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      const products = PRODUCTS_BY_CATEGORY[v] || [];
-                      setOrgForm((s) => ({
-                        ...s,
-                        business_category: v,
-                        product_or_brand: products.includes(s.product_or_brand) ? s.product_or_brand : "",
-                      }));
-                    }}
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  <button
+                    onClick={handleSaveOrg}
+                    disabled={orgSaving}
+                    className="w-full py-3 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue flex items-center justify-center gap-2 disabled:opacity-60"
                   >
-                    <option value="">Selecione</option>
-                    {BUSINESS_CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                    {orgSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    {orgSaving ? "Salvando..." : "Salvar"}
+                  </button>
+
+                  <div className="text-xs text-muted-foreground">Este perfil representa seu negócio para influenciadores e para a Orbty.</div>
                 </div>
-
-                {/* Produto */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Produto</Label>
-                  <Input
-                    value={orgForm.product_or_brand}
-                    onChange={(e) => setOrgForm((s) => ({ ...s, product_or_brand: e.target.value }))}
-                    placeholder={productsForSelectedCategory.length ? "Selecione ou digite" : "Selecione a categoria primeiro"}
-                    className="text-sm"
-                    list="business-product-list"
-                    disabled={!orgForm.business_category}
-                  />
-                  <datalist id="business-product-list">
-                    {productsForSelectedCategory.map((p) => (
-                      <option key={p} value={p} />
-                    ))}
-                  </datalist>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Instagram</Label>
-                  <Input value={orgForm.instagram} onChange={(e) => setOrgForm((s) => ({ ...s, instagram: e.target.value }))} placeholder="@seunegocio" className="text-sm" />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Site</Label>
-                  <Input value={orgForm.website_url} onChange={(e) => setOrgForm((s) => ({ ...s, website_url: e.target.value }))} placeholder="https://..." className="text-sm" />
-                </div>
-
-                <button
-                  onClick={handleSaveOrg}
-                  disabled={orgSaving}
-                  className="w-full py-3 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue flex items-center justify-center gap-2 disabled:opacity-60"
-                >
-                  {orgSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {orgSaving ? "Salvando..." : "Salvar"}
-                </button>
-
-                <div className="text-xs text-muted-foreground">Este perfil representa seu negócio para influenciadores e para a Orbty.</div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {ctx.error && <div className="text-xs text-muted-foreground">Erro ao carregar contexto premium: {String(ctx.error)}</div>}
-      </div>
+          {ctx.error && <div className="text-xs text-muted-foreground">Erro ao carregar contexto premium: {String(ctx.error)}</div>}
+        </div>
+      )}
     </MobileLayout>
   );
 }
