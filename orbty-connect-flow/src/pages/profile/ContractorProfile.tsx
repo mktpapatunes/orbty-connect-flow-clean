@@ -680,6 +680,11 @@ export default function ContractorProfile() {
                     ) : null}
                   </div>
 
+                  {/* ✅ NOVO: tipo fixo do painel */}
+                  <div className="mt-1 text-xs font-medium text-primary/90 tracking-wide">
+                    Marca/Negócios
+                  </div>
+
                   <div className="mt-2 text-sm text-foreground/90 leading-relaxed">
                     {headerBio ? (
                       <>
