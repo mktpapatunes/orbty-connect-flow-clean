@@ -1,6 +1,7 @@
 // src/pages/profile/ContractorProfile.tsx
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,6 +26,8 @@ import {
   Package,
   Instagram,
   ArrowUpRight,
+  History as HistoryIcon,
+  ChevronRight,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -273,12 +276,30 @@ const PRODUCTS_BY_CATEGORY: Record<string, string[]> = {
 };
 
 /* =========================
+   Types
+========================= */
+
+interface HistoryCampaign {
+  id: string;
+  title: string;
+  type: string;
+  city: string;
+  state: string;
+  campaign_date: string | null;
+  status: string;
+  created_at: string;
+}
+
+/* =========================
    Page
 ========================= */
 
 export default function ContractorProfile() {
+  const navigate = useNavigate();
+
   // ⚠️ Mantém compatível
   const auth = useAuth() as any;
+  const user = auth?.user;
   const profile = auth?.profile;
   const userRole = auth?.userRole;
   const approvalStatus = auth?.approvalStatus;
@@ -331,6 +352,55 @@ export default function ContractorProfile() {
       if (logoRef.current) logoRef.current.value = "";
     }
   };
+
+  /* -------------------------
+     ✅ Minhas campanhas (preview)
+  ------------------------- */
+  const [myCampaigns, setMyCampaigns] = useState<HistoryCampaign[]>([]);
+  const [loadingMyCampaigns, setLoadingMyCampaigns] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      if (!user?.id) {
+        if (!alive) return;
+        setMyCampaigns([]);
+        setLoadingMyCampaigns(false);
+        return;
+      }
+
+      setLoadingMyCampaigns(true);
+
+      try {
+        const { data, error } = await supabase
+          .from("campaigns")
+          .select("id,title,type,city,state,campaign_date,status,created_at")
+          .eq("created_by", user.id)
+          .order("created_at", { ascending: false })
+          .limit(3);
+
+        if (!alive) return;
+
+        if (error) {
+          console.warn("MY_CAMPAIGNS_PREVIEW_ERROR", error);
+          setMyCampaigns([]);
+        } else {
+          setMyCampaigns((data || []) as unknown as HistoryCampaign[]);
+        }
+      } catch (e) {
+        if (!alive) return;
+        console.warn("MY_CAMPAIGNS_PREVIEW_UNEXPECTED", e);
+        setMyCampaigns([]);
+      } finally {
+        if (alive) setLoadingMyCampaigns(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [user?.id]);
 
   /* -------------------------
      Métricas campanhas
@@ -567,7 +637,6 @@ export default function ContractorProfile() {
 
   /* -------------------------
      Dados exibidos (SÓ DO NEGÓCIO)
-     -> evita o flash de “perfil pessoal”
   ------------------------- */
 
   const title = useMemo(() => org?.name || "Meu negócio", [org?.name]);
@@ -660,11 +729,7 @@ export default function ContractorProfile() {
                     className="absolute -bottom-2 -right-2 w-9 h-9 rounded-full bg-primary flex items-center justify-center disabled:opacity-60 shadow-md"
                     title="Trocar logo"
                   >
-                    {logoUploading ? (
-                      <Loader2 className="w-4 h-4 text-primary-foreground animate-spin" />
-                    ) : (
-                      <ImagePlus className="w-4 h-4 text-primary-foreground" />
-                    )}
+                    {logoUploading ? <Loader2 className="w-4 h-4 text-primary-foreground animate-spin" /> : <ImagePlus className="w-4 h-4 text-primary-foreground" />}
                   </button>
 
                   <input ref={logoRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleLogoFile(e.target.files?.[0])} />
@@ -772,6 +837,61 @@ export default function ContractorProfile() {
             <MicroChip icon={<Package className="w-4 h-4" />} label="Produto" value={product} title={product} />
           </div>
 
+          {/* ✅ MINHAS CAMPANHAS (NOVO) */}
+          <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <HistoryIcon className="w-4 h-4 text-primary" />
+                <div className="text-sm font-semibold text-foreground">Minhas campanhas</div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => navigate("/historico")}
+                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold bg-gradient-neon text-primary-foreground glow-blue active:scale-[0.99]"
+              >
+                Ver histórico
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {loadingMyCampaigns ? (
+              <div className="flex justify-center py-2">
+                <Loader2 className="w-4 h-4 text-primary animate-spin" />
+              </div>
+            ) : myCampaigns.length === 0 ? (
+              <div className="text-sm text-muted-foreground">Você ainda não criou campanhas.</div>
+            ) : (
+              <div className="space-y-2">
+                {myCampaigns.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => navigate(`/campanha/${c.id}`)}
+                    className="w-full rounded-2xl border border-border/50 bg-white/5 px-4 py-3 text-left transition
+                    hover:bg-white/10 hover:shadow-sm active:scale-[0.99]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground truncate">{c.title || "Campanha"}</div>
+                        <div className="mt-1 text-xs text-muted-foreground capitalize">
+                          {c.type || "—"} · {c.city}, {c.state}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground capitalize">{c.status || "—"}</span>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="text-xs text-muted-foreground">Toque em uma campanha para abrir os detalhes.</div>
+          </div>
+
           {/* ATIVAÇÕES E CAMPANHAS */}
           <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06] space-y-3">
             <div className="text-sm font-semibold text-foreground text-center">Ativações e campanhas</div>
@@ -834,38 +954,22 @@ export default function ContractorProfile() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Cidade</Label>
-                      <Input
-                        value={orgForm.region_city}
-                        onChange={(e) => setOrgForm((s) => ({ ...s, region_city: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={orgForm.region_city} onChange={(e) => setOrgForm((s) => ({ ...s, region_city: e.target.value }))} className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Estado</Label>
-                      <Input
-                        value={orgForm.region_state}
-                        onChange={(e) => setOrgForm((s) => ({ ...s, region_state: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={orgForm.region_state} onChange={(e) => setOrgForm((s) => ({ ...s, region_state: e.target.value }))} className="text-sm" />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Rua</Label>
-                      <Input
-                        value={orgForm.address_street}
-                        onChange={(e) => setOrgForm((s) => ({ ...s, address_street: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={orgForm.address_street} onChange={(e) => setOrgForm((s) => ({ ...s, address_street: e.target.value }))} className="text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Número</Label>
-                      <Input
-                        value={orgForm.address_number}
-                        onChange={(e) => setOrgForm((s) => ({ ...s, address_number: e.target.value }))}
-                        className="text-sm"
-                      />
+                      <Input value={orgForm.address_number} onChange={(e) => setOrgForm((s) => ({ ...s, address_number: e.target.value }))} className="text-sm" />
                     </div>
                   </div>
 
@@ -880,12 +984,7 @@ export default function ContractorProfile() {
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">CEP</Label>
-                      <Input
-                        value={orgForm.address_zip}
-                        onChange={(e) => setOrgForm((s) => ({ ...s, address_zip: e.target.value }))}
-                        className="text-sm"
-                        inputMode="numeric"
-                      />
+                      <Input value={orgForm.address_zip} onChange={(e) => setOrgForm((s) => ({ ...s, address_zip: e.target.value }))} className="text-sm" inputMode="numeric" />
                     </div>
                   </div>
 
@@ -932,22 +1031,12 @@ export default function ContractorProfile() {
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Instagram</Label>
-                    <Input
-                      value={orgForm.instagram}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, instagram: e.target.value }))}
-                      placeholder="@seunegocio"
-                      className="text-sm"
-                    />
+                    <Input value={orgForm.instagram} onChange={(e) => setOrgForm((s) => ({ ...s, instagram: e.target.value }))} placeholder="@seunegocio" className="text-sm" />
                   </div>
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Site</Label>
-                    <Input
-                      value={orgForm.website_url}
-                      onChange={(e) => setOrgForm((s) => ({ ...s, website_url: e.target.value }))}
-                      placeholder="https://..."
-                      className="text-sm"
-                    />
+                    <Input value={orgForm.website_url} onChange={(e) => setOrgForm((s) => ({ ...s, website_url: e.target.value }))} placeholder="https://..." className="text-sm" />
                   </div>
 
                   <button
