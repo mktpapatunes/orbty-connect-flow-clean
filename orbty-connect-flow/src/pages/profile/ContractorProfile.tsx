@@ -852,9 +852,6 @@ export default function ContractorProfile() {
                     <div className="text-[11px] text-muted-foreground">
                       Há um limite de caracteres para a bio.
                     </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      O header mostra no máximo 3 linhas (use uma descrição curta).
-                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
