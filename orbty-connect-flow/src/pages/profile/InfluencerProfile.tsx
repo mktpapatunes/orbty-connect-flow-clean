@@ -23,6 +23,7 @@ import {
   Building2,
   Home,
   ExternalLink,
+  ChevronRight,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,8 @@ import { useNavigate } from "react-router-dom";
 /* =========================
    UI helpers
 ========================= */
+
+const BIO_LIMIT = 28;
 
 function clamp(n: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, n));
@@ -85,11 +88,7 @@ function openMapsQuery(query: string) {
   window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
 }
 
-/** Formatação estilo Instagram:
- *  - 1..9.999 -> 9.999
- *  - 10.000..999.999 -> 10 mil / 12.3 mil / 999 mil
- *  - 1.000.000+ -> 1M / 1.1M / 10M / 10.5M
- */
+/** Formatação estilo Instagram */
 function formatIGCount(input: number | null | undefined) {
   const n = Number(input ?? 0);
   if (!Number.isFinite(n) || n <= 0) return "—";
@@ -115,7 +114,6 @@ function formatIGCount(input: number | null | undefined) {
   return `${Math.floor(m)}M`;
 }
 
-/** Formata só com separador pt-BR (1.000.000) */
 function formatBRInt(n: number) {
   const v = Math.max(0, Math.floor(Number(n) || 0));
   return v.toLocaleString("pt-BR");
@@ -163,7 +161,6 @@ function IconButton(props: {
   );
 }
 
-/** ✅ Chip micro com label + valor empilhado (compacto e premium) */
 function MicroChip(props: { icon: React.ReactNode; label: string; value: string; title?: string }) {
   return (
     <div
@@ -181,7 +178,6 @@ function MicroChip(props: { icon: React.ReactNode; label: string; value: string;
   );
 }
 
-/** ✅ Chip de localização com label+valor + clique (maps) */
 function LocationInfoChip(props: {
   icon: React.ReactNode;
   label: string;
@@ -426,7 +422,6 @@ function AgeBarsCard(props: { data: Record<string, number> | null; buckets: stri
 
 type ObjNum = Record<string, number>;
 
-const AGE_BUCKETS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"] as const;
 const AGE_BARS_BUCKETS = ["18-24", "25-34", "35-44", "45-54", "55-64"] as const;
 
 function parseObjectNumbers(v: any): ObjNum | null {
@@ -709,10 +704,9 @@ export default function InfluencerProfile() {
     state: (profile as any)?.state ?? "",
     city: (profile as any)?.city ?? "",
     neighborhood: (profile as any)?.neighborhood ?? "",
-    bio: (profile as any)?.bio ?? "",
+    bio: String((profile as any)?.bio ?? "").slice(0, BIO_LIMIT),
 
     instagram_username: (profile as any)?.instagram ?? "",
-
     followers_digits: initialFollowersDigits,
 
     female_str: String(femalePct),
@@ -735,7 +729,7 @@ export default function InfluencerProfile() {
       state: (profile as any)?.state ?? "",
       city: (profile as any)?.city ?? "",
       neighborhood: (profile as any)?.neighborhood ?? "",
-      bio: (profile as any)?.bio ?? "",
+      bio: String((profile as any)?.bio ?? "").slice(0, BIO_LIMIT),
 
       instagram_username: (profile as any)?.instagram ?? "",
 
@@ -785,8 +779,7 @@ export default function InfluencerProfile() {
         }
 
         const list = citiesCacheRef.current[uf] || [];
-        const filtered =
-          q.length < 1 ? list.slice(0, 25) : list.filter((name) => name.toLowerCase().startsWith(q)).slice(0, 25);
+        const filtered = q.length < 1 ? list.slice(0, 25) : list.filter((name) => name.toLowerCase().startsWith(q)).slice(0, 25);
 
         if (!alive) return;
         setCitySuggestions(filtered);
@@ -837,6 +830,8 @@ export default function InfluencerProfile() {
 
     setSaving(true);
     try {
+      const bioSafe = (form.bio || "").slice(0, BIO_LIMIT).trim();
+
       const { error: pErr } = await supabase
         .from("profiles")
         .update({
@@ -844,7 +839,7 @@ export default function InfluencerProfile() {
           state: uf || null,
           city: form.city.trim() || null,
           neighborhood: form.neighborhood.trim() || null,
-          bio: form.bio.trim() || null,
+          bio: bioSafe ? bioSafe : null,
 
           instagram: form.instagram_username.trim() || null,
           followers: String(Math.max(0, followersNum)),
@@ -885,7 +880,8 @@ export default function InfluencerProfile() {
   const neighborhoodLabel = ((profile as any)?.neighborhood || "—").toString();
 
   const stateMapsQuery = stateUF ? `${stateName}, Brasil` : "";
-  const cityMapsQuery = stateUF && cityLabel && cityLabel !== "—" ? `${cityLabel}, ${stateUF}, Brasil` : cityLabel !== "—" ? `${cityLabel}, Brasil` : "";
+  const cityMapsQuery =
+    stateUF && cityLabel && cityLabel !== "—" ? `${cityLabel}, ${stateUF}, Brasil` : cityLabel !== "—" ? `${cityLabel}, Brasil` : "";
   const neighborhoodMapsQuery =
     stateUF && cityLabel && neighborhoodLabel && neighborhoodLabel !== "—"
       ? `${neighborhoodLabel}, ${cityLabel}, ${stateUF}, Brasil`
@@ -930,20 +926,10 @@ export default function InfluencerProfile() {
                   className="absolute -bottom-2 -right-2 w-9 h-9 rounded-full bg-primary flex items-center justify-center disabled:opacity-60 shadow-md"
                   title="Alterar foto"
                 >
-                  {avatarUploading ? (
-                    <Loader2 className="w-4 h-4 text-primary-foreground animate-spin" />
-                  ) : (
-                    <Camera className="w-4 h-4 text-primary-foreground" />
-                  )}
+                  {avatarUploading ? <Loader2 className="w-4 h-4 text-primary-foreground animate-spin" /> : <Camera className="w-4 h-4 text-primary-foreground" />}
                 </button>
 
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => handleAvatarFile(e.target.files?.[0])}
-                />
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleAvatarFile(e.target.files?.[0])} />
               </div>
 
               {/* infos */}
@@ -957,16 +943,15 @@ export default function InfluencerProfile() {
                   ) : null}
                 </div>
 
+                {/* ✅ FIXO: indica tipo do painel */}
+                <div className="mt-0.5 text-xs text-muted-foreground">Creator</div>
+
                 <div className="mt-2 text-sm text-foreground/90 leading-relaxed">
                   {headerBio ? (
                     <>
                       <span className="line-clamp-3">{headerBio}</span>
                       {showBioMore ? (
-                        <button
-                          type="button"
-                          onClick={() => setBioOpen(true)}
-                          className="mt-1 text-xs text-primary hover:opacity-90 transition"
-                        >
+                        <button type="button" onClick={() => setBioOpen(true)} className="mt-1 text-xs text-primary hover:opacity-90 transition">
                           Ver mais
                         </button>
                       ) : null}
@@ -980,12 +965,7 @@ export default function InfluencerProfile() {
 
             {/* ações */}
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <IconButton
-                icon={<Pencil className="w-4 h-4" />}
-                label="Editar perfil"
-                onClick={() => setEditOpen(true)}
-                className="w-full justify-center"
-              />
+              <IconButton icon={<Pencil className="w-4 h-4" />} label="Editar perfil" onClick={() => setEditOpen(true)} className="w-full justify-center" />
               <IconButton
                 icon={<Instagram className="w-4 h-4" />}
                 label={igRaw ? `@${igRaw}` : "Instagram"}
@@ -1019,24 +999,9 @@ export default function InfluencerProfile() {
 
         {/* 3 CHIPS */}
         <div className="grid grid-cols-3 gap-2">
-          <MicroChip
-            icon={<Users className="w-4 h-4" />}
-            label="Seguidores"
-            value={followersCompact}
-            title={`Seguidores: ${followersLabel}`}
-          />
-          <MicroChip
-            icon={<Sparkles className="w-4 h-4" />}
-            label="Conteúdo"
-            value={primaryStyle}
-            title={`Estilo: ${primaryStyle}`}
-          />
-          <MicroChip
-            icon={<MapPin className="w-4 h-4" />}
-            label="Localização"
-            value={cityLabel || "—"}
-            title={`Cidade: ${cityLabel}`}
-          />
+          <MicroChip icon={<Users className="w-4 h-4" />} label="Seguidores" value={followersCompact} title={`Seguidores: ${followersLabel}`} />
+          <MicroChip icon={<Sparkles className="w-4 h-4" />} label="Conteúdo" value={primaryStyle} title={`Estilo: ${primaryStyle}`} />
+          <MicroChip icon={<MapPin className="w-4 h-4" />} label="Localização" value={cityLabel || "—"} title={`Cidade: ${cityLabel}`} />
         </div>
 
         {/* AUDIÊNCIA */}
@@ -1047,7 +1012,6 @@ export default function InfluencerProfile() {
             <AgeBarsCard data={audienceAge} buckets={[...AGE_BARS_BUCKETS]} />
           </div>
 
-          {/* ✅ Principais localizações: com label/resultado + ícones diferentes + clique Maps */}
           <div className="mt-4">
             <div className="text-xs text-muted-foreground mb-2">Principais localizações</div>
 
@@ -1077,8 +1041,20 @@ export default function InfluencerProfile() {
           </div>
         </SectionShell>
 
-        {/* ✅ AVALIAÇÕES (REAIS) */}
+        {/* ✅ AVALIAÇÕES */}
         <RatingsCard rating={ratingAvg} count={ratingCount} loading={loadingRatings} />
+
+        {/* ✅ MINHAS CAMPANHAS (minimalista) */}
+        <button
+          type="button"
+          onClick={() => navigate("/historico")}
+          className="w-full rounded-2xl bg-gradient-neon text-primary-foreground glow-blue
+          px-5 py-4 font-semibold text-base flex items-center justify-between
+          active:scale-[0.99] transition"
+        >
+          <span>Minhas campanhas</span>
+          <ChevronRight className="w-5 h-5 opacity-90" />
+        </button>
 
         {/* ATIVAÇÕES E CAMPANHAS */}
         <SingleStatCard title="Ativações e campanhas" label="Realizadas:" value={orbtyAccepted} loading={loadingOrbty} />
@@ -1120,11 +1096,7 @@ export default function InfluencerProfile() {
 
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Nome *</Label>
-                    <Input
-                      value={form.name}
-                      onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
-                      className="text-sm"
-                    />
+                    <Input value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} className="text-sm" />
                   </div>
 
                   {/* Estado / Cidade / Bairro (3 campos alinhados) */}
@@ -1180,14 +1152,19 @@ export default function InfluencerProfile() {
                     </div>
                   </div>
 
+                  {/* ✅ BIO com limite */}
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Bio</Label>
                     <Input
                       value={form.bio}
-                      onChange={(e) => setForm((s) => ({ ...s, bio: e.target.value }))}
+                      maxLength={BIO_LIMIT}
+                      onChange={(e) => {
+                        const v = String(e.target.value || "").slice(0, BIO_LIMIT);
+                        setForm((s) => ({ ...s, bio: v }));
+                      }}
                       className="text-sm"
                     />
-                    <div className="text-[11px] text-muted-foreground">O header mostra no máximo 3 linhas (use uma bio curta).</div>
+                    <div className="text-[11px] text-muted-foreground">Há um limite para a bio. Use uma frase curta.</div>
                   </div>
                 </div>
 
@@ -1205,7 +1182,7 @@ export default function InfluencerProfile() {
                     />
                   </div>
 
-                  {/* Seguidores - text com formatação (sem setinhas) */}
+                  {/* Seguidores */}
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Seguidores</Label>
                     <Input
@@ -1323,9 +1300,7 @@ export default function InfluencerProfile() {
                     <Label className="text-xs text-muted-foreground">Ajuste rápido (Feminino)</Label>
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>Feminino: {clamp(Number(parseDigitsOnly(form.female_str) || 0), 0, 100)}%</span>
-                      <span>
-                        Masculino: {clamp(100 - clamp(Number(parseDigitsOnly(form.female_str) || 0), 0, 100), 0, 100)}%
-                      </span>
+                      <span>Masculino: {clamp(100 - clamp(Number(parseDigitsOnly(form.female_str) || 0), 0, 100), 0, 100)}%</span>
                     </div>
                     <Slider
                       value={[genderFromSlider]}
@@ -1360,13 +1335,7 @@ export default function InfluencerProfile() {
                         <div className="h-2 rounded-full bg-white/10 overflow-hidden mb-2">
                           <div className="h-full bg-white/30" style={{ width: `${clampInt(row.val, 0, 100)}%` }} />
                         </div>
-                        <Slider
-                          value={[clampInt(row.val, 0, 100)]}
-                          onValueChange={(v) => row.set(clampInt(v[0], 0, 100))}
-                          min={0}
-                          max={100}
-                          step={10}
-                        />
+                        <Slider value={[clampInt(row.val, 0, 100)]} onValueChange={(v) => row.set(clampInt(v[0], 0, 100))} min={0} max={100} step={10} />
                       </div>
                     ))}
                   </div>
