@@ -454,11 +454,7 @@ export default function CreateCampaign() {
     const state = String((data as any).selectedState || "").trim();
 
     const shouldHydrate =
-      step === 1 &&
-      !!city &&
-      !!state &&
-      (locationLat === null || locationLon === null) &&
-      !hydratingMap;
+      step === 1 && !!city && !!state && (locationLat === null || locationLon === null) && !hydratingMap;
 
     if (!shouldHydrate) return;
 
@@ -620,9 +616,7 @@ export default function CreateCampaign() {
   // ✅ selectedCreators precisa funcionar mesmo que creatorList não contenha o ID (ex: filtros mudaram)
   const selectedCreators = useMemo(() => {
     const map = new Map(creatorList.map((c) => [c.id, c]));
-    return selectedCreatorIds
-      .map((id) => map.get(id))
-      .filter(Boolean) as CreatorListItem[];
+    return selectedCreatorIds.map((id) => map.get(id)).filter(Boolean) as CreatorListItem[];
   }, [creatorList, selectedCreatorIds]);
 
   /* =========================
@@ -696,6 +690,17 @@ export default function CreateCampaign() {
   };
 
   /* =========================
+     Step 3 fields (Briefing / Menções / Collab / Hashtags / Legenda)
+  ========================= */
+
+  const collabValue = (data as any).collab;
+  const collabBool: boolean | null =
+    typeof collabValue === "boolean" ? collabValue : collabValue === "true" ? true : collabValue === "false" ? false : null;
+
+  const caption = String((data as any).caption || "");
+  const captionLimit = 2200;
+
+  /* =========================
      Validations
   ========================= */
 
@@ -761,6 +766,8 @@ export default function CreateCampaign() {
               .map((m) => m.trim())
               .filter(Boolean)
           : [],
+        collab: collabBool, // ✅ novo (pode ser null)
+        caption: String((data as any).caption || "").trim() || null, // ✅ novo (pode ser null)
         creators_needed: creatorsNeededFinal,
         content_segments: selectedSegments,
         selected_creator_ids: selectedCreatorIds,
@@ -776,7 +783,7 @@ export default function CreateCampaign() {
           campaign_date: campaignStart || null,
           apply_deadline: campaignEnd,
           brief_public: String((data as any).briefPublic || ""), // objetivos em chips (csv)
-          brief_private: String((data as any).briefPrivate || "") || null,
+          brief_private: String((data as any).briefPrivate || "") || null, // ✅ Briefing (step 3)
           requirements,
         },
       });
@@ -1301,8 +1308,87 @@ export default function CreateCampaign() {
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Arquivos & Publicação</h3>
 
-          {/* Upload */}
-          <input ref={fileInputRef} type="file" multiple accept="image/*,video/*,.pdf" onChange={handleFileSelect} className="hidden" />
+          {/* Briefing */}
+          <div>
+            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+              Briefing <span className="normal-case tracking-normal text-muted-foreground">(Descreva as informações da sua campanha)</span>
+            </label>
+            <textarea
+              value={String((data as any).briefPrivate || "")}
+              onChange={(e) => updateData({ briefPrivate: e.target.value } as any)}
+              placeholder="Ex: contexto da campanha, o que deve ser destacado, pontos obrigatórios, tom de voz, etc."
+              rows={5}
+              className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+            />
+          </div>
+
+          {/* Menções */}
+          <div>
+            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+              Menções <span className="normal-case tracking-normal text-muted-foreground">(Adicione o @ dos perfis que devem ser marcados)</span>
+            </label>
+            <input
+              type="text"
+              value={String((data as any).mentions || "")}
+              onChange={(e) => updateData({ mentions: e.target.value } as any)}
+              placeholder="Ex: @perfil1, @perfil2"
+              className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+
+          {/* Collab */}
+          <div>
+            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Collab</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => updateData({ collab: true } as any)}
+                className={`px-3 py-3 rounded-xl border text-sm font-semibold transition-all ${
+                  collabBool === true ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
+                }`}
+              >
+                Sim
+              </button>
+              <button
+                type="button"
+                onClick={() => updateData({ collab: false } as any)}
+                className={`px-3 py-3 rounded-xl border text-sm font-semibold transition-all ${
+                  collabBool === false ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
+                }`}
+              >
+                Não
+              </button>
+            </div>
+
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              Selecionado:{" "}
+              <span className="text-foreground font-medium">{collabBool === null ? "—" : collabBool ? "Sim" : "Não"}</span>
+            </div>
+          </div>
+
+          {/* Hashtags */}
+          <div>
+            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+              Hashtags <span className="normal-case tracking-normal text-muted-foreground">(Adicione as hashtags que devem estar na publicação)</span>
+            </label>
+            <input
+              type="text"
+              value={String((data as any).hashtags || "")}
+              onChange={(e) => updateData({ hashtags: e.target.value } as any)}
+              placeholder="Ex: #minhamarca, #novidade"
+              className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+
+          {/* Upload (mantém, só mudou a ordem) */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,video/*,.pdf"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
           <button
             onClick={() => fileInputRef.current?.click()}
             className="w-full border-2 border-dashed border-border/60 rounded-xl p-6 flex flex-col items-center gap-2 text-center hover:border-primary/30 transition-colors"
@@ -1329,13 +1415,38 @@ export default function CreateCampaign() {
                     <p className="text-xs text-foreground truncate">{f.file.name}</p>
                     <p className="text-[10px] text-muted-foreground">{(f.file.size / 1024).toFixed(0)} KB</p>
                   </div>
-                  <button onClick={() => removeFile(i)} className="text-muted-foreground hover:text-destructive transition-colors" type="button">
+                  <button
+                    onClick={() => removeFile(i)}
+                    className="text-muted-foreground hover:text-destructive transition-colors"
+                    type="button"
+                  >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               ))}
             </div>
           )}
+
+          {/* Legenda */}
+          <div>
+            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+              Legenda <span className="normal-case tracking-normal text-muted-foreground">(Sugestão de texto para o post, caso necessário)</span>
+            </label>
+            <textarea
+              value={caption}
+              maxLength={captionLimit}
+              onChange={(e) => updateData({ caption: e.target.value } as any)}
+              placeholder="Escreva aqui uma sugestão de legenda (você pode pular linha)."
+              rows={7}
+              className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+            />
+            <div className="mt-2 text-[11px] text-muted-foreground flex items-center justify-between">
+              <span>Dica: você pode quebrar linhas para formatar.</span>
+              <span>
+                <span className="text-foreground font-medium">{caption.length}</span>/{captionLimit}
+              </span>
+            </div>
+          </div>
 
           {/* Summary */}
           <div className="glass-card p-4 space-y-2">
@@ -1374,6 +1485,22 @@ export default function CreateCampaign() {
                 </span>
               </div>
               <div className="flex justify-between">
+                <span className="text-muted-foreground">Collab</span>
+                <span className="text-foreground font-medium">{collabBool === null ? "-" : collabBool ? "Sim" : "Não"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Menções</span>
+                <span className="text-foreground font-medium truncate ml-4">{String((data as any).mentions || "").trim() || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Hashtags</span>
+                <span className="text-foreground font-medium truncate ml-4">{String((data as any).hashtags || "").trim() || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Legenda</span>
+                <span className="text-foreground font-medium">{caption.trim() ? `${caption.length} caractere(s)` : "-"}</span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-muted-foreground">Arquivos</span>
                 <span className="text-foreground font-medium">{files.length}</span>
               </div>
@@ -1397,26 +1524,26 @@ export default function CreateCampaign() {
 
       {/* ✅ Modal de perfil (SEM iframe / SEM redirect de servidor) */}
       {profileOpen && profileCreatorId && (
-  <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-    <div className="absolute inset-0 bg-black/60" onMouseDown={closeProfileModal} />
-    <div
-      className="relative w-full md:max-w-3xl h-[85vh] md:h-[80vh] rounded-t-3xl md:rounded-3xl border border-border/50 bg-background overflow-hidden"
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between bg-background/80 backdrop-blur-xl">
-        <div className="text-sm font-semibold text-foreground">Perfil do creator</div>
-        <button type="button" onClick={closeProfileModal} className="p-2 rounded-xl hover:bg-white/5">
-          <X className="w-4 h-4" />
-        </button>
-      </div>
+        <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
+          <div className="absolute inset-0 bg-black/60" onMouseDown={closeProfileModal} />
+          <div
+            className="relative w-full md:max-w-3xl h-[85vh] md:h-[80vh] rounded-t-3xl md:rounded-3xl border border-border/50 bg-background overflow-hidden"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between bg-background/80 backdrop-blur-xl">
+              <div className="text-sm font-semibold text-foreground">Perfil do creator</div>
+              <button type="button" onClick={closeProfileModal} className="p-2 rounded-xl hover:bg-white/5">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-      <div className="h-full overflow-auto">
-        <PublicProfile key={profileCreatorId} idOverride={profileCreatorId} />
-      </div>
-    </div>
-  </div>
-)}
+            <div className="h-full overflow-auto">
+              <PublicProfile key={profileCreatorId} idOverride={profileCreatorId} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom navigation */}
       <div className="sticky bottom-0 px-6 py-4 bg-background/80 backdrop-blur-xl border-t border-border/30 flex gap-3">
