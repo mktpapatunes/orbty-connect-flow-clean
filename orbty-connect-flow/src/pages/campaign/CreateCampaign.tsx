@@ -818,7 +818,7 @@ export default function CreateCampaign() {
             <p className="mt-2 text-[11px] text-muted-foreground">Dica: clique novamente no tipo selecionado para remover.</p>
           </div>
 
-          {/* ✅ Objectives (movido para acima da localização) */}
+          {/* Objectives */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
               Objetivo da campanha * <span className="normal-case tracking-normal text-muted-foreground">(até 3)</span>
@@ -967,7 +967,6 @@ export default function CreateCampaign() {
                   </button>
                 </div>
 
-                {/* ✅ corrigido mobile: 1 coluna no mobile, 2 no desktop */}
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Início</label>
@@ -1050,7 +1049,7 @@ export default function CreateCampaign() {
               </label>
             </div>
 
-            {/* ✅ grid mobile com 3 colunas (5 linhas perfeitas) / desktop mantém 5 por linha */}
+            {/* ✅ Fix desktop overflow: força o conteúdo a caber no chip (wrap/line-clamp) sem mudar layout do mobile */}
             <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
               {segmentOptions.map((seg) => {
                 const selected = selectedSegments.includes(seg);
@@ -1059,11 +1058,17 @@ export default function CreateCampaign() {
                     key={seg}
                     type="button"
                     onClick={() => toggleSegment(seg)}
-                    className={`px-2 sm:px-3 py-2.5 sm:py-3 rounded-xl border text-[12px] sm:text-sm font-medium transition-all text-center leading-none ${
+                    className={`px-2 sm:px-3 py-2.5 sm:py-3 rounded-xl border font-medium transition-all text-center leading-tight
+                    text-[12px] sm:text-[12px] md:text-sm
+                    whitespace-normal break-words min-w-0
+                    ${
                       selected ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
                     }`}
                   >
-                    {seg}
+                    {/* garante que o texto não “vaze” do botão em desktop */}
+                    <span className="block w-full min-w-0 overflow-hidden text-ellipsis">
+                      {seg}
+                    </span>
                   </button>
                 );
               })}
@@ -1074,7 +1079,7 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* ✅ Quantity (destacado + informativo) */}
+          {/* Quantity (destacado + informativo) */}
           <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 shadow-[0_0_0_1px_rgba(59,130,246,0.15)]">
             <div className="flex items-center gap-2 mb-2">
               <Users className="w-4 h-4 text-primary" />
@@ -1120,7 +1125,7 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* ✅ Suggested creators (agora vem antes) */}
+          {/* Suggested creators */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators sugeridos</div>
@@ -1183,7 +1188,7 @@ export default function CreateCampaign() {
             <div className="text-[11px] text-muted-foreground">Clique em um creator para selecionar. Use o ícone ao lado para ver o perfil.</div>
           </div>
 
-          {/* ✅ Selected creators (agora vem depois) */}
+          {/* Selected creators */}
           <div className="glass-card p-4">
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators selecionados</div>
@@ -1212,8 +1217,6 @@ export default function CreateCampaign() {
               </div>
             )}
           </div>
-
-          {/* ✅ Briefing privado removido desta etapa */}
         </div>
       )}
 
@@ -1260,7 +1263,7 @@ export default function CreateCampaign() {
             </div>
           )}
 
-          {/* Summary (igual ao seu estilo anterior) */}
+          {/* Summary */}
           <div className="glass-card p-4 space-y-2">
             <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Resumo</h4>
             <div className="space-y-1.5 text-sm">
