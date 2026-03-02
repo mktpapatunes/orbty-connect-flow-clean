@@ -23,16 +23,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
-// ✅ IMPORTS para renderizar o perfil no modal (SEM IFRAME / SEM SERVER HIT)
-import { MemoryRouter, Routes, Route } from "react-router-dom";
-import PublicProfileKeyed from "@/pages/profile/PublicProfileKeyed";
 import PublicProfile from "@/pages/profile/PublicProfile";
 
 /* =========================
    Consts
 ========================= */
 
-const PUBLIC_PROFILE_ROUTE_PREFIX = "/u"; // ✅ conforme App.tsx
 const STEP_STORAGE_KEY = "orbty:create_campaign:step:v1";
 
 const campaignTypes = [
@@ -72,6 +68,15 @@ const segmentOptions = [
 ] as const;
 
 type SegmentOption = (typeof segmentOptions)[number];
+
+const postFormatOptions = [
+  { id: "stories", label: "Stories" },
+  { id: "reels", label: "Reels" },
+  { id: "feed", label: "Feed" },
+  { id: "combo", label: "Combo" },
+] as const;
+
+type PostFormat = (typeof postFormatOptions)[number]["id"];
 
 /* =========================
    Types
@@ -113,7 +118,6 @@ type CreatorListItem = {
   approval_status?: string | null;
   desired_role?: string | null;
 
-  // ✅ opcional: se sua RPC retornar foto, já usamos direto
   avatar_url?: string | null;
   photo_url?: string | null;
   profile_photo_url?: string | null;
@@ -189,6 +193,23 @@ function initialsFromName(name?: string | null) {
   return (first + last).toUpperCase();
 }
 
+function normalizeAtHandles(raw: string, max = 4) {
+  const parts = String(raw || "")
+    .split(/[,\n]/g)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const out: string[] = [];
+  for (const p0 of parts) {
+    const p = p0.startsWith("@") ? p0 : `@${p0}`;
+    const cleaned = p.replace(/\s+/g, "");
+    if (cleaned === "@") continue;
+    if (!out.includes(cleaned)) out.push(cleaned);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 /* =========================
    Page
 ========================= */
@@ -198,11 +219,11 @@ export default function CreateCampaign() {
   const { user } = useAuth();
   const { data, updateData, resetData } = useCampaign();
 
-  // ✅ step persistente
+  // ✅ step persistente (agora 1..4)
   const [step, setStep] = useState<number>(() => {
     const raw = localStorage.getItem(STEP_STORAGE_KEY);
     const n = Number(raw);
-    return Number.isFinite(n) ? clamp(Math.floor(n), 1, 3) : 1;
+    return Number.isFinite(n) ? clamp(Math.floor(n), 1, 4) : 1;
   });
 
   useEffect(() => {
@@ -453,8 +474,7 @@ export default function CreateCampaign() {
     const city = String((data as any).selectedCity || "").trim();
     const state = String((data as any).selectedState || "").trim();
 
-    const shouldHydrate =
-      step === 1 && !!city && !!state && (locationLat === null || locationLon === null) && !hydratingMap;
+    const shouldHydrate = step === 1 && !!city && !!state && (locationLat === null || locationLon === null) && !hydratingMap;
 
     if (!shouldHydrate) return;
 
@@ -557,7 +577,6 @@ export default function CreateCampaign() {
   const selectedCity = String((data as any).selectedCity || "").trim();
   const selectedState = String((data as any).selectedState || "").trim();
 
-  // ✅ carrega via RPC quando entrar no step 2 e tiver filtros
   useEffect(() => {
     let alive = true;
 
@@ -574,7 +593,6 @@ export default function CreateCampaign() {
       try {
         setCreatorLoading(true);
 
-        // get_creator_suggestions(p_city text, p_state text, p_segments text[], p_limit int)
         const { data: rpcData, error } = await (supabase.rpc as any)("get_creator_suggestions", {
           p_city: selectedCity,
           p_state: selectedState,
@@ -592,7 +610,6 @@ export default function CreateCampaign() {
 
         const rows = (Array.isArray(rpcData) ? rpcData : []) as CreatorListItem[];
 
-        // ✅ garante ordenação por followers (caso a RPC não ordene)
         const sorted = [...rows].sort(
           (a, b) => (followersToNumber(b.followers) ?? 0) - (followersToNumber(a.followers) ?? 0)
         );
@@ -613,7 +630,6 @@ export default function CreateCampaign() {
 
   const selectedCreatorIds: string[] = ((data as any).selectedCreatorIds || []) as string[];
 
-  // ✅ selectedCreators precisa funcionar mesmo que creatorList não contenha o ID (ex: filtros mudaram)
   const selectedCreators = useMemo(() => {
     const map = new Map(creatorList.map((c) => [c.id, c]));
     return selectedCreatorIds.map((id) => map.get(id)).filter(Boolean) as CreatorListItem[];
@@ -651,7 +667,6 @@ export default function CreateCampaign() {
     const current = selectedCreatorIds.slice();
     const exists = current.includes(id);
 
-    // persiste creatorsNeeded válido antes de selecionar
     if (creatorsNeededNumber !== null && creatorsNeededNumber !== creatorsNeededFromData) {
       updateData({ creatorsNeeded: creatorsNeededNumber } as any);
     }
@@ -690,12 +705,36 @@ export default function CreateCampaign() {
   };
 
   /* =========================
-     Step 3 fields (Briefing / Menções / Collab / Hashtags / Legenda)
+     Step 3 fields (posts / format / briefing / mentions / collab / hashtags / files / caption)
   ========================= */
+
+  // Posts por creator (sem setas, com input string + onBlur)
+  const postsFromData = Number((data as any).posts ?? 1) || 1;
+  const [postsInput, setPostsInput] = useState<string>(String(postsFromData));
+
+  useEffect(() => {
+    setPostsInput(String(Number((data as any).posts ?? 1) || 1));
+  }, [(data as any).posts]);
+
+  const postsNumber = useMemo(() => {
+    const raw = postsInput.trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return null;
+    return clamp(Math.floor(n), 1, 20);
+  }, [postsInput]);
+
+  const postsOk = postsNumber !== null && postsNumber >= 1 && postsNumber <= 20;
+
+  const formatFromData = String((data as any).format || "stories") as PostFormat;
+  const formatOk = !!String(formatFromData || "").trim();
 
   const collabValue = (data as any).collab;
   const collabBool: boolean | null =
     typeof collabValue === "boolean" ? collabValue : collabValue === "true" ? true : collabValue === "false" ? false : null;
+
+  const collabMentionsRaw = String((data as any).collabMentions || "");
+  const collabMentionsList = useMemo(() => normalizeAtHandles(collabMentionsRaw, 4), [collabMentionsRaw]);
 
   const caption = String((data as any).caption || "");
   const captionLimit = 2200;
@@ -707,10 +746,10 @@ export default function CreateCampaign() {
   const canStep2 =
     !!String((data as any).title || "").trim() &&
     !!String((data as any).campaignType || "").trim() &&
-    !!selectedState &&
-    !!selectedCity &&
-    !!campaignStart &&
-    !!campaignEnd &&
+    !!String(selectedState || "").trim() &&
+    !!String(selectedCity || "").trim() &&
+    !!String(campaignStart || "").trim() &&
+    !!String(campaignEnd || "").trim() &&
     selectedObjectives.length > 0;
 
   const canStep3 =
@@ -719,7 +758,10 @@ export default function CreateCampaign() {
     selectedCreatorIds.length > 0 &&
     selectedCreatorIds.length <= currentLimit;
 
-  const canPublish = canStep2 && canStep3;
+  // ✅ agora existe validação mínima na etapa 3 (posts + formato)
+  const canStep4 = canStep2 && canStep3 && postsOk && formatOk;
+
+  const canPublish = canStep4;
 
   /* =========================
      Files
@@ -740,7 +782,7 @@ export default function CreateCampaign() {
   };
 
   /* =========================
-     Publish
+     Publish (ainda cria campanha; pagamento vem depois)
   ========================= */
 
   const handlePublish = async () => {
@@ -751,8 +793,10 @@ export default function CreateCampaign() {
       const region = String((data as any).region || "").trim() || `${selectedCity}, ${selectedState}`;
       const creatorsNeededFinal = creatorsNeededNumber ?? creatorsNeededFromData;
 
+      const postsFinal = postsNumber ?? postsFromData;
+
       const requirements = {
-        posts: Number((data as any).posts ?? 1),
+        posts: postsFinal,
         format: String((data as any).format || "stories"),
         hashtags: String((data as any).hashtags || "")
           ? String((data as any).hashtags)
@@ -766,8 +810,9 @@ export default function CreateCampaign() {
               .map((m) => m.trim())
               .filter(Boolean)
           : [],
-        collab: collabBool, // ✅ novo (pode ser null)
-        caption: String((data as any).caption || "").trim() || null, // ✅ novo (pode ser null)
+        collab: collabBool, // boolean | null
+        collab_mentions: collabBool ? collabMentionsList : [], // ✅ novo
+        caption: String((data as any).caption || "").trim() || null,
         creators_needed: creatorsNeededFinal,
         content_segments: selectedSegments,
         selected_creator_ids: selectedCreatorIds,
@@ -782,8 +827,8 @@ export default function CreateCampaign() {
           city: selectedCity,
           campaign_date: campaignStart || null,
           apply_deadline: campaignEnd,
-          brief_public: String((data as any).briefPublic || ""), // objetivos em chips (csv)
-          brief_private: String((data as any).briefPrivate || "") || null, // ✅ Briefing (step 3)
+          brief_public: String((data as any).briefPublic || ""),
+          brief_private: String((data as any).briefPrivate || "") || null,
           requirements,
         },
       });
@@ -811,7 +856,7 @@ export default function CreateCampaign() {
         } as any);
       }
 
-      toast.success("Campanha publicada com sucesso!");
+      toast.success("Campanha criada! Pagamento será habilitado em breve.");
       resetData();
       try {
         localStorage.removeItem(STEP_STORAGE_KEY);
@@ -1140,7 +1185,7 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Quantity (destacado + informativo) */}
+          {/* Quantity */}
           <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 shadow-[0_0_0_1px_rgba(59,130,246,0.15)]">
             <div className="flex items-center gap-2 mb-2">
               <Users className="w-4 h-4 text-primary" />
@@ -1163,7 +1208,6 @@ export default function CreateCampaign() {
                 const safe = creatorsNeededNumber ?? 1;
                 updateData({ creatorsNeeded: safe } as any);
 
-                // se reduziu, corta selecionados
                 const cut = selectedCreatorIds.slice(0, safe);
                 if (cut.length !== selectedCreatorIds.length) updateData({ selectedCreatorIds: cut } as any);
 
@@ -1204,7 +1248,6 @@ export default function CreateCampaign() {
                 <span className="text-foreground font-medium">1 segmento</span> para ver sugestões.
               </div>
             ) : creatorList.length === 0 && !creatorLoading ? (
-              // ✅ AJUSTE DA MENSAGEM (mais adequada para contractor)
               <div className="glass-card p-4 text-sm text-muted-foreground">
                 Nenhum creator encontrado para os filtros atuais. Selecione outro segmento para ampliar a busca.
               </div>
@@ -1220,14 +1263,12 @@ export default function CreateCampaign() {
                       key={c.id}
                       className={`glass-card p-3 flex items-center gap-3 transition ${selected ? "border-primary/60 bg-primary/5" : ""}`}
                     >
-                      {/* ✅ Clique no "corpo" abre perfil (modal) */}
                       <button
                         type="button"
                         onClick={() => openProfileModal(c.id)}
                         className="flex-1 min-w-0 text-left flex items-center gap-3"
                         aria-label={`Ver perfil de ${c.name || "creator"}`}
                       >
-                        {/* Avatar */}
                         <div className="w-11 h-11 rounded-full border border-border/50 bg-white/5 overflow-hidden shrink-0 flex items-center justify-center">
                           {avatarUrl ? (
                             <img src={avatarUrl} alt={c.name || "Creator"} className="w-full h-full object-cover" loading="lazy" />
@@ -1244,7 +1285,6 @@ export default function CreateCampaign() {
                         </div>
                       </button>
 
-                      {/* ✅ Seleção só no botão (sem abrir perfil) */}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1308,6 +1348,58 @@ export default function CreateCampaign() {
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Arquivos & Publicação</h3>
 
+          {/* Posts + Formato (lado a lado) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+                Posts por creator *
+              </label>
+              <input
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={postsInput}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "" || /^\d+$/.test(v)) setPostsInput(v);
+                }}
+                onBlur={() => {
+                  const safe = postsNumber ?? 1;
+                  updateData({ posts: safe } as any);
+                  setPostsInput(String(safe));
+                }}
+                placeholder="Ex: 2"
+                className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30
+                [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <div className="mt-2 text-[11px] text-muted-foreground">
+                Limite sugerido: até <span className="text-foreground font-medium">20</span>.{" "}
+                {postsOk ? (
+                  <>
+                    Atual: <span className="text-foreground font-medium">{postsNumber}</span>.
+                  </>
+                ) : (
+                  "Digite um número entre 1 e 20."
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Formato *</label>
+              <select
+                value={formatFromData}
+                onChange={(e) => updateData({ format: e.target.value } as any)}
+                className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                {postFormatOptions.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-2 text-[11px] text-muted-foreground">Escolha o formato principal do post.</div>
+            </div>
+          </div>
+
           {/* Briefing */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
@@ -1336,22 +1428,31 @@ export default function CreateCampaign() {
             />
           </div>
 
-          {/* Collab */}
+          {/* Collab (toggle chip + campo extra) */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Collab</label>
+
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => updateData({ collab: true } as any)}
+                onClick={() => {
+                  // ✅ clicar no mesmo chip remove seleção
+                  if (collabBool === true) updateData({ collab: null, collabMentions: "" } as any);
+                  else updateData({ collab: true } as any);
+                }}
                 className={`px-3 py-3 rounded-xl border text-sm font-semibold transition-all ${
                   collabBool === true ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
                 }`}
               >
                 Sim
               </button>
+
               <button
                 type="button"
-                onClick={() => updateData({ collab: false } as any)}
+                onClick={() => {
+                  if (collabBool === false) updateData({ collab: null, collabMentions: "" } as any);
+                  else updateData({ collab: false, collabMentions: "" } as any);
+                }}
                 className={`px-3 py-3 rounded-xl border text-sm font-semibold transition-all ${
                   collabBool === false ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
                 }`}
@@ -1364,6 +1465,33 @@ export default function CreateCampaign() {
               Selecionado:{" "}
               <span className="text-foreground font-medium">{collabBool === null ? "—" : collabBool ? "Sim" : "Não"}</span>
             </div>
+
+            {collabBool === true ? (
+              <div className="mt-3">
+                <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+                  @ para Collab <span className="normal-case tracking-normal text-muted-foreground">(até 4)</span>
+                </label>
+
+                <input
+                  type="text"
+                  value={collabMentionsRaw}
+                  onChange={(e) => updateData({ collabMentions: e.target.value } as any)}
+                  onBlur={() => {
+                    const normalized = normalizeAtHandles(collabMentionsRaw, 4);
+                    updateData({ collabMentions: normalized.join(", ") } as any);
+                  }}
+                  placeholder="Ex: @perfil1, @perfil2"
+                  className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+
+                <div className="mt-2 text-[11px] text-muted-foreground">
+                  Selecionados:{" "}
+                  <span className="text-foreground font-medium">
+                    {collabMentionsList.length ? collabMentionsList.join(", ") : "—"}
+                  </span>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* Hashtags */}
@@ -1380,15 +1508,8 @@ export default function CreateCampaign() {
             />
           </div>
 
-          {/* Upload (mantém, só mudou a ordem) */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,video/*,.pdf"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
+          {/* Upload */}
+          <input ref={fileInputRef} type="file" multiple accept="image/*,video/*,.pdf" onChange={handleFileSelect} className="hidden" />
           <button
             onClick={() => fileInputRef.current?.click()}
             className="w-full border-2 border-dashed border-border/60 rounded-xl p-6 flex flex-col items-center gap-2 text-center hover:border-primary/30 transition-colors"
@@ -1447,59 +1568,99 @@ export default function CreateCampaign() {
               </span>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* =========================
+          STEP 4 (Resumo + Valores + Pagamento)
+      ========================= */}
+      {step === 4 && (
+        <div className="px-6 py-4 space-y-4">
+          <h3 className="font-display text-xl font-bold text-foreground">Resumo & Pagamento</h3>
 
           {/* Summary */}
           <div className="glass-card p-4 space-y-2">
             <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Resumo</h4>
+
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Título</span>
                 <span className="text-foreground font-medium truncate ml-4">{String((data as any).title || "")}</span>
               </div>
+
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Tipo</span>
                 <span className="text-foreground font-medium capitalize">{String((data as any).campaignType || "")}</span>
               </div>
+
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Região</span>
                 <span className="text-foreground font-medium truncate ml-4">
                   {String((data as any).region || "") || `${selectedCity}, ${selectedState}`}
                 </span>
               </div>
+
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Período</span>
                 <span className="text-foreground font-medium truncate ml-4">{periodLabel || "-"}</span>
               </div>
+
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Objetivos</span>
                 <span className="text-foreground font-medium truncate ml-4">{selectedObjectives.length ? selectedObjectives.join(", ") : "-"}</span>
               </div>
+
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Segmentos</span>
                 <span className="text-foreground font-medium truncate ml-4">{selectedSegments.length ? selectedSegments.join(", ") : "-"}</span>
               </div>
+
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Creators</span>
                 <span className="text-foreground font-medium">
                   {selectedCreatorIds.length}/{currentLimit}
                 </span>
               </div>
+
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Posts por creator</span>
+                <span className="text-foreground font-medium">{postsNumber ?? postsFromData}</span>
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Formato</span>
+                <span className="text-foreground font-medium">
+                  {postFormatOptions.find((x) => x.id === formatFromData)?.label || String(formatFromData || "-")}
+                </span>
+              </div>
+
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Collab</span>
                 <span className="text-foreground font-medium">{collabBool === null ? "-" : collabBool ? "Sim" : "Não"}</span>
               </div>
+
+              {collabBool === true ? (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Collab @</span>
+                  <span className="text-foreground font-medium truncate ml-4">{collabMentionsList.length ? collabMentionsList.join(", ") : "-"}</span>
+                </div>
+              ) : null}
+
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Menções</span>
                 <span className="text-foreground font-medium truncate ml-4">{String((data as any).mentions || "").trim() || "-"}</span>
               </div>
+
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Hashtags</span>
                 <span className="text-foreground font-medium truncate ml-4">{String((data as any).hashtags || "").trim() || "-"}</span>
               </div>
+
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Legenda</span>
-                <span className="text-foreground font-medium">{caption.trim() ? `${caption.length} caractere(s)` : "-"}</span>
+                <span className="text-foreground font-medium">{String((data as any).caption || "").trim() ? `${caption.length} caractere(s)` : "-"}</span>
               </div>
+
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Arquivos</span>
                 <span className="text-foreground font-medium">{files.length}</span>
@@ -1507,7 +1668,36 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Publish */}
+          {/* Pricing (placeholder - definido pela plataforma) */}
+          <div className="glass-card p-4 space-y-2">
+            <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Valores</h4>
+
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Preço por creator</span>
+                <span className="text-foreground font-medium">—</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Preço por post</span>
+                <span className="text-foreground font-medium">—</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Acréscimo por formato</span>
+                <span className="text-foreground font-medium">—</span>
+              </div>
+
+              <div className="border-t border-border/30 pt-2 flex justify-between">
+                <span className="text-muted-foreground">Total da campanha</span>
+                <span className="text-foreground font-semibold">R$ —</span>
+              </div>
+
+              <div className="text-[11px] text-muted-foreground">
+                Os valores serão calculados automaticamente pela plataforma com base nas configurações da campanha.
+              </div>
+            </div>
+          </div>
+
+          {/* Payment CTA */}
           <button
             onClick={handlePublish}
             disabled={!canPublish || isSubmitting}
@@ -1517,7 +1707,15 @@ export default function CreateCampaign() {
             type="button"
           >
             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-            {isSubmitting ? "Publicando..." : "Publicar campanha"}
+            {isSubmitting ? "Processando..." : "Ir para pagamento"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setStep(3)}
+            className="w-full py-4 rounded-xl border border-border/50 text-muted-foreground font-medium text-sm"
+          >
+            Voltar
           </button>
         </div>
       )}
@@ -1545,31 +1743,35 @@ export default function CreateCampaign() {
         </div>
       )}
 
-      {/* Bottom navigation */}
-      <div className="sticky bottom-0 px-6 py-4 bg-background/80 backdrop-blur-xl border-t border-border/30 flex gap-3">
-        {step > 1 && (
-          <button
-            onClick={() => setStep(step - 1)}
-            className="flex-1 py-4 rounded-xl border border-border/50 text-muted-foreground font-medium text-sm"
-            type="button"
-          >
-            Voltar
-          </button>
-        )}
+      {/* Bottom navigation (agora vai até o step 3; step 4 tem botões próprios) */}
+      {step < 4 && (
+        <div className="sticky bottom-0 px-6 py-4 bg-background/80 backdrop-blur-xl border-t border-border/30 flex gap-3">
+          {step > 1 && (
+            <button
+              onClick={() => setStep(step - 1)}
+              className="flex-1 py-4 rounded-xl border border-border/50 text-muted-foreground font-medium text-sm"
+              type="button"
+            >
+              Voltar
+            </button>
+          )}
 
-        {step < 3 ? (
-          <button
-            onClick={() => setStep(step + 1)}
-            disabled={step === 1 ? !canStep2 : !canStep3}
-            className={`flex-[2] py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
-              (step === 1 ? canStep2 : canStep3) ? "bg-gradient-neon text-primary-foreground glow-blue" : "bg-secondary text-muted-foreground"
-            }`}
-            type="button"
-          >
-            Avançar
-          </button>
-        ) : null}
-      </div>
+          {step < 4 ? (
+            <button
+              onClick={() => setStep(step + 1)}
+              disabled={step === 1 ? !canStep2 : step === 2 ? !canStep3 : !canStep4}
+              className={`flex-[2] py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
+                (step === 1 ? canStep2 : step === 2 ? canStep3 : canStep4)
+                  ? "bg-gradient-neon text-primary-foreground glow-blue"
+                  : "bg-secondary text-muted-foreground"
+              }`}
+              type="button"
+            >
+              Avançar
+            </button>
+          ) : null}
+        </div>
+      )}
     </MobileLayout>
   );
 }
