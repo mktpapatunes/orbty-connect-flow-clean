@@ -920,11 +920,12 @@ export default function CreateCampaign() {
   };
 
   /* =========================
-     Publish
+     Publish (agora -> ir para pagamento simulado)
   ========================= */
 
   const handlePublish = async () => {
     if (!user || !canPublish) return;
+    if (isSubmitting) return;
     setIsSubmitting(true);
 
     try {
@@ -999,14 +1000,11 @@ export default function CreateCampaign() {
         } as any);
       }
 
-      toast.success("Campanha criada! Pagamento será habilitado em breve.");
-      resetData();
-      try {
-        localStorage.removeItem(STEP_STORAGE_KEY);
-      } catch {
-        // ignore
-      }
-      navigate("/dashboard-contratante");
+      // ✅ IMPORTANTE:
+      // Não limpar o wizard aqui. Só limpa após "pagamento aprovado" no PaymentSimulated.
+      toast.success("Campanha criada! Finalize o pagamento para ativar.");
+
+      navigate(`/pagamento/${campaignId}`);
     } catch (error: any) {
       console.error("CREATE_CAMPAIGN_ERROR", error);
       toast.error(error.message || "Erro ao criar campanha. Tente novamente.");

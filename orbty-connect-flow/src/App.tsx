@@ -26,20 +26,18 @@ import ProfileRouter from "@/pages/profile/ProfileRouter";
 import ContractorProfile from "@/pages/profile/ContractorProfile";
 import InfluencerProfile from "@/pages/profile/InfluencerProfile";
 
-// ✅ NOVO: Dados pessoais (privado) do influencer
 import InfluencerPersonalData from "@/pages/profile/InfluencerPersonalData";
-
-// ✅ Perfil público (visão de terceiros)
 import PublicProfileKeyed from "@/pages/profile/PublicProfileKeyed";
 
 import History from "./pages/History";
 import CheckEmail from "./pages/CheckEmail";
 import NotFound from "./pages/NotFound";
 
-// (Opcional)
 import LegacyProfile from "@/pages/Profile";
-
 import ContractorPersonalData from "@/pages/profile/ContractorPersonalData";
+
+// ✅ NOVO: Pagamento simulado
+import PaymentSimulated from "@/pages/payment/PaymentSimulated";
 
 const queryClient = new QueryClient();
 
@@ -108,6 +106,16 @@ const App = () => (
                 }
               />
 
+              {/* ✅ NOVO: pagamento (simulado) */}
+              <Route
+                path="/pagamento/:id"
+                element={
+                  <ProtectedRoute requiredRole="contractor">
+                    <PaymentSimulated />
+                  </ProtectedRoute>
+                }
+              />
+
               {/* Influencer flow */}
               <Route
                 path="/dashboard-influenciadora"
@@ -144,7 +152,7 @@ const App = () => (
                 }
               />
 
-              {/* Profile routes (NEW) */}
+              {/* Profile routes */}
               <Route
                 path="/perfil"
                 element={
@@ -182,10 +190,7 @@ const App = () => (
               />
 
               {/* Perfil público */}
-              <Route
-  path="/u/:id"
-  element={<PublicProfileKeyed />}
-/>
+              <Route path="/u/:id" element={<PublicProfileKeyed />} />
 
               <Route
                 path="/perfil-contratante/dados-pessoais"
