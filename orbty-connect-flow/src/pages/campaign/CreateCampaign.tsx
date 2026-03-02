@@ -1396,30 +1396,34 @@ export default function CreateCampaign() {
 
       {/* ✅ Modal de perfil (SEM iframe / SEM redirect de servidor) */}
       {profileOpen && profileCreatorId && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-          <div className="absolute inset-0 bg-black/60" onMouseDown={closeProfileModal} />
-          <div
-            className="relative w-full md:max-w-3xl h-[85vh] md:h-[80vh] rounded-t-3xl md:rounded-3xl border border-border/50 bg-background overflow-hidden"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between bg-background/80 backdrop-blur-xl">
-              <div className="text-sm font-semibold text-foreground">Perfil do creator</div>
-              <button type="button" onClick={closeProfileModal} className="p-2 rounded-xl hover:bg-white/5" aria-label="Fechar">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+  <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
+    <div className="absolute inset-0 bg-black/60" onMouseDown={closeProfileModal} />
+    <div
+      className="relative w-full md:max-w-3xl h-[85vh] md:h-[80vh] rounded-t-3xl md:rounded-3xl border border-border/50 bg-background overflow-hidden"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between bg-background/80 backdrop-blur-xl">
+        <div className="text-sm font-semibold text-foreground">Perfil do creator</div>
+        <button
+          type="button"
+          onClick={closeProfileModal}
+          className="p-2 rounded-xl hover:bg-white/5"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
 
-            <div className="w-full h-full">
-              <MemoryRouter initialEntries={[`/u/${profileCreatorId}`]}>
-  <Routes>
-    <Route path="/u/:id" element={<PublicProfileKeyed />} />
-  </Routes>
-</MemoryRouter>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="w-full h-full overflow-auto">
+        <MemoryRouter initialEntries={[`/${profileCreatorId}`]}>
+          <Routes>
+            <Route path="/:id" element={<PublicProfileKeyed />} />
+          </Routes>
+        </MemoryRouter>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Bottom navigation */}
       <div className="sticky bottom-0 px-6 py-4 bg-background/80 backdrop-blur-xl border-t border-border/30 flex gap-3">
