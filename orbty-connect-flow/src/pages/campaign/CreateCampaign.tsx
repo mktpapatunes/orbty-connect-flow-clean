@@ -26,6 +26,7 @@ import { toast } from "sonner";
 // ✅ IMPORTS para renderizar o perfil no modal (SEM IFRAME / SEM SERVER HIT)
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import PublicProfileKeyed from "@/pages/profile/PublicProfileKeyed";
+import PublicProfile from "@/pages/profile/PublicProfile";
 
 /* =========================
    Consts
