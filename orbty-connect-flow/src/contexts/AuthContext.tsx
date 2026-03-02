@@ -14,29 +14,16 @@ import type { Session, User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 
 // ------------------------------------------------------------
-// Helpers
+// Helpers (sanitizers)
 // ------------------------------------------------------------
-
-async function checkInviteCodeSafe(code?: string): Promise<boolean> {
-  if (!code) return false;
-  try {
-    const { data, error } = await (supabase.rpc as any)("validate_invite_code", { _code: code });
-    if (error) {
-      console.error("validate_invite_code error:", error);
-      return false;
-    }
-    return !!data;
-  } catch (e) {
-    console.error("validate_invite_code exception:", e);
-    return false;
-  }
-}
 
 function sanitizeRole(v: any): AppRole | null {
   const s = String(v ?? "").trim().toLowerCase();
   if (s === "contractor" || s === "influencer" || s === "admin") return s as AppRole;
-  // alguns projetos usam "creator"
+
+  // alguns projetos antigos usam "creator"
   if (s === "creator") return "influencer";
+
   return null;
 }
 
@@ -132,9 +119,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const registeringRef = useRef(false);
   const authReadyRef = useRef(false);
 
-  const isAdmin = userRole === "admin";
+  // ✅ role defensivo (pra UI não “piscar” creator/pessoal)
+  const roleFromSession = inferRoleFromSession(session);
+  const roleToUse: AppRole | null | undefined =
+    userRole !== undefined ? userRole : roleFromSession; // se userRole ainda não veio, usa o da sessão
 
-  // Admin bypass
+  const isAdmin = roleToUse === "admin";
+
+  // ✅ approval: admin bypass, depois RPC, depois profile
   const approvalStatus: ApprovalStatus | undefined = isAdmin
     ? "approved"
     : (rpcApprovalStatus ?? inferApprovalFromProfile(profile) ?? undefined);
@@ -158,14 +150,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
    * 1) profiles.desired_role
    * 2) session.user_metadata.role
    * 3) RPC get_my_context.role (sanitizado)
-   *
-   * Importante: nunca setar "" / valores inválidos no state.
    */
   const fetchUserData = useCallback(
     async (userId: string, currentSession?: Session | null) => {
       try {
-        // 0) role possível pela sessão (rápido, não depende de DB)
-        const roleFromSession = inferRoleFromSession(currentSession ?? session);
+        const sess = currentSession ?? session;
+
+        // 0) role possível pela sessão (rápido)
+        const roleFromSess = inferRoleFromSession(sess);
 
         // 1) tenta RPC (se falhar, segue)
         let roleFromRpc: AppRole | null = null;
@@ -178,12 +170,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           } else if (Array.isArray(data) && data.length > 0) {
             const ctx = data[0] as any;
 
-            // 🔒 sanitiza pra nunca cair em "" ou lixo
             roleFromRpc = sanitizeRole(ctx?.role);
             approvalFromRpc = sanitizeApproval(ctx?.approval_status);
 
             if (mountedRef.current) {
-              // só seta se vier válido
               if (approvalFromRpc) setRpcApprovalStatus(approvalFromRpc);
             }
           }
@@ -209,7 +199,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setProfile(p);
 
           const roleFromProfile = inferRoleFromProfile(p);
-          const finalRole = roleFromProfile ?? roleFromSession ?? roleFromRpc ?? null;
+          const finalRole = roleFromProfile ?? roleFromSess ?? roleFromRpc ?? null;
 
           setUserRole(finalRole);
 
@@ -222,10 +212,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Sem profile
         setProfile(null);
 
-        // mesmo sem profile, ainda tenta usar role da sessão/RPC
-        setUserRole(roleFromSession ?? roleFromRpc ?? null);
+        // Mesmo sem profile, ainda tenta usar role da sessão/RPC
+        setUserRole(roleFromSess ?? roleFromRpc ?? null);
 
-        // sem profile: deixa approval como veio do RPC (se veio)
+        // Sem profile: deixa approval como veio do RPC (se veio)
         setRpcApprovalStatus((prev) => prev ?? approvalFromRpc ?? null);
       } catch (e) {
         console.error("fetchUserData exception:", e);
@@ -287,7 +277,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setSession(data.session);
 
         if (data.session?.user) {
-          // já tenta setar role rápido pela session (evita layout errado antes do profile)
+          // ✅ já seta role rápido pela session (evita layout errado antes do profile)
           setUserRole(inferRoleFromSession(data.session));
 
           await fetchUserData(data.session.user.id, data.session);
@@ -319,10 +309,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     registeringRef.current = true;
 
     try {
-      // (Opcional) se quiser validar invite code de verdade aqui:
-      // const ok = await checkInviteCodeSafe(profileData.inviteCode);
-      // if (profileData.inviteCode && !ok) return { error: "Código de convite inválido." };
-
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -337,7 +323,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             instagram: profileData.instagram,
             followers: profileData.followers,
             invite_code: profileData.inviteCode,
-            role, // ✅ metadata role
+            role, // ✅ role SEMPRE aqui (é isso que seu trigger usa)
           },
         },
       });
@@ -356,7 +342,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return { needsEmailConfirmation: true };
       }
 
-      // ✅ garante role correto imediatamente (antes do profile)
+      // ✅ garante role correto imediatamente (antes do profile carregar)
       setSession(authData.session);
       setUserRole(sanitizeRole(role));
 
@@ -396,14 +382,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     console.log("AUTH_STATE", {
       authReady,
       loading,
-      role: userRole,
+      role: roleToUse,
+      roleRaw: userRole,
+      roleFromSession: roleFromSession,
       approval: approvalStatus,
       isAdmin,
       profileState: profile === undefined ? "undefined" : profile === null ? "null" : "object",
       hasSession: !!session,
-      metaRole: inferRoleFromSession(session),
     });
-  }, [authReady, loading, userRole, approvalStatus, isAdmin, profile, session]);
+  }, [authReady, loading, roleToUse, userRole, roleFromSession, approvalStatus, isAdmin, profile, session]);
 
   return (
     <AuthContext.Provider
