@@ -15,7 +15,6 @@ import {
   Search,
   Users,
   Layers,
-  ExternalLink,
 } from "lucide-react";
 import MobileLayout from "@/components/MobileLayout";
 import CampaignProgress from "@/components/CampaignProgress";
@@ -108,6 +107,11 @@ type CreatorListItem = {
   content_style: string | null;
   approval_status?: string | null;
   desired_role?: string | null;
+
+  // ✅ opcional: se sua RPC retornar foto, já usamos direto
+  avatar_url?: string | null;
+  photo_url?: string | null;
+  profile_photo_url?: string | null;
 };
 
 /* =========================
@@ -169,6 +173,15 @@ function diffDaysInclusive(startISO?: string, endISO?: string) {
 
   const days = Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1;
   return days > 0 ? days : null;
+}
+
+function initialsFromName(name?: string | null) {
+  const n = String(name || "").trim();
+  if (!n) return "C";
+  const parts = n.split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] ?? "C";
+  const last = parts.length > 1 ? parts[parts.length - 1]?.[0] : "";
+  return (first + last).toUpperCase();
 }
 
 /* =========================
@@ -436,7 +449,11 @@ export default function CreateCampaign() {
     const state = String((data as any).selectedState || "").trim();
 
     const shouldHydrate =
-      step === 1 && !!city && !!state && (locationLat === null || locationLon === null) && !hydratingMap;
+      step === 1 &&
+      !!city &&
+      !!state &&
+      (locationLat === null || locationLon === null) &&
+      !hydratingMap;
 
     if (!shouldHydrate) return;
 
@@ -557,7 +574,6 @@ export default function CreateCampaign() {
         setCreatorLoading(true);
 
         // ⚠️ Ajuste os nomes dos parâmetros se a sua RPC estiver diferente.
-        // Padrão sugerido:
         // get_creator_suggestions(p_city text, p_state text, p_segments text[], p_limit int)
         const { data: rpcData, error } = await (supabase.rpc as any)("get_creator_suggestions", {
           p_city: selectedCity,
@@ -600,8 +616,38 @@ export default function CreateCampaign() {
   // ✅ selectedCreators precisa funcionar mesmo que creatorList não contenha o ID (ex: filtros mudaram)
   const selectedCreators = useMemo(() => {
     const map = new Map(creatorList.map((c) => [c.id, c]));
-    return selectedCreatorIds.map((id) => map.get(id)).filter(Boolean) as CreatorListItem[];
+    return selectedCreatorIds
+      .map((id) => map.get(id))
+      .filter(Boolean) as CreatorListItem[];
   }, [creatorList, selectedCreatorIds]);
+
+  /* =========================
+     Perfil: modal (abre sem nova aba)
+  ========================= */
+
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileCreatorId, setProfileCreatorId] = useState<string | null>(null);
+
+  const openProfileModal = (id: string) => {
+    setProfileCreatorId(id);
+    setProfileOpen(true);
+  };
+
+  const closeProfileModal = () => {
+    setProfileOpen(false);
+    setProfileCreatorId(null);
+  };
+
+  useEffect(() => {
+    if (!profileOpen) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeProfileModal();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileOpen]);
 
   const toggleSelectCreator = (id: string) => {
     const current = selectedCreatorIds.slice();
@@ -631,8 +677,18 @@ export default function CreateCampaign() {
     updateData({ selectedCreatorIds: selectedCreatorIds.filter((x) => x !== id) } as any);
   };
 
-  const openCreatorProfile = (id: string) => {
-    window.open(`${PUBLIC_PROFILE_ROUTE_PREFIX}/${id}`, "_blank", "noopener,noreferrer");
+  const getCreatorAvatarUrl = (c: CreatorListItem) => {
+    const anyC = c as any;
+    const url =
+      (c.avatar_url ?? null) ||
+      (c.photo_url ?? null) ||
+      (c.profile_photo_url ?? null) ||
+      (anyC.avatarUrl ?? null) ||
+      (anyC.photoUrl ?? null) ||
+      (anyC.profilePhotoUrl ?? null) ||
+      null;
+
+    return typeof url === "string" && url.trim() ? url.trim() : null;
   };
 
   /* =========================
@@ -1049,7 +1105,6 @@ export default function CreateCampaign() {
               </label>
             </div>
 
-            {/* ✅ Fix desktop overflow: força o conteúdo a caber no chip (wrap/line-clamp) sem mudar layout do mobile */}
             <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
               {segmentOptions.map((seg) => {
                 const selected = selectedSegments.includes(seg);
@@ -1065,10 +1120,7 @@ export default function CreateCampaign() {
                       selected ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
                     }`}
                   >
-                    {/* garante que o texto não “vaze” do botão em desktop */}
-                    <span className="block w-full min-w-0 overflow-hidden text-ellipsis">
-                      {seg}
-                    </span>
+                    <span className="block w-full min-w-0 overflow-hidden text-ellipsis">{seg}</span>
                   </button>
                 );
               })}
@@ -1152,32 +1204,52 @@ export default function CreateCampaign() {
                 {creatorList.map((c) => {
                   const selected = selectedCreatorIds.includes(c.id);
                   const followersLabel = formatIGCount(followersToNumber(c.followers));
+                  const avatarUrl = getCreatorAvatarUrl(c);
 
                   return (
-                    <div key={c.id} className={`glass-card p-3 flex items-center gap-3 transition ${selected ? "border-primary/60 bg-primary/5" : ""}`}>
-                      <button type="button" onClick={() => toggleSelectCreator(c.id)} className="flex-1 min-w-0 text-left">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-sm font-semibold text-foreground truncate">{c.name || "Creator"}</div>
-                            <div className="text-[11px] text-muted-foreground truncate">
-                              {c.city && c.state ? `${c.city}, ${c.state}` : c.city || c.state || "—"} • {followersLabel} seguidores
-                            </div>
-                          </div>
+                    <div
+                      key={c.id}
+                      className={`glass-card p-3 flex items-center gap-3 transition ${
+                        selected ? "border-primary/60 bg-primary/5" : ""
+                      }`}
+                    >
+                      {/* ✅ Clique no "corpo" abre perfil (modal) */}
+                      <button
+                        type="button"
+                        onClick={() => openProfileModal(c.id)}
+                        className="flex-1 min-w-0 text-left flex items-center gap-3"
+                        aria-label={`Ver perfil de ${c.name || "creator"}`}
+                      >
+                        {/* Avatar */}
+                        <div className="w-11 h-11 rounded-full border border-border/50 bg-white/5 overflow-hidden shrink-0 flex items-center justify-center">
+                          {avatarUrl ? (
+                            <img src={avatarUrl} alt={c.name || "Creator"} className="w-full h-full object-cover" loading="lazy" />
+                          ) : (
+                            <span className="text-xs font-semibold text-muted-foreground">{initialsFromName(c.name)}</span>
+                          )}
+                        </div>
 
-                          <div className={`text-xs font-semibold px-2 py-1 rounded-lg border ${selected ? "border-primary/60 text-primary" : "border-border/50 text-muted-foreground"}`}>
-                            {selected ? "Selecionado" : "Selecionar"}
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground truncate">{c.name || "Creator"}</div>
+                          <div className="text-[11px] text-muted-foreground truncate">
+                            {c.city && c.state ? `${c.city}, ${c.state}` : c.city || c.state || "—"} • {followersLabel} seguidores
                           </div>
                         </div>
                       </button>
 
+                      {/* ✅ Seleção só no botão (sem abrir perfil) */}
                       <button
                         type="button"
-                        onClick={() => openCreatorProfile(c.id)}
-                        className="p-2 rounded-xl hover:bg-white/5 text-muted-foreground"
-                        aria-label="Ver perfil"
-                        title="Ver perfil"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSelectCreator(c.id);
+                        }}
+                        className={`shrink-0 text-xs font-semibold px-3 py-2 rounded-xl border transition ${
+                          selected ? "border-primary/60 text-primary bg-primary/5" : "border-border/50 text-muted-foreground hover:bg-white/5"
+                        }`}
+                        aria-label={selected ? "Remover seleção" : "Selecionar creator"}
                       >
-                        <ExternalLink className="w-4 h-4" />
+                        {selected ? "Selecionado" : "Selecionar"}
                       </button>
                     </div>
                   );
@@ -1185,7 +1257,9 @@ export default function CreateCampaign() {
               </div>
             )}
 
-            <div className="text-[11px] text-muted-foreground">Clique em um creator para selecionar. Use o ícone ao lado para ver o perfil.</div>
+            <div className="text-[11px] text-muted-foreground">
+              Clique no card para ver o perfil. Use o botão <span className="text-foreground font-medium">Selecionar</span> para escolher.
+            </div>
           </div>
 
           {/* Selected creators */}
@@ -1277,7 +1351,9 @@ export default function CreateCampaign() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Região</span>
-                <span className="text-foreground font-medium truncate ml-4">{String((data as any).region || "") || `${selectedCity}, ${selectedState}`}</span>
+                <span className="text-foreground font-medium truncate ml-4">
+                  {String((data as any).region || "") || `${selectedCity}, ${selectedState}`}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Período</span>
@@ -1316,6 +1392,31 @@ export default function CreateCampaign() {
             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
             {isSubmitting ? "Publicando..." : "Publicar campanha"}
           </button>
+        </div>
+      )}
+
+      {/* ✅ Modal de perfil (sem navegar / sem nova aba) */}
+      {profileOpen && profileCreatorId && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
+          <div className="absolute inset-0 bg-black/60" onMouseDown={closeProfileModal} />
+          <div
+            className="relative w-full md:max-w-3xl h-[85vh] md:h-[80vh] rounded-t-3xl md:rounded-3xl border border-border/50 bg-background overflow-hidden"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between bg-background/80 backdrop-blur-xl">
+              <div className="text-sm font-semibold text-foreground">Perfil do creator</div>
+              <button type="button" onClick={closeProfileModal} className="p-2 rounded-xl hover:bg-white/5" aria-label="Fechar">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <iframe
+              title="Perfil do creator"
+              src={`${PUBLIC_PROFILE_ROUTE_PREFIX}/${profileCreatorId}`}
+              className="w-full h-full"
+            />
+          </div>
         </div>
       )}
 
