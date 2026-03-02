@@ -27,15 +27,14 @@ const ProtectedRoute = ({
 }: ProtectedRouteProps) => {
   const { session, profile, userRole, approvalStatus, isAdmin, loading, authReady } = useAuth();
 
-  // 🔒 role fallback completo: userRole -> profile.desired_role -> session metadata
+  // role fallback completo: userRole -> profile.desired_role -> session metadata
   const roleFromUserRole = sanitizeRole(userRole);
   const roleFromProfile = sanitizeRole((profile as any)?.desired_role);
   const roleFromMeta = sanitizeRole((session?.user as any)?.user_metadata?.role);
 
-  const roleToUse: AppRole | null | undefined =
+  const roleToUse: AppRole | null =
     roleFromUserRole ?? roleFromProfile ?? roleFromMeta ?? null;
 
-  // Still loading initial auth
   if (loading || !authReady) {
     return (
       <div className="mobile-container flex items-center justify-center bg-background">
@@ -44,23 +43,19 @@ const ProtectedRoute = ({
     );
   }
 
-  // Not authenticated
   if (!session) {
     return <Navigate to="/login" replace />;
   }
 
-  // Admin-only route
   if (adminOnly) {
     if (!(isAdmin || roleToUse === "admin")) return <Navigate to="/login" replace />;
     return <>{children}</>;
   }
 
-  // Admin can access any route
   if (isAdmin || roleToUse === "admin") {
     return <>{children}</>;
   }
 
-  // Wait for profile to load (undefined = loading, null = doesn't exist)
   if (profile === undefined) {
     return (
       <div className="mobile-container flex items-center justify-center bg-background">
@@ -69,12 +64,10 @@ const ProtectedRoute = ({
     );
   }
 
-  // No profile — user needs to register
   if (profile === null) {
     return <Navigate to="/escolha-perfil" replace />;
   }
 
-  // Wait for approval status to load (undefined = loading)
   if (approvalStatus === undefined) {
     return (
       <div className="mobile-container flex items-center justify-center bg-background">
@@ -83,7 +76,6 @@ const ProtectedRoute = ({
     );
   }
 
-  // Check approval
   if (requireApproval && approvalStatus === "pending") {
     return <Navigate to="/aguardando-aprovacao" replace />;
   }
@@ -92,13 +84,11 @@ const ProtectedRoute = ({
     return <Navigate to="/conta-rejeitada" replace />;
   }
 
-  // Se por algum motivo ainda não temos role válido, não manda pro login (sessão existe).
-  // Direciona pro fluxo de escolha ou tenta refresh manualmente via tela.
+  // Sessão existe, mas role ainda não veio válido -> manda para escolha de perfil (não para login)
   if (!roleToUse) {
     return <Navigate to="/escolha-perfil" replace />;
   }
 
-  // Check role — redirect to correct dashboard
   if (requiredRole && roleToUse !== requiredRole) {
     if (roleToUse === "contractor") return <Navigate to="/dashboard-contratante" replace />;
     if (roleToUse === "influencer") return <Navigate to="/dashboard-influenciadora" replace />;

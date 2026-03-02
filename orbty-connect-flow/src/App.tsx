@@ -1,5 +1,3 @@
-// src/App.tsx
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -31,14 +29,14 @@ import InfluencerProfile from "@/pages/profile/InfluencerProfile";
 // ✅ NOVO: Dados pessoais (privado) do influencer
 import InfluencerPersonalData from "@/pages/profile/InfluencerPersonalData";
 
-// ✅ Perfil público (visão de terceiros) — wrapper keyed (evita flash de estado antigo)
+// ✅ Perfil público (visão de terceiros)
 import PublicProfileKeyed from "@/pages/profile/PublicProfileKeyed";
 
 import History from "./pages/History";
 import CheckEmail from "./pages/CheckEmail";
 import NotFound from "./pages/NotFound";
 
-// (Opcional) mantém a tela antiga acessível pra você comparar durante migração
+// (Opcional)
 import LegacyProfile from "@/pages/Profile";
 
 import ContractorPersonalData from "@/pages/profile/ContractorPersonalData";
@@ -54,7 +52,6 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-              {/* Root → Welcome */}
               <Route path="/" element={<Navigate to="/welcome" replace />} />
 
               {/* Public auth flow */}
@@ -166,7 +163,6 @@ const App = () => (
                 }
               />
 
-              {/* ✅ PERFIL COMPLETO do influencer (usuário logado) */}
               <Route
                 path="/perfil-influenciadora"
                 element={
@@ -176,7 +172,6 @@ const App = () => (
                 }
               />
 
-              {/* ✅ DADOS PESSOAIS (privado) do influencer */}
               <Route
                 path="/perfil-influenciadora/dados-pessoais"
                 element={
@@ -186,7 +181,7 @@ const App = () => (
                 }
               />
 
-              {/* ✅ PERFIL PÚBLICO (visão de terceiros) */}
+              {/* Perfil público */}
               <Route
                 path="/u/:id"
                 element={
@@ -200,12 +195,11 @@ const App = () => (
                 path="/perfil-contratante/dados-pessoais"
                 element={
                   <ProtectedRoute requiredRole="contractor">
-                     <ContractorPersonalData />
-                 </ProtectedRoute>
+                    <ContractorPersonalData />
+                  </ProtectedRoute>
                 }
               />
 
-              {/* (Opcional) tela antiga, só pra comparar durante a migração */}
               <Route
                 path="/perfil-antigo"
                 element={
@@ -215,7 +209,6 @@ const App = () => (
                 }
               />
 
-              {/* Shared pages */}
               <Route
                 path="/historico"
                 element={
@@ -225,7 +218,6 @@ const App = () => (
                 }
               />
 
-              {/* Catch-all */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
