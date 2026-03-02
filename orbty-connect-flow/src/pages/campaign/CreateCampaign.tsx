@@ -48,7 +48,6 @@ const objectiveOptions = [
 
 type ObjectiveOption = (typeof objectiveOptions)[number];
 
-// ✅ trocou "Família" por "Esportes"
 const segmentOptions = [
   "Humor",
   "Educação",
@@ -138,7 +137,6 @@ function followersToNumber(raw: any) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/** Formatação estilo Instagram */
 function formatIGCount(input: number | null | undefined) {
   const n = Number(input ?? 0);
   if (!Number.isFinite(n) || n <= 0) return "—";
@@ -219,7 +217,6 @@ export default function CreateCampaign() {
   const { user } = useAuth();
   const { data, updateData, resetData } = useCampaign();
 
-  // ✅ step persistente (agora 1..4)
   const [step, setStep] = useState<number>(() => {
     const raw = localStorage.getItem(STEP_STORAGE_KEY);
     const n = Number(raw);
@@ -248,7 +245,7 @@ export default function CreateCampaign() {
   }, []);
 
   /* =========================
-     Objetivos (chips) - usa briefPublic como storage
+     Objectives
   ========================= */
 
   const parseObjectives = (raw: string): ObjectiveOption[] => {
@@ -284,7 +281,7 @@ export default function CreateCampaign() {
   };
 
   /* =========================
-     Segmentos (chips) - usa data.contentSegments
+     Segments
   ========================= */
 
   const parseSegments = (raw: string): SegmentOption[] => {
@@ -320,11 +317,10 @@ export default function CreateCampaign() {
   };
 
   /* =========================
-     Quantidade creators (sem spinner + permite apagar)
+     Creators Needed
   ========================= */
 
   const creatorsNeededFromData = Number((data as any).creatorsNeeded ?? 1) || 1;
-
   const [creatorsNeededInput, setCreatorsNeededInput] = useState<string>(String(creatorsNeededFromData));
 
   useEffect(() => {
@@ -340,11 +336,10 @@ export default function CreateCampaign() {
   }, [creatorsNeededInput]);
 
   const creatorsNeededOk = creatorsNeededNumber !== null && creatorsNeededNumber >= 1 && creatorsNeededNumber <= 50;
-
   const currentLimit = creatorsNeededNumber ?? creatorsNeededFromData;
 
   /* =========================
-     Localização (Nominatim + mapa)
+     Localização
   ========================= */
 
   const [locationQuery, setLocationQuery] = useState("");
@@ -466,7 +461,6 @@ export default function CreateCampaign() {
     updateData({ selectedCity: "", selectedState: "", region: "" } as any);
   };
 
-  // hidrata lat/lon quando já tem cidade/estado (volta do app etc)
   const [hydratingMap, setHydratingMap] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -498,7 +492,6 @@ export default function CreateCampaign() {
           setLocationLat(Number.isFinite(lat) ? lat : null);
           setLocationLon(Number.isFinite(lon) ? lon : null);
 
-          // ✅ garante region completo (bairro/cidade/estado)
           if (!String((data as any).region || "").trim()) {
             updateData({ region: buildFullLocationLabel(first) } as any);
           }
@@ -528,7 +521,7 @@ export default function CreateCampaign() {
   }, [locationLat, locationLon]);
 
   /* =========================
-     Período (modal)
+     Período
   ========================= */
 
   const [periodOpen, setPeriodOpen] = useState(false);
@@ -568,7 +561,7 @@ export default function CreateCampaign() {
   };
 
   /* =========================
-     Step 2: sugestões de creators (RPC)
+     Step 2: creators (RPC)
   ========================= */
 
   const [creatorLoading, setCreatorLoading] = useState(false);
@@ -609,7 +602,6 @@ export default function CreateCampaign() {
         }
 
         const rows = (Array.isArray(rpcData) ? rpcData : []) as CreatorListItem[];
-
         const sorted = [...rows].sort(
           (a, b) => (followersToNumber(b.followers) ?? 0) - (followersToNumber(a.followers) ?? 0)
         );
@@ -636,7 +628,7 @@ export default function CreateCampaign() {
   }, [creatorList, selectedCreatorIds]);
 
   /* =========================
-     Perfil: modal (SEM iframe)
+     Perfil: modal
   ========================= */
 
   const [profileOpen, setProfileOpen] = useState(false);
@@ -705,10 +697,9 @@ export default function CreateCampaign() {
   };
 
   /* =========================
-     Step 3 fields (posts / format / briefing / mentions / collab / hashtags / files / caption)
+     Step 3 fields
   ========================= */
 
-  // Posts por creator (sem setas, com input string + onBlur)
   const postsFromData = Number((data as any).posts ?? 1) || 1;
   const [postsInput, setPostsInput] = useState<string>(String(postsFromData));
 
@@ -758,9 +749,7 @@ export default function CreateCampaign() {
     selectedCreatorIds.length > 0 &&
     selectedCreatorIds.length <= currentLimit;
 
-  // ✅ agora existe validação mínima na etapa 3 (posts + formato)
   const canStep4 = canStep2 && canStep3 && postsOk && formatOk;
-
   const canPublish = canStep4;
 
   /* =========================
@@ -782,7 +771,7 @@ export default function CreateCampaign() {
   };
 
   /* =========================
-     Publish (ainda cria campanha; pagamento vem depois)
+     Publish
   ========================= */
 
   const handlePublish = async () => {
@@ -792,7 +781,6 @@ export default function CreateCampaign() {
     try {
       const region = String((data as any).region || "").trim() || `${selectedCity}, ${selectedState}`;
       const creatorsNeededFinal = creatorsNeededNumber ?? creatorsNeededFromData;
-
       const postsFinal = postsNumber ?? postsFromData;
 
       const requirements = {
@@ -810,8 +798,8 @@ export default function CreateCampaign() {
               .map((m) => m.trim())
               .filter(Boolean)
           : [],
-        collab: collabBool, // boolean | null
-        collab_mentions: collabBool ? collabMentionsList : [], // ✅ novo
+        collab: collabBool,
+        collab_mentions: collabBool ? collabMentionsList : [],
         caption: String((data as any).caption || "").trim() || null,
         creators_needed: creatorsNeededFinal,
         content_segments: selectedSegments,
@@ -885,7 +873,8 @@ export default function CreateCampaign() {
       showHome
       homeRoute="/dashboard-contratante"
     >
-      <CampaignProgress currentStep={step} />
+      {/* ✅ agora informa 4 etapas */}
+      <CampaignProgress currentStep={step} totalSteps={4} />
 
       {/* =========================
           STEP 1
@@ -1348,12 +1337,10 @@ export default function CreateCampaign() {
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Arquivos & Publicação</h3>
 
-          {/* Posts + Formato (lado a lado) */}
+          {/* Posts + Formato */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
-                Posts por creator *
-              </label>
+              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Posts por creator *</label>
               <input
                 inputMode="numeric"
                 pattern="[0-9]*"
@@ -1428,7 +1415,7 @@ export default function CreateCampaign() {
             />
           </div>
 
-          {/* Collab (toggle chip + campo extra) */}
+          {/* Collab */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Collab</label>
 
@@ -1436,7 +1423,6 @@ export default function CreateCampaign() {
               <button
                 type="button"
                 onClick={() => {
-                  // ✅ clicar no mesmo chip remove seleção
                   if (collabBool === true) updateData({ collab: null, collabMentions: "" } as any);
                   else updateData({ collab: true } as any);
                 }}
@@ -1520,7 +1506,6 @@ export default function CreateCampaign() {
             <p className="text-xs text-muted-foreground/60">Imagens, vídeos ou PDFs</p>
           </button>
 
-          {/* File list */}
           {files.length > 0 && (
             <div className="space-y-2">
               {files.map((f, i) => (
@@ -1536,11 +1521,7 @@ export default function CreateCampaign() {
                     <p className="text-xs text-foreground truncate">{f.file.name}</p>
                     <p className="text-[10px] text-muted-foreground">{(f.file.size / 1024).toFixed(0)} KB</p>
                   </div>
-                  <button
-                    onClick={() => removeFile(i)}
-                    className="text-muted-foreground hover:text-destructive transition-colors"
-                    type="button"
-                  >
+                  <button onClick={() => removeFile(i)} className="text-muted-foreground hover:text-destructive transition-colors" type="button">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -1572,13 +1553,12 @@ export default function CreateCampaign() {
       )}
 
       {/* =========================
-          STEP 4 (Resumo + Valores + Pagamento)
+          STEP 4
       ========================= */}
       {step === 4 && (
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Resumo & Pagamento</h3>
 
-          {/* Summary */}
           <div className="glass-card p-4 space-y-2">
             <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Resumo</h4>
 
@@ -1633,42 +1613,9 @@ export default function CreateCampaign() {
                   {postFormatOptions.find((x) => x.id === formatFromData)?.label || String(formatFromData || "-")}
                 </span>
               </div>
-
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Collab</span>
-                <span className="text-foreground font-medium">{collabBool === null ? "-" : collabBool ? "Sim" : "Não"}</span>
-              </div>
-
-              {collabBool === true ? (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Collab @</span>
-                  <span className="text-foreground font-medium truncate ml-4">{collabMentionsList.length ? collabMentionsList.join(", ") : "-"}</span>
-                </div>
-              ) : null}
-
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Menções</span>
-                <span className="text-foreground font-medium truncate ml-4">{String((data as any).mentions || "").trim() || "-"}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Hashtags</span>
-                <span className="text-foreground font-medium truncate ml-4">{String((data as any).hashtags || "").trim() || "-"}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Legenda</span>
-                <span className="text-foreground font-medium">{String((data as any).caption || "").trim() ? `${caption.length} caractere(s)` : "-"}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Arquivos</span>
-                <span className="text-foreground font-medium">{files.length}</span>
-              </div>
             </div>
           </div>
 
-          {/* Pricing (placeholder - definido pela plataforma) */}
           <div className="glass-card p-4 space-y-2">
             <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Valores</h4>
 
@@ -1697,7 +1644,6 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Payment CTA */}
           <button
             onClick={handlePublish}
             disabled={!canPublish || isSubmitting}
@@ -1720,7 +1666,7 @@ export default function CreateCampaign() {
         </div>
       )}
 
-      {/* ✅ Modal de perfil (SEM iframe / SEM redirect de servidor) */}
+      {/* Modal perfil */}
       {profileOpen && profileCreatorId && (
         <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
           <div className="absolute inset-0 bg-black/60" onMouseDown={closeProfileModal} />
@@ -1743,7 +1689,7 @@ export default function CreateCampaign() {
         </div>
       )}
 
-      {/* Bottom navigation (agora vai até o step 3; step 4 tem botões próprios) */}
+      {/* Bottom navigation até step 3 */}
       {step < 4 && (
         <div className="sticky bottom-0 px-6 py-4 bg-background/80 backdrop-blur-xl border-t border-border/30 flex gap-3">
           {step > 1 && (
@@ -1756,20 +1702,18 @@ export default function CreateCampaign() {
             </button>
           )}
 
-          {step < 4 ? (
-            <button
-              onClick={() => setStep(step + 1)}
-              disabled={step === 1 ? !canStep2 : step === 2 ? !canStep3 : !canStep4}
-              className={`flex-[2] py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
-                (step === 1 ? canStep2 : step === 2 ? canStep3 : canStep4)
-                  ? "bg-gradient-neon text-primary-foreground glow-blue"
-                  : "bg-secondary text-muted-foreground"
-              }`}
-              type="button"
-            >
-              Avançar
-            </button>
-          ) : null}
+          <button
+            onClick={() => setStep(step + 1)}
+            disabled={step === 1 ? !canStep2 : step === 2 ? !canStep3 : !canStep4}
+            className={`flex-[2] py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
+              (step === 1 ? canStep2 : step === 2 ? canStep3 : canStep4)
+                ? "bg-gradient-neon text-primary-foreground glow-blue"
+                : "bg-secondary text-muted-foreground"
+            }`}
+            type="button"
+          >
+            Avançar
+          </button>
         </div>
       )}
     </MobileLayout>
