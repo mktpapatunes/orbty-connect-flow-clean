@@ -117,14 +117,6 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function normalizeText(v: any) {
-  return String(v ?? "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
-
 function followersToNumber(raw: any) {
   const s = String(raw ?? "").trim();
   if (!s) return null;
@@ -234,21 +226,21 @@ export default function CreateCampaign() {
     return picked;
   };
 
-  const selectedObjectives = useMemo(() => parseObjectives(data.briefPublic || ""), [data.briefPublic]);
+  const selectedObjectives = useMemo(() => parseObjectives((data as any).briefPublic || ""), [(data as any).briefPublic]);
 
   const toggleObjective = (opt: ObjectiveOption) => {
     const current = selectedObjectives.slice();
     const exists = current.includes(opt);
 
     if (exists) {
-      updateData({ briefPublic: current.filter((x) => x !== opt).join(", ") });
+      updateData({ briefPublic: current.filter((x) => x !== opt).join(", ") } as any);
       return;
     }
     if (current.length >= 3) {
       toast.error("Você pode selecionar no máximo 3 objetivos.");
       return;
     }
-    updateData({ briefPublic: [...current, opt].join(", ") });
+    updateData({ briefPublic: [...current, opt].join(", ") } as any);
   };
 
   /* =========================
@@ -541,7 +533,7 @@ export default function CreateCampaign() {
   };
 
   /* =========================
-     Step 2: sugestões de creators (FIX real)
+     Step 2: sugestões de creators (RPC)
   ========================= */
 
   const [creatorLoading, setCreatorLoading] = useState(false);
@@ -550,6 +542,7 @@ export default function CreateCampaign() {
   const selectedCity = String((data as any).selectedCity || "").trim();
   const selectedState = String((data as any).selectedState || "").trim();
 
+  // ✅ carrega via RPC quando entrar no step 2 e tiver filtros
   useEffect(() => {
     let alive = true;
 
@@ -566,53 +559,33 @@ export default function CreateCampaign() {
       try {
         setCreatorLoading(true);
 
-        // ✅ Busca aberta (pra não falhar por SP vs São Paulo / acento / role/status nulo)
-        const res = await supabase
-          .from("profiles")
-          .select("id, name, city, state, neighborhood, followers, content_style, approval_status, desired_role")
-          .limit(300);
+        // ⚠️ Ajuste os nomes dos parâmetros se a sua RPC estiver diferente.
+        // Padrão sugerido:
+        // get_creator_suggestions(p_city text, p_state text, p_segments text[], p_limit int)
+        const { data: rpcData, error } = await (supabase.rpc as any)("get_creator_suggestions", {
+          p_city: selectedCity,
+          p_state: selectedState,
+          p_segments: selectedSegments,
+          p_limit: 30,
+        });
 
         if (!alive) return;
-        if (res.error) throw res.error;
 
-        const rows = (res.data as any[] | null) ?? [];
+        if (error) {
+          console.error("GET_CREATOR_SUGGESTIONS_ERROR", error);
+          setCreatorList([]);
+          return;
+        }
 
-        const cityWanted = normalizeText(selectedCity);
-        const stateWanted = normalizeText(selectedState);
-        const segsLower = selectedSegments.map((s) => normalizeText(s));
+        const rows = (Array.isArray(rpcData) ? rpcData : []) as CreatorListItem[];
 
-        const filtered = rows
-          .filter((r) => {
-            // role/status tolerantes (pra teste)
-            const role = normalizeText(r?.desired_role);
-            const status = normalizeText(r?.approval_status);
+        // ✅ garante ordenação por followers (caso a RPC não ordene)
+        const sorted = [...rows].sort((a, b) => (followersToNumber(b.followers) ?? 0) - (followersToNumber(a.followers) ?? 0));
 
-            const roleOk = role === "influencer" || role === "" || role === "creator";
-            const statusOk = status === "approved" || status === "" || status === "pending";
-
-            if (!roleOk) return false;
-            if (!statusOk) return false;
-
-            const c = normalizeText(r?.city);
-            const s = normalizeText(r?.state);
-
-            // match tolerante
-            const cityOk = cityWanted ? c.includes(cityWanted) || cityWanted.includes(c) : true;
-            const stateOk = stateWanted ? s.includes(stateWanted) || stateWanted.includes(s) : true;
-            if (!cityOk || !stateOk) return false;
-
-            const cs = normalizeText(r?.content_style);
-            if (!cs) return false;
-
-            return segsLower.some((seg) => cs.includes(seg));
-          })
-          .sort((a, b) => (followersToNumber(b.followers) ?? 0) - (followersToNumber(a.followers) ?? 0))
-          .slice(0, 30);
-
-        setCreatorList(filtered);
+        setCreatorList(sorted.slice(0, 30));
       } catch (e) {
-        console.error("CREATORS_SUGGEST_ERROR", e);
-        setCreatorList([]);
+        console.error("GET_CREATOR_SUGGESTIONS_EXCEPTION", e);
+        if (alive) setCreatorList([]);
       } finally {
         if (alive) setCreatorLoading(false);
       }
@@ -625,9 +598,12 @@ export default function CreateCampaign() {
 
   const selectedCreatorIds: string[] = ((data as any).selectedCreatorIds || []) as string[];
 
+  // ✅ selectedCreators precisa funcionar mesmo que creatorList não contenha o ID (ex: filtros mudaram)
   const selectedCreators = useMemo(() => {
     const map = new Map(creatorList.map((c) => [c.id, c]));
-    return selectedCreatorIds.map((id) => map.get(id)).filter(Boolean) as CreatorListItem[];
+    return selectedCreatorIds
+      .map((id) => map.get(id))
+      .filter(Boolean) as CreatorListItem[];
   }, [creatorList, selectedCreatorIds]);
 
   const toggleSelectCreator = (id: string) => {
@@ -1168,14 +1144,15 @@ export default function CreateCampaign() {
               ) : null}
             </div>
 
-            {(!selectedCity || !selectedState || selectedSegments.length === 0) ? (
+            {!selectedCity || !selectedState || selectedSegments.length === 0 ? (
               <div className="glass-card p-4 text-sm text-muted-foreground">
                 Defina <span className="text-foreground font-medium">Localização</span> e pelo menos{" "}
                 <span className="text-foreground font-medium">1 segmento</span> para ver sugestões.
               </div>
             ) : creatorList.length === 0 && !creatorLoading ? (
               <div className="glass-card p-4 text-sm text-muted-foreground">
-                Nenhum creator encontrado para os filtros atuais. (Agora o filtro é tolerante — se ainda não aparecer, o perfil do creator está com city/state/content_style vazio.)
+                Nenhum creator encontrado para os filtros atuais. Se você tem um creator compatível e não apareceu, verifique se o perfil dele tem:
+                <span className="text-foreground font-medium"> city, state (UF/cidade corretos) e content_style</span> preenchidos.
               </div>
             ) : (
               <div className="space-y-2">
@@ -1190,7 +1167,7 @@ export default function CreateCampaign() {
                           <div className="min-w-0">
                             <div className="text-sm font-semibold text-foreground truncate">{c.name || "Creator"}</div>
                             <div className="text-[11px] text-muted-foreground truncate">
-                              {(c.city && c.state) ? `${c.city}, ${c.state}` : (c.city || c.state || "—")} • {followersLabel} seguidores
+                              {c.city && c.state ? `${c.city}, ${c.state}` : c.city || c.state || "—"} • {followersLabel} seguidores
                             </div>
                           </div>
 

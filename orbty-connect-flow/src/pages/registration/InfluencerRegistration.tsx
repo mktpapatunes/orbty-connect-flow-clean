@@ -73,10 +73,7 @@ const InfluencerRegistration = () => {
       instagram: form.instagram,
       followers: form.followers || undefined,
       inviteCode: form.inviteCode || undefined,
-
-      // ✅ FIX: garantir desired_role preenchido
-      desired_role: "influencer",
-    } as any);
+    });
 
     if (result.error) {
       const errLower = result.error.toLowerCase();
@@ -118,7 +115,7 @@ const InfluencerRegistration = () => {
     { key: "instagram", label: "Instagram", icon: Instagram, placeholder: "@seuinstagram", type: "text" },
     { key: "followers", label: "Número de seguidores (opcional)", icon: Users, placeholder: "Ex: 50K", type: "text" },
     { key: "inviteCode", label: "Código de convite (opcional)", icon: User, placeholder: "Ex: ORBTY2026", type: "text" },
-  ];
+  ] as const;
 
   return (
     <div className="mobile-container relative flex flex-col bg-background">

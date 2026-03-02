@@ -1,8 +1,14 @@
-import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+
+export type CampaignType = "event" | "music" | "product" | "";
+
+// deixa flexível, mas evita qualquer string bizarra no app
+export type CampaignFormat = "stories" | "reels" | "feed" | "tiktok" | string;
 
 export interface CampaignFormData {
   title: string;
-  campaignType: string;
+  campaignType: CampaignType;
+
   selectedState: string;
   selectedCity: string;
 
@@ -10,25 +16,25 @@ export interface CampaignFormData {
   region: string;
 
   // Período
-  campaignDate: string; // início
-  applyDeadline: string; // fim
+  campaignDate: string; // início (YYYY-MM-DD)
+  applyDeadline: string; // fim (YYYY-MM-DD)
 
-  // Objetivos (chips)
+  // Objetivos (chips) - CSV
   briefPublic: string;
 
   // Briefing privado
   briefPrivate: string;
 
   // Etapa 2
-  contentSegments: string; // "Humor, Educação"
+  contentSegments: string; // CSV: "Humor, Educação"
   creatorsNeeded: number; // 1..50
-  selectedCreatorIds: string[]; // ✅ seleção manual
+  selectedCreatorIds: string[]; // seleção manual
 
   // Mantidos (requirements atual)
   posts: number;
-  format: string;
-  hashtags: string;
-  mentions: string;
+  format: CampaignFormat;
+  hashtags: string; // CSV
+  mentions: string; // CSV
 }
 
 interface CampaignContextType {
@@ -42,16 +48,21 @@ const STORAGE_KEY = "orbty:create_campaign:draft:v1";
 const initialData: CampaignFormData = {
   title: "",
   campaignType: "",
+
   selectedState: "",
   selectedCity: "",
   region: "",
+
   campaignDate: "",
   applyDeadline: "",
+
   briefPublic: "",
   briefPrivate: "",
+
   contentSegments: "",
   creatorsNeeded: 1,
   selectedCreatorIds: [],
+
   posts: 1,
   format: "stories",
   hashtags: "",
@@ -66,22 +77,62 @@ export const useCampaign = () => {
   return ctx;
 };
 
+function clampInt(n: unknown, min: number, max: number, fallback: number) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(v)));
+}
+
+function asString(v: unknown, fallback = "") {
+  return typeof v === "string" ? v : fallback;
+}
+
+function sanitizeCsv(v: unknown) {
+  // mantém como string; só evita null/objeto quebrando
+  return asString(v, "");
+}
+
+function sanitizeCampaignType(v: unknown): CampaignType {
+  const s = asString(v, "");
+  if (s === "event" || s === "music" || s === "product" || s === "") return s;
+  return "";
+}
+
+function sanitizeStringArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((x) => typeof x === "string");
+}
+
 function safeParseDraft(raw: string | null): CampaignFormData | null {
   if (!raw) return null;
   try {
     const obj = JSON.parse(raw);
     if (!obj || typeof obj !== "object") return null;
 
-    // validação mínima de shape (evita crash)
     const out: CampaignFormData = {
       ...initialData,
-      ...obj,
-      creatorsNeeded: Number.isFinite(Number(obj.creatorsNeeded))
-        ? Math.max(1, Math.min(50, Math.floor(Number(obj.creatorsNeeded))))
-        : initialData.creatorsNeeded,
-      selectedCreatorIds: Array.isArray(obj.selectedCreatorIds)
-        ? obj.selectedCreatorIds.filter((x: any) => typeof x === "string")
-        : [],
+
+      title: asString((obj as any).title, initialData.title),
+      campaignType: sanitizeCampaignType((obj as any).campaignType),
+
+      selectedState: asString((obj as any).selectedState, initialData.selectedState),
+      selectedCity: asString((obj as any).selectedCity, initialData.selectedCity),
+      region: asString((obj as any).region, initialData.region),
+
+      campaignDate: asString((obj as any).campaignDate, initialData.campaignDate),
+      applyDeadline: asString((obj as any).applyDeadline, initialData.applyDeadline),
+
+      briefPublic: sanitizeCsv((obj as any).briefPublic),
+      briefPrivate: asString((obj as any).briefPrivate, initialData.briefPrivate),
+
+      contentSegments: sanitizeCsv((obj as any).contentSegments),
+      creatorsNeeded: clampInt((obj as any).creatorsNeeded, 1, 50, initialData.creatorsNeeded),
+      selectedCreatorIds: sanitizeStringArray((obj as any).selectedCreatorIds),
+
+      posts: clampInt((obj as any).posts, 1, 50, initialData.posts),
+      format: asString((obj as any).format, initialData.format),
+      hashtags: sanitizeCsv((obj as any).hashtags),
+      mentions: sanitizeCsv((obj as any).mentions),
     };
 
     return out;
@@ -96,7 +147,7 @@ export const CampaignProvider = ({ children }: { children: ReactNode }) => {
     return draft ?? initialData;
   });
 
-  const updateData = (updates: Partial<CampaignFormData>) => {
+  const updateData: CampaignContextType["updateData"] = (updates) => {
     setData((prev) => ({ ...prev, ...updates }));
   };
 
@@ -109,7 +160,7 @@ export const CampaignProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // ✅ Persistência automática (com debounce leve)
+  // Persistência automática (com debounce leve)
   const serialized = useMemo(() => JSON.stringify(data), [data]);
 
   useEffect(() => {

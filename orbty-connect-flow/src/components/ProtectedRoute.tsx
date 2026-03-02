@@ -1,3 +1,4 @@
+import React from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import type { AppRole } from "@/types/database";
@@ -10,6 +11,14 @@ interface ProtectedRouteProps {
   adminOnly?: boolean;
 }
 
+/** garante que nunca entra "" / lixo */
+function sanitizeRole(v: any): AppRole | null {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "contractor" || s === "influencer" || s === "admin") return s as AppRole;
+  if (s === "creator") return "influencer";
+  return null;
+}
+
 const ProtectedRoute = ({
   children,
   requiredRole,
@@ -18,13 +27,13 @@ const ProtectedRoute = ({
 }: ProtectedRouteProps) => {
   const { session, profile, userRole, approvalStatus, isAdmin, loading, authReady } = useAuth();
 
-  // Fallback: se role veio como null, tentar inferir do profile
-  const desiredRole = (profile as any)?.desired_role as
-    | "contractor"
-    | "influencer"
-    | "admin"
-    | undefined;
-  const roleToUse = userRole ?? desiredRole ?? null;
+  // 🔒 role fallback completo: userRole -> profile.desired_role -> session metadata
+  const roleFromUserRole = sanitizeRole(userRole);
+  const roleFromProfile = sanitizeRole((profile as any)?.desired_role);
+  const roleFromMeta = sanitizeRole((session?.user as any)?.user_metadata?.role);
+
+  const roleToUse: AppRole | null | undefined =
+    roleFromUserRole ?? roleFromProfile ?? roleFromMeta ?? null;
 
   // Still loading initial auth
   if (loading || !authReady) {
@@ -42,7 +51,7 @@ const ProtectedRoute = ({
 
   // Admin-only route
   if (adminOnly) {
-    if (!isAdmin && roleToUse !== "admin") return <Navigate to="/login" replace />;
+    if (!(isAdmin || roleToUse === "admin")) return <Navigate to="/login" replace />;
     return <>{children}</>;
   }
 
@@ -83,17 +92,10 @@ const ProtectedRoute = ({
     return <Navigate to="/conta-rejeitada" replace />;
   }
 
-  // Wait for role to load (undefined = loading)
-  if (roleToUse === undefined) {
-    return (
-      <div className="mobile-container flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-      </div>
-    );
-  }
-
+  // Se por algum motivo ainda não temos role válido, não manda pro login (sessão existe).
+  // Direciona pro fluxo de escolha ou tenta refresh manualmente via tela.
   if (!roleToUse) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/escolha-perfil" replace />;
   }
 
   // Check role — redirect to correct dashboard

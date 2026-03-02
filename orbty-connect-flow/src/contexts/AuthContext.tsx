@@ -32,17 +32,36 @@ async function checkInviteCodeSafe(code?: string): Promise<boolean> {
   }
 }
 
-function inferRoleFromProfile(p?: unknown): AppRole | null {
-  // No seu banco existe `desired_role` (mesmo que o type esteja desatualizado).
-  const desired = (p as any)?.desired_role;
-  if (desired === "contractor" || desired === "influencer" || desired === "admin") return desired;
+function sanitizeRole(v: any): AppRole | null {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "contractor" || s === "influencer" || s === "admin") return s as AppRole;
+  // alguns projetos usam "creator"
+  if (s === "creator") return "influencer";
   return null;
 }
 
-function inferApprovalFromProfile(p?: unknown): ApprovalStatus | null {
-  const s = (p as any)?.approval_status;
-  if (s === "pending" || s === "approved" || s === "rejected") return s;
+function sanitizeApproval(v: any): ApprovalStatus | null {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "pending" || s === "approved" || s === "rejected") return s as ApprovalStatus;
   return null;
+}
+
+function inferRoleFromProfile(p?: unknown): AppRole | null {
+  // Fonte: profiles.desired_role
+  return sanitizeRole((p as any)?.desired_role);
+}
+
+function inferApprovalFromProfile(p?: unknown): ApprovalStatus | null {
+  return sanitizeApproval((p as any)?.approval_status);
+}
+
+function inferRoleFromSession(session: Session | null): AppRole | null {
+  const metaRole =
+    (session?.user as any)?.user_metadata?.role ??
+    (session?.user as any)?.app_metadata?.role ??
+    null;
+
+  return sanitizeRole(metaRole);
 }
 
 // ------------------------------------------------------------
@@ -101,8 +120,11 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
+
+  // role/status separados, mas sempre sanitizados
   const [userRole, setUserRole] = useState<AppRole | null | undefined>(undefined);
   const [rpcApprovalStatus, setRpcApprovalStatus] = useState<ApprovalStatus | null | undefined>(undefined);
+
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
 
@@ -132,69 +154,89 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   /**
-   * Fonte de verdade:
-   * - tenta RPC get_my_context (role + approval), mas NÃO depende disso
-   * - SEMPRE tenta buscar o profile direto em `profiles`
-   * - se role vier null, tenta inferir de `profiles.desired_role`
+   * Fonte de verdade de role:
+   * 1) profiles.desired_role
+   * 2) session.user_metadata.role
+   * 3) RPC get_my_context.role (sanitizado)
+   *
+   * Importante: nunca setar "" / valores inválidos no state.
    */
-  const fetchUserData = useCallback(async (userId: string) => {
-    try {
-      // 1) tenta RPC (se falhar, seguimos do mesmo jeito)
+  const fetchUserData = useCallback(
+    async (userId: string, currentSession?: Session | null) => {
       try {
-        const { data, error } = await supabase.rpc("get_my_context");
-        if (error) {
-          console.error("get_my_context error:", error);
-        } else if (Array.isArray(data) && data.length > 0) {
-          const ctx = data[0] as any;
-          const role = (ctx?.role ?? null) as AppRole | null;
-          const status = (ctx?.approval_status ?? null) as ApprovalStatus | null;
-          if (mountedRef.current) {
-            setUserRole(role);
-            setRpcApprovalStatus(status);
+        // 0) role possível pela sessão (rápido, não depende de DB)
+        const roleFromSession = inferRoleFromSession(currentSession ?? session);
+
+        // 1) tenta RPC (se falhar, segue)
+        let roleFromRpc: AppRole | null = null;
+        let approvalFromRpc: ApprovalStatus | null = null;
+
+        try {
+          const { data, error } = await supabase.rpc("get_my_context");
+          if (error) {
+            console.error("get_my_context error:", error);
+          } else if (Array.isArray(data) && data.length > 0) {
+            const ctx = data[0] as any;
+
+            // 🔒 sanitiza pra nunca cair em "" ou lixo
+            roleFromRpc = sanitizeRole(ctx?.role);
+            approvalFromRpc = sanitizeApproval(ctx?.approval_status);
+
+            if (mountedRef.current) {
+              // só seta se vier válido
+              if (approvalFromRpc) setRpcApprovalStatus(approvalFromRpc);
+            }
           }
+        } catch (e) {
+          console.error("get_my_context exception:", e);
         }
-      } catch (e) {
-        console.error("get_my_context exception:", e);
-      }
 
-      // 2) busca profile SEMPRE
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .maybeSingle();
+        // 2) busca profile SEMPRE
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", userId)
+          .maybeSingle();
 
-      if (profileError) {
-        console.error("profiles select error:", profileError);
-      }
+        if (profileError) {
+          console.error("profiles select error:", profileError);
+        }
 
-      if (mountedRef.current) {
+        if (!mountedRef.current) return;
+
         if (profileData) {
           const p = profileData as unknown as Profile;
           setProfile(p);
 
-          // role fallback (quando user_roles/RPC não retorna)
-          setUserRole((prev) => {
-            if (prev) return prev;
-            return inferRoleFromProfile(p);
-          });
+          const roleFromProfile = inferRoleFromProfile(p);
+          const finalRole = roleFromProfile ?? roleFromSession ?? roleFromRpc ?? null;
 
-          // approval fallback (quando RPC não retorna)
-          setRpcApprovalStatus((prev) => {
-            if (prev) return prev;
-            return inferApprovalFromProfile(p);
-          });
+          setUserRole(finalRole);
+
+          // approval fallback (se RPC não veio)
+          setRpcApprovalStatus((prev) => prev ?? approvalFromRpc ?? inferApprovalFromProfile(p));
+
           return;
         }
 
         // Sem profile
         setProfile(null);
+
+        // mesmo sem profile, ainda tenta usar role da sessão/RPC
+        setUserRole(roleFromSession ?? roleFromRpc ?? null);
+
+        // sem profile: deixa approval como veio do RPC (se veio)
+        setRpcApprovalStatus((prev) => prev ?? approvalFromRpc ?? null);
+      } catch (e) {
+        console.error("fetchUserData exception:", e);
+        if (mountedRef.current) {
+          setProfile(null);
+          setUserRole(inferRoleFromSession(currentSession ?? session)); // pelo menos metadata
+        }
       }
-    } catch (e) {
-      console.error("fetchUserData exception:", e);
-      if (mountedRef.current) setProfile(null);
-    }
-  }, []);
+    },
+    [session]
+  );
 
   // ------------------------------------------------------------
   // Auth lifecycle
@@ -203,7 +245,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     mountedRef.current = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mountedRef.current) return;
       if (event === "INITIAL_SESSION") return;
 
@@ -217,7 +261,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setAuthReady(false);
         setLoading(true);
 
-        fetchUserData(newSession.user.id)
+        fetchUserData(newSession.user.id, newSession)
           .catch((e) => console.error("onAuthStateChange fetchUserData error:", e))
           .finally(() => finalizeLoading());
       }
@@ -241,8 +285,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!mountedRef.current) return;
 
         setSession(data.session);
+
         if (data.session?.user) {
-          await fetchUserData(data.session.user.id);
+          // já tenta setar role rápido pela session (evita layout errado antes do profile)
+          setUserRole(inferRoleFromSession(data.session));
+
+          await fetchUserData(data.session.user.id, data.session);
         } else {
           clearUserState();
         }
@@ -271,6 +319,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     registeringRef.current = true;
 
     try {
+      // (Opcional) se quiser validar invite code de verdade aqui:
+      // const ok = await checkInviteCodeSafe(profileData.inviteCode);
+      // if (profileData.inviteCode && !ok) return { error: "Código de convite inválido." };
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -285,7 +337,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             instagram: profileData.instagram,
             followers: profileData.followers,
             invite_code: profileData.inviteCode,
-            role,
+            role, // ✅ metadata role
           },
         },
       });
@@ -304,7 +356,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return { needsEmailConfirmation: true };
       }
 
-      await fetchUserData(authData.user.id);
+      // ✅ garante role correto imediatamente (antes do profile)
+      setSession(authData.session);
+      setUserRole(sanitizeRole(role));
+
+      await fetchUserData(authData.user.id, authData.session);
       return {};
     } catch (e: any) {
       return { error: e?.message || "Erro desconhecido" };
@@ -332,7 +388,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshProfile: AuthContextType["refreshProfile"] = async () => {
     if (!session?.user) return;
-    await fetchUserData(session.user.id);
+    await fetchUserData(session.user.id, session);
   };
 
   // Debug útil
@@ -345,6 +401,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       isAdmin,
       profileState: profile === undefined ? "undefined" : profile === null ? "null" : "object",
       hasSession: !!session,
+      metaRole: inferRoleFromSession(session),
     });
   }, [authReady, loading, userRole, approvalStatus, isAdmin, profile, session]);
 

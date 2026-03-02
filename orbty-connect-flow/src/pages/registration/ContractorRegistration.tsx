@@ -68,10 +68,7 @@ const ContractorRegistration = () => {
       city: form.city,
       state: form.state, // ✅ UF
       inviteCode: form.inviteCode || undefined,
-
-      // ✅ FIX: garantir desired_role preenchido
-      desired_role: "contractor",
-    } as any);
+    });
 
     if (result.error) {
       const errLower = result.error.toLowerCase();
@@ -95,7 +92,14 @@ const ContractorRegistration = () => {
     setIsLoading(false);
   };
 
-  const canProceed = form.name && form.email && form.password && form.phone && form.city && form.state && cityValid;
+  const canProceed =
+    form.name &&
+    form.email &&
+    form.password &&
+    form.phone &&
+    form.city &&
+    form.state &&
+    cityValid;
 
   const fields = [
     { key: "name", label: "Nome completo", icon: User, placeholder: "Seu nome ou nome da empresa", type: "text" },
@@ -103,7 +107,7 @@ const ContractorRegistration = () => {
     { key: "password", label: "Senha", icon: Lock, placeholder: "Mínimo 6 caracteres", type: "password" },
     { key: "phone", label: "Telefone / WhatsApp", icon: Phone, placeholder: "(00) 00000-0000", type: "tel" },
     { key: "inviteCode", label: "Código de convite (opcional)", icon: User, placeholder: "Ex: ORBTY2026", type: "text" },
-  ];
+  ] as const;
 
   return (
     <div className="mobile-container relative flex flex-col bg-background">
@@ -166,7 +170,7 @@ const ContractorRegistration = () => {
           </motion.div>
         ))}
 
-        {/* ✅ Localização padronizada */}
+        {/* ✅ Localização padronizada (UF + cidade IBGE) */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -180,6 +184,7 @@ const ContractorRegistration = () => {
               setForm((s) => ({ ...s, state: uf, city }));
               setCityValid(cityValid);
 
+              // limpa erros ao corrigir
               setErrors((prev) => {
                 const next = { ...prev };
                 if (next.state) delete next.state;

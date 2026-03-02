@@ -9,21 +9,16 @@ export default function ProfileRouter() {
   useEffect(() => {
     if (loading || !authReady) return;
 
-    // Admin: manda para /admin (ou mantenha no /perfil-antigo se preferir)
     if (isAdmin || userRole === "admin") {
       navigate("/admin", { replace: true });
       return;
     }
 
-    // Se ainda não tem profile, o ProtectedRoute já redireciona,
-    // mas mantemos fallback defensivo
     if (profile === null) {
       navigate("/escolha-perfil", { replace: true });
       return;
     }
 
-    // Se pending/rejected, o ProtectedRoute já lida,
-    // mas deixamos defensivo
     if (approvalStatus === "pending") {
       navigate("/aguardando-aprovacao", { replace: true });
       return;
@@ -33,17 +28,20 @@ export default function ProfileRouter() {
       return;
     }
 
-    if (userRole === "contractor") {
+    // ✅ Fallback igual ao ProtectedRoute
+    const desiredRole = (profile as any)?.desired_role as "contractor" | "influencer" | "admin" | undefined;
+    const roleToUse = userRole ?? desiredRole ?? null;
+
+    if (roleToUse === "contractor") {
       navigate("/perfil-contratante", { replace: true });
       return;
     }
 
-    if (userRole === "influencer") {
+    if (roleToUse === "influencer") {
       navigate("/perfil-influenciadora", { replace: true });
       return;
     }
 
-    // fallback
     navigate("/welcome", { replace: true });
   }, [navigate, userRole, profile, loading, authReady, approvalStatus, isAdmin]);
 
