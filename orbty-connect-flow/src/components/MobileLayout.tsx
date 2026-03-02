@@ -168,7 +168,7 @@ const MobileLayout = ({
               {/* Criar (central destacado alinhado) */}
               <button
                 onClick={() => navigate("/criar-campanha")}
-                className="w-13 h-13 rounded-full bg-gradient-neon glow-blue flex items-center justify-center shadow-md transition hover:scale-105 active:scale-95"
+                className="w-14 h-14 rounded-full bg-gradient-neon glow-blue flex items-center justify-center shadow-md transition hover:scale-105 active:scale-95"
                 title="Criar campanha"
               >
                 <Plus className="w-6 h-6 text-primary-foreground" />
