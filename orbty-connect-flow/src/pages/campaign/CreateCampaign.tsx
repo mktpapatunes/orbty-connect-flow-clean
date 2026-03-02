@@ -122,6 +122,31 @@ type CreatorListItem = {
   profile_photo_url?: string | null;
 };
 
+type QuoteResponse = {
+  ok: boolean;
+  subtotal: number;
+  discount: number;
+  total: number;
+  breakdown?: Array<{
+    key: string;
+    label: string;
+    qty: number | null;
+    unit: number | null;
+    total: number;
+  }>;
+  coupon?: {
+    code: string | null;
+    applied: boolean;
+    percent_off: number;
+    message: string | null;
+  };
+  inputs?: {
+    creators_needed: number;
+    posts: number;
+    format: string;
+  };
+};
+
 /* =========================
    Helpers
 ========================= */
@@ -206,6 +231,12 @@ function normalizeAtHandles(raw: string, max = 4) {
     if (out.length >= max) break;
   }
   return out;
+}
+
+function formatBRL(value: any) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
 }
 
 /* =========================
@@ -339,7 +370,7 @@ export default function CreateCampaign() {
   const currentLimit = creatorsNeededNumber ?? creatorsNeededFromData;
 
   /* =========================
-     Localização
+     Location
   ========================= */
 
   const [locationQuery, setLocationQuery] = useState("");
@@ -521,7 +552,7 @@ export default function CreateCampaign() {
   }, [locationLat, locationLon]);
 
   /* =========================
-     Período
+     Period
   ========================= */
 
   const [periodOpen, setPeriodOpen] = useState(false);
@@ -561,7 +592,7 @@ export default function CreateCampaign() {
   };
 
   /* =========================
-     Step 2: creators (RPC)
+     Step 2: suggestions (RPC)
   ========================= */
 
   const [creatorLoading, setCreatorLoading] = useState(false);
@@ -602,6 +633,7 @@ export default function CreateCampaign() {
         }
 
         const rows = (Array.isArray(rpcData) ? rpcData : []) as CreatorListItem[];
+
         const sorted = [...rows].sort(
           (a, b) => (followersToNumber(b.followers) ?? 0) - (followersToNumber(a.followers) ?? 0)
         );
@@ -628,7 +660,7 @@ export default function CreateCampaign() {
   }, [creatorList, selectedCreatorIds]);
 
   /* =========================
-     Perfil: modal
+     Profile modal
   ========================= */
 
   const [profileOpen, setProfileOpen] = useState(false);
@@ -753,6 +785,76 @@ export default function CreateCampaign() {
   const canPublish = canStep4;
 
   /* =========================
+     Quote (Step 4)
+  ========================= */
+
+  const [couponCode, setCouponCode] = useState<string>(String((data as any).couponCode || ""));
+  useEffect(() => {
+    updateData({ couponCode } as any);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [couponCode]);
+
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quote, setQuote] = useState<QuoteResponse | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+
+    if (step !== 4) return;
+    if (!canStep4) {
+      setQuote(null);
+      return;
+    }
+
+    const creatorsNeededFinal = creatorsNeededNumber ?? creatorsNeededFromData;
+    const postsFinal = postsNumber ?? postsFromData;
+
+    const t = setTimeout(async () => {
+      try {
+        setQuoteLoading(true);
+
+        const { data: rpcData, error } = await (supabase.rpc as any)("quote_campaign_price", {
+          p_creators_needed: creatorsNeededFinal,
+          p_posts: postsFinal,
+          p_format: formatFromData,
+          p_coupon_code: couponCode?.trim() ? couponCode.trim() : null,
+        });
+
+        if (!alive) return;
+
+        if (error) {
+          console.error("QUOTE_CAMPAIGN_PRICE_ERROR", error);
+          setQuote(null);
+          toast.error("Não foi possível calcular o valor agora. Tente novamente.");
+          return;
+        }
+
+        const q = (rpcData || null) as QuoteResponse | null;
+        setQuote(q);
+
+        const msg = q?.coupon?.message;
+        if (couponCode.trim()) {
+          if (q?.coupon?.applied) toast.success(msg || "Cupom aplicado.");
+          else if (msg) toast.error(msg);
+        }
+      } catch (e) {
+        console.error("QUOTE_CAMPAIGN_PRICE_EXCEPTION", e);
+        if (!alive) return;
+        setQuote(null);
+        toast.error("Erro ao calcular o valor. Tente novamente.");
+      } finally {
+        if (alive) setQuoteLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, canStep4, creatorsNeededNumber, creatorsNeededFromData, postsNumber, postsFromData, formatFromData, couponCode]);
+
+  /* =========================
      Files
   ========================= */
 
@@ -804,6 +906,12 @@ export default function CreateCampaign() {
         creators_needed: creatorsNeededFinal,
         content_segments: selectedSegments,
         selected_creator_ids: selectedCreatorIds,
+
+        // ✅ salva para auditoria/checkout futuro (opcional)
+        coupon_code: couponCode?.trim() ? couponCode.trim() : null,
+        quote_total: quote?.total ?? null,
+        quote_subtotal: quote?.subtotal ?? null,
+        quote_discount: quote?.discount ?? null,
       };
 
       const { data: campaignId, error: campaignError } = await supabase.rpc("create_campaign", {
@@ -873,7 +981,6 @@ export default function CreateCampaign() {
       showHome
       homeRoute="/dashboard-contratante"
     >
-      {/* ✅ agora informa 4 etapas */}
       <CampaignProgress currentStep={step} totalSteps={4} />
 
       {/* =========================
@@ -1182,7 +1289,7 @@ export default function CreateCampaign() {
             </div>
 
             <div className="text-[12px] text-muted-foreground mb-3">
-              Defina o número de creators que irão divulgar sua campanha.
+              Defina a quantidade de creators que você gostaria que divulgasse sua campanha.
             </div>
 
             <input
@@ -1337,7 +1444,7 @@ export default function CreateCampaign() {
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Arquivos & Publicação</h3>
 
-          {/* Posts + Formato */}
+          {/* Posts + Format */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Posts por creator *</label>
@@ -1472,9 +1579,7 @@ export default function CreateCampaign() {
 
                 <div className="mt-2 text-[11px] text-muted-foreground">
                   Selecionados:{" "}
-                  <span className="text-foreground font-medium">
-                    {collabMentionsList.length ? collabMentionsList.join(", ") : "—"}
-                  </span>
+                  <span className="text-foreground font-medium">{collabMentionsList.length ? collabMentionsList.join(", ") : "—"}</span>
                 </div>
               </div>
             ) : null}
@@ -1559,6 +1664,7 @@ export default function CreateCampaign() {
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Resumo & Pagamento</h3>
 
+          {/* Summary */}
           <div className="glass-card p-4 space-y-2">
             <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Resumo</h4>
 
@@ -1566,33 +1672,6 @@ export default function CreateCampaign() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Título</span>
                 <span className="text-foreground font-medium truncate ml-4">{String((data as any).title || "")}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Tipo</span>
-                <span className="text-foreground font-medium capitalize">{String((data as any).campaignType || "")}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Região</span>
-                <span className="text-foreground font-medium truncate ml-4">
-                  {String((data as any).region || "") || `${selectedCity}, ${selectedState}`}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Período</span>
-                <span className="text-foreground font-medium truncate ml-4">{periodLabel || "-"}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Objetivos</span>
-                <span className="text-foreground font-medium truncate ml-4">{selectedObjectives.length ? selectedObjectives.join(", ") : "-"}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Segmentos</span>
-                <span className="text-foreground font-medium truncate ml-4">{selectedSegments.length ? selectedSegments.join(", ") : "-"}</span>
               </div>
 
               <div className="flex justify-between">
@@ -1613,37 +1692,104 @@ export default function CreateCampaign() {
                   {postFormatOptions.find((x) => x.id === formatFromData)?.label || String(formatFromData || "-")}
                 </span>
               </div>
+
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Período</span>
+                <span className="text-foreground font-medium truncate ml-4">{periodLabel || "-"}</span>
+              </div>
             </div>
           </div>
 
+          {/* Coupon */}
+          <div className="glass-card p-4 space-y-2">
+            <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Cupom</h4>
+
+            <div className="flex gap-2">
+              <input
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value)}
+                placeholder="Digite seu cupom (ex: ORBTY10)"
+                className="flex-1 bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <button
+                type="button"
+                onClick={() => setCouponCode((v) => v.trim())}
+                className="px-4 py-3 rounded-xl border border-border/50 text-muted-foreground font-semibold text-sm hover:bg-white/5"
+              >
+                Aplicar
+              </button>
+            </div>
+
+            <div className="text-[11px] text-muted-foreground">
+              {quoteLoading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Calculando…
+                </span>
+              ) : quote?.coupon?.message ? (
+                <span className={quote.coupon.applied ? "text-primary" : ""}>{quote.coupon.message}</span>
+              ) : (
+                " "
+              )}
+            </div>
+          </div>
+
+          {/* Pricing */}
           <div className="glass-card p-4 space-y-2">
             <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Valores</h4>
 
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Preço por creator</span>
-                <span className="text-foreground font-medium">—</span>
+            {quoteLoading ? (
+              <div className="text-sm text-muted-foreground flex items-center gap-2 py-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Calculando valores…
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Preço por post</span>
-                <span className="text-foreground font-medium">—</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Acréscimo por formato</span>
-                <span className="text-foreground font-medium">—</span>
-              </div>
+            ) : quote?.ok ? (
+              <div className="space-y-2 text-sm">
+                {(quote.breakdown || []).map((line) => {
+                  const isDiscount = line.key === "discount";
+                  const qtyLabel =
+                    line.qty === null || line.qty === undefined
+                      ? ""
+                      : isDiscount
+                        ? line.qty > 0
+                          ? `(${Number(line.qty)}%)`
+                          : ""
+                        : `(${Number(line.qty)}x)`;
 
-              <div className="border-t border-border/30 pt-2 flex justify-between">
-                <span className="text-muted-foreground">Total da campanha</span>
-                <span className="text-foreground font-semibold">R$ —</span>
-              </div>
+                  return (
+                    <div key={line.key} className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {line.label} {qtyLabel ? <span className="text-muted-foreground/70">{qtyLabel}</span> : null}
+                      </span>
+                      <span className={`text-foreground font-medium ${isDiscount && line.total !== 0 ? "text-primary" : ""}`}>
+                        {formatBRL(line.total)}
+                      </span>
+                    </div>
+                  );
+                })}
 
-              <div className="text-[11px] text-muted-foreground">
-                Os valores são calculados automaticamente pela plataforma com base nas configurações da campanha.
+                <div className="border-t border-border/30 pt-2 flex justify-between">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span className="text-foreground font-medium">{formatBRL(quote.subtotal)}</span>
+                </div>
+
+                {quote.discount ? (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Desconto</span>
+                    <span className="text-primary font-semibold">- {formatBRL(quote.discount)}</span>
+                  </div>
+                ) : null}
+
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total da campanha</span>
+                  <span className="text-foreground font-semibold">{formatBRL(quote.total)}</span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">Não foi possível calcular os valores.</div>
+            )}
           </div>
 
+          {/* Payment CTA */}
           <button
             onClick={handlePublish}
             disabled={!canPublish || isSubmitting}
@@ -1666,7 +1812,7 @@ export default function CreateCampaign() {
         </div>
       )}
 
-      {/* Modal perfil */}
+      {/* Profile modal */}
       {profileOpen && profileCreatorId && (
         <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
           <div className="absolute inset-0 bg-black/60" onMouseDown={closeProfileModal} />
@@ -1689,7 +1835,7 @@ export default function CreateCampaign() {
         </div>
       )}
 
-      {/* Bottom navigation até step 3 */}
+      {/* Bottom navigation */}
       {step < 4 && (
         <div className="sticky bottom-0 px-6 py-4 bg-background/80 backdrop-blur-xl border-t border-border/30 flex gap-3">
           {step > 1 && (
