@@ -1405,21 +1405,13 @@ export default function CreateCampaign() {
     >
       <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between bg-background/80 backdrop-blur-xl">
         <div className="text-sm font-semibold text-foreground">Perfil do creator</div>
-        <button
-          type="button"
-          onClick={closeProfileModal}
-          className="p-2 rounded-xl hover:bg-white/5"
-        >
+        <button type="button" onClick={closeProfileModal} className="p-2 rounded-xl hover:bg-white/5">
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      <div className="w-full h-full overflow-auto">
-        <MemoryRouter initialEntries={[`/${profileCreatorId}`]}>
-          <Routes>
-            <Route path="/:id" element={<PublicProfileKeyed />} />
-          </Routes>
-        </MemoryRouter>
+      <div className="h-full overflow-auto">
+        <PublicProfile key={profileCreatorId} idOverride={profileCreatorId} />
       </div>
     </div>
   </div>

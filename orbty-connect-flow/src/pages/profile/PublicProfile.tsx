@@ -487,8 +487,9 @@ async function fetchInfluencerAcceptedCount(profileId: string) {
 
 const AGE_BARS_BUCKETS = ["18-24", "25-34", "35-44", "45-54", "55-64"] as const;
 
-export default function PublicProfile() {
-  const { id } = useParams<{ id: string }>();
+export default function PublicProfile({ idOverride }: { idOverride?: string }) {
+  const params = useParams<{ id: string }>();
+  const id = idOverride ?? params.id;
   const navigate = useNavigate();
   const { userRole } = useAuth();
 
