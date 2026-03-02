@@ -48,6 +48,7 @@ const objectiveOptions = [
 
 type ObjectiveOption = (typeof objectiveOptions)[number];
 
+// ✅ trocou "Família" por "Esportes"
 const segmentOptions = [
   "Humor",
   "Educação",
@@ -62,7 +63,7 @@ const segmentOptions = [
   "Games",
   "Negócios",
   "Arte",
-  "Família",
+  "Esportes",
   "Pets",
 ] as const;
 
@@ -435,11 +436,7 @@ export default function CreateCampaign() {
     const state = String((data as any).selectedState || "").trim();
 
     const shouldHydrate =
-      step === 1 &&
-      !!city &&
-      !!state &&
-      (locationLat === null || locationLon === null) &&
-      !hydratingMap;
+      step === 1 && !!city && !!state && (locationLat === null || locationLon === null) && !hydratingMap;
 
     if (!shouldHydrate) return;
 
@@ -580,7 +577,9 @@ export default function CreateCampaign() {
         const rows = (Array.isArray(rpcData) ? rpcData : []) as CreatorListItem[];
 
         // ✅ garante ordenação por followers (caso a RPC não ordene)
-        const sorted = [...rows].sort((a, b) => (followersToNumber(b.followers) ?? 0) - (followersToNumber(a.followers) ?? 0));
+        const sorted = [...rows].sort(
+          (a, b) => (followersToNumber(b.followers) ?? 0) - (followersToNumber(a.followers) ?? 0)
+        );
 
         setCreatorList(sorted.slice(0, 30));
       } catch (e) {
@@ -601,9 +600,7 @@ export default function CreateCampaign() {
   // ✅ selectedCreators precisa funcionar mesmo que creatorList não contenha o ID (ex: filtros mudaram)
   const selectedCreators = useMemo(() => {
     const map = new Map(creatorList.map((c) => [c.id, c]));
-    return selectedCreatorIds
-      .map((id) => map.get(id))
-      .filter(Boolean) as CreatorListItem[];
+    return selectedCreatorIds.map((id) => map.get(id)).filter(Boolean) as CreatorListItem[];
   }, [creatorList, selectedCreatorIds]);
 
   const toggleSelectCreator = (id: string) => {
@@ -768,7 +765,14 @@ export default function CreateCampaign() {
   ========================= */
 
   return (
-    <MobileLayout title="Nova campanha" showBack backTo="/dashboard-contratante" showNav={false} showHome homeRoute="/dashboard-contratante">
+    <MobileLayout
+      title="Nova campanha"
+      showBack
+      backTo="/dashboard-contratante"
+      showNav={false}
+      showHome
+      homeRoute="/dashboard-contratante"
+    >
       <CampaignProgress currentStep={step} />
 
       {/* =========================
@@ -812,6 +816,36 @@ export default function CreateCampaign() {
               })}
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">Dica: clique novamente no tipo selecionado para remover.</p>
+          </div>
+
+          {/* ✅ Objectives (movido para acima da localização) */}
+          <div>
+            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+              Objetivo da campanha * <span className="normal-case tracking-normal text-muted-foreground">(até 3)</span>
+            </label>
+
+            <div className="grid grid-cols-2 gap-2">
+              {objectiveOptions.map((opt) => {
+                const selected = selectedObjectives.includes(opt);
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => toggleObjective(opt)}
+                    className={`px-3 py-3 rounded-xl border text-sm font-medium transition-all text-center ${
+                      selected ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              Selecionados:{" "}
+              <span className="text-foreground font-medium">{selectedObjectives.length ? selectedObjectives.join(", ") : "—"}</span>
+            </div>
           </div>
 
           {/* Location */}
@@ -917,35 +951,6 @@ export default function CreateCampaign() {
             )}
           </div>
 
-          {/* Objectives */}
-          <div>
-            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
-              Objetivo da campanha * <span className="normal-case tracking-normal text-muted-foreground">(até 3)</span>
-            </label>
-
-            <div className="grid grid-cols-2 gap-2">
-              {objectiveOptions.map((opt) => {
-                const selected = selectedObjectives.includes(opt);
-                return (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => toggleObjective(opt)}
-                    className={`px-3 py-3 rounded-xl border text-sm font-medium transition-all text-center ${
-                      selected ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
-                    }`}
-                  >
-                    {opt}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-2 text-[11px] text-muted-foreground">
-              Selecionados: <span className="text-foreground font-medium">{selectedObjectives.length ? selectedObjectives.join(", ") : "—"}</span>
-            </div>
-          </div>
-
           {/* Period Modal */}
           {periodOpen && (
             <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
@@ -1008,10 +1013,18 @@ export default function CreateCampaign() {
                 </div>
 
                 <div className="mt-5 flex gap-3">
-                  <button type="button" onClick={closePeriodModal} className="flex-1 py-3 rounded-xl border border-border/50 text-muted-foreground font-medium text-sm">
+                  <button
+                    type="button"
+                    onClick={closePeriodModal}
+                    className="flex-1 py-3 rounded-xl border border-border/50 text-muted-foreground font-medium text-sm"
+                  >
                     Cancelar
                   </button>
-                  <button type="button" onClick={confirmPeriod} className="flex-[2] py-3 rounded-xl font-semibold text-sm bg-gradient-neon text-primary-foreground glow-blue">
+                  <button
+                    type="button"
+                    onClick={confirmPeriod}
+                    className="flex-[2] py-3 rounded-xl font-semibold text-sm bg-gradient-neon text-primary-foreground glow-blue"
+                  >
                     OK
                   </button>
                 </div>
@@ -1037,7 +1050,8 @@ export default function CreateCampaign() {
               </label>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {/* ✅ grid mobile com 3 colunas (5 linhas perfeitas) / desktop mantém 5 por linha */}
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
               {segmentOptions.map((seg) => {
                 const selected = selectedSegments.includes(seg);
                 return (
@@ -1045,7 +1059,7 @@ export default function CreateCampaign() {
                     key={seg}
                     type="button"
                     onClick={() => toggleSegment(seg)}
-                    className={`px-3 py-3 rounded-xl border text-sm font-medium transition-all text-center ${
+                    className={`px-2 sm:px-3 py-2.5 sm:py-3 rounded-xl border text-[12px] sm:text-sm font-medium transition-all text-center leading-none ${
                       selected ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
                     }`}
                   >
@@ -1060,11 +1074,15 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Quantity */}
-          <div>
+          {/* ✅ Quantity (destacado + informativo) */}
+          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 shadow-[0_0_0_1px_rgba(59,130,246,0.15)]">
             <div className="flex items-center gap-2 mb-2">
               <Users className="w-4 h-4 text-primary" />
               <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block">Quantidade de creators *</label>
+            </div>
+
+            <div className="text-[12px] text-muted-foreground mb-3">
+              Defina a quantidade de creators que você gostaria que divulgasse sua campanha.
             </div>
 
             <input
@@ -1102,37 +1120,7 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Selected creators */}
-          <div className="glass-card p-4">
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators selecionados</div>
-              <div className="text-xs text-muted-foreground">
-                {selectedCreatorIds.length}/{currentLimit}
-              </div>
-            </div>
-
-            {selectedCreatorIds.length === 0 ? (
-              <div className="mt-3 text-sm text-muted-foreground">Nenhum creator selecionado ainda.</div>
-            ) : (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {selectedCreators.map((c) => (
-                  <div key={c.id} className="inline-flex items-center gap-2 rounded-xl border border-border/50 bg-white/5 px-3 py-2 text-sm">
-                    <span className="text-foreground font-medium truncate max-w-[170px]">{c.name || "Creator"}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeSelectedCreator(c.id)}
-                      className="p-1 rounded-lg hover:bg-white/10 text-muted-foreground"
-                      aria-label="Remover creator"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Suggested creators */}
+          {/* ✅ Suggested creators (agora vem antes) */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators sugeridos</div>
@@ -1195,17 +1183,37 @@ export default function CreateCampaign() {
             <div className="text-[11px] text-muted-foreground">Clique em um creator para selecionar. Use o ícone ao lado para ver o perfil.</div>
           </div>
 
-          {/* Briefing privado */}
-          <div>
-            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Briefing privado (só para confirmados)</label>
-            <textarea
-              value={String((data as any).briefPrivate || "")}
-              onChange={(e) => updateData({ briefPrivate: e.target.value } as any)}
-              placeholder="Instruções detalhadas visíveis somente após confirmação..."
-              rows={4}
-              className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-            />
+          {/* ✅ Selected creators (agora vem depois) */}
+          <div className="glass-card p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators selecionados</div>
+              <div className="text-xs text-muted-foreground">
+                {selectedCreatorIds.length}/{currentLimit}
+              </div>
+            </div>
+
+            {selectedCreatorIds.length === 0 ? (
+              <div className="mt-3 text-sm text-muted-foreground">Nenhum creator selecionado ainda.</div>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selectedCreators.map((c) => (
+                  <div key={c.id} className="inline-flex items-center gap-2 rounded-xl border border-border/50 bg-white/5 px-3 py-2 text-sm">
+                    <span className="text-foreground font-medium truncate max-w-[170px]">{c.name || "Creator"}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeSelectedCreator(c.id)}
+                      className="p-1 rounded-lg hover:bg-white/10 text-muted-foreground"
+                      aria-label="Remover creator"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
+
+          {/* ✅ Briefing privado removido desta etapa */}
         </div>
       )}
 
@@ -1282,7 +1290,9 @@ export default function CreateCampaign() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Creators</span>
-                <span className="text-foreground font-medium">{selectedCreatorIds.length}/{currentLimit}</span>
+                <span className="text-foreground font-medium">
+                  {selectedCreatorIds.length}/{currentLimit}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Arquivos</span>
