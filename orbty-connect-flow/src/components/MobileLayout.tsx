@@ -55,12 +55,17 @@ const MobileLayout = ({
   const location = useLocation();
   const { signOut } = useAuth();
 
-  const navItems = navType === "contractor" ? contractorNav : influencerNav;
+  const navItems =
+    navType === "contractor" ? contractorNav : influencerNav;
+
   const isContractor = navType === "contractor";
 
   const handleBack = () => {
-    if (backTo) navigate(backTo);
-    else navigate(-1);
+    if (backTo) {
+      navigate(backTo);
+    } else {
+      navigate(-1);
+    }
   };
 
   const handleHome = () => {
@@ -160,26 +165,14 @@ const MobileLayout = ({
                 )}
               </button>
 
-              {/* Criar (central destacado + maior + glow pulsando + hover) */}
-              <motion.button
+              {/* Criar (central destacado alinhado) */}
+              <button
                 onClick={() => navigate("/criar-campanha")}
+                className="w-13 h-13 rounded-full bg-gradient-neon glow-blue flex items-center justify-center shadow-md transition hover:scale-105 active:scale-95"
                 title="Criar campanha"
-                whileHover={{ scale: 1.08 }}
-                whileTap={{ scale: 0.96 }}
-                animate={{
-                  boxShadow: [
-                    "0 0 0 0 rgba(59,130,246,0.0)",
-                    "0 0 18px 6px rgba(59,130,246,0.25)",
-                    "0 0 0 0 rgba(59,130,246,0.0)",
-                  ],
-                }}
-                transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-                className="w-14 h-14 rounded-full bg-gradient-neon flex items-center justify-center shadow-xl"
               >
-                {/* “anel” sutil para dar acabamento */}
-                <span className="absolute w-14 h-14 rounded-full ring-2 ring-white/10 pointer-events-none" />
-                <Plus className="w-7 h-7 text-primary-foreground" />
-              </motion.button>
+                <Plus className="w-6 h-6 text-primary-foreground" />
+              </button>
 
               {/* Perfil */}
               <button
