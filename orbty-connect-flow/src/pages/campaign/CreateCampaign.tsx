@@ -1182,7 +1182,7 @@ export default function CreateCampaign() {
             </div>
 
             <div className="text-[12px] text-muted-foreground mb-3">
-              Defina a quantidade de creators que você gostaria que divulgasse sua campanha.
+              Defina o número de creators que irão divulgar sua campanha.
             </div>
 
             <input
@@ -1639,7 +1639,7 @@ export default function CreateCampaign() {
               </div>
 
               <div className="text-[11px] text-muted-foreground">
-                Os valores serão calculados automaticamente pela plataforma com base nas configurações da campanha.
+                Os valores são calculados automaticamente pela plataforma com base nas configurações da campanha.
               </div>
             </div>
           </div>
