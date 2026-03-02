@@ -8,6 +8,8 @@ import {
   User,
   Home,
   LogOut,
+  Trophy,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -55,9 +57,7 @@ const MobileLayout = ({
   const location = useLocation();
   const { signOut } = useAuth();
 
-  const navItems =
-    navType === "contractor" ? contractorNav : influencerNav;
-
+  const navItems = navType === "contractor" ? contractorNav : influencerNav;
   const isContractor = navType === "contractor";
 
   const handleBack = () => {
@@ -145,7 +145,7 @@ const MobileLayout = ({
         <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-30 bg-card/90 backdrop-blur-xl border-t border-border/50">
           {isContractor ? (
             /* ===== CONTRACTOR NAV ===== */
-            <div className="flex items-center justify-between py-2 px-6">
+            <div className="flex items-center justify-between py-2 px-4">
               {/* Início */}
               <button
                 onClick={() => navigate("/dashboard-contratante")}
@@ -165,10 +165,21 @@ const MobileLayout = ({
                 )}
               </button>
 
-              {/* Criar (central destacado alinhado) */}
+              {/* Ranking (inativo) */}
+              <button
+                type="button"
+                disabled
+                className="flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 text-muted-foreground opacity-60 cursor-not-allowed"
+                title="Ranking (em breve)"
+              >
+                <Trophy className="w-5 h-5" />
+                <span className="text-[10px] font-medium">Ranking</span>
+              </button>
+
+              {/* Criar (central destacado) */}
               <button
                 onClick={() => navigate("/criar-campanha")}
-                className="w-14 h-14 rounded-full bg-gradient-neon glow-blue flex items-center justify-center shadow-md transition hover:scale-105 active:scale-95"
+                className="w-12 h-12 rounded-full bg-gradient-neon glow-blue flex items-center justify-center shadow-md transition hover:scale-105 active:scale-95"
                 title="Criar campanha"
               >
                 <Plus className="w-6 h-6 text-primary-foreground" />
@@ -191,6 +202,17 @@ const MobileLayout = ({
                     className="w-1 h-1 rounded-full bg-primary"
                   />
                 )}
+              </button>
+
+              {/* Configuração (inativo) */}
+              <button
+                type="button"
+                disabled
+                className="flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 text-muted-foreground opacity-60 cursor-not-allowed"
+                title="Configurações (em breve)"
+              >
+                <Settings className="w-5 h-5" />
+                <span className="text-[10px] font-medium">Config</span>
               </button>
             </div>
           ) : (
