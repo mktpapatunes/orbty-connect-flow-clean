@@ -23,17 +23,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
+// ✅ IMPORTS para renderizar o perfil no modal (SEM IFRAME / SEM SERVER HIT)
+import { MemoryRouter, Routes, Route } from "react-router-dom";
+import PublicProfileKeyed from "@/pages/profile/PublicProfileKeyed";
+
 /* =========================
    Consts
 ========================= */
 
-const PUBLIC_PROFILE_ROUTE_PREFIX = "/u";
-
-function buildPublicProfileSrc(creatorId: string) {
-  const isHashRouter = window.location.hash.startsWith("#/");
-  // HashRouter precisa de /#/u/:id
-  return isHashRouter ? `/#${PUBLIC_PROFILE_ROUTE_PREFIX}/${creatorId}` : `${PUBLIC_PROFILE_ROUTE_PREFIX}/${creatorId}`;
-}
+const PUBLIC_PROFILE_ROUTE_PREFIX = "/u"; // ✅ conforme App.tsx
 const STEP_STORAGE_KEY = "orbty:create_campaign:step:v1";
 
 const campaignTypes = [
@@ -579,7 +577,6 @@ export default function CreateCampaign() {
       try {
         setCreatorLoading(true);
 
-        // ⚠️ Ajuste os nomes dos parâmetros se a sua RPC estiver diferente.
         // get_creator_suggestions(p_city text, p_state text, p_segments text[], p_limit int)
         const { data: rpcData, error } = await (supabase.rpc as any)("get_creator_suggestions", {
           p_city: selectedCity,
@@ -628,7 +625,7 @@ export default function CreateCampaign() {
   }, [creatorList, selectedCreatorIds]);
 
   /* =========================
-     Perfil: modal (abre sem nova aba)
+     Perfil: modal (SEM iframe)
   ========================= */
 
   const [profileOpen, setProfileOpen] = useState(false);
@@ -1098,223 +1095,203 @@ export default function CreateCampaign() {
       {/* =========================
           STEP 2
       ========================= */}
-{step === 2 && (
-  <div className="px-6 py-4 space-y-4">
-    <h3 className="font-display text-xl font-bold text-foreground">
-      Requisitos da campanha
-    </h3>
+      {step === 2 && (
+        <div className="px-6 py-4 space-y-4">
+          <h3 className="font-display text-xl font-bold text-foreground">Requisitos da campanha</h3>
 
-    {/* Segments */}
-    <div>
-      <div className="flex items-center gap-2 mb-2">
-        <Layers className="w-4 h-4 text-primary" />
-        <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block">
-          Segmento do conteúdo *{" "}
-          <span className="normal-case tracking-normal text-muted-foreground">
-            (até 3)
-          </span>
-        </label>
-      </div>
-
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-        {segmentOptions.map((seg) => {
-          const selected = selectedSegments.includes(seg);
-          return (
-            <button
-              key={seg}
-              type="button"
-              onClick={() => toggleSegment(seg)}
-              className={`px-2 sm:px-3 py-2.5 sm:py-3 rounded-xl border font-medium transition-all text-center leading-tight
-              text-[12px] sm:text-[12px] md:text-sm
-              whitespace-normal break-words min-w-0
-              ${
-                selected
-                  ? "border-primary/60 bg-primary/5 text-primary"
-                  : "border-border/50 bg-card/60 text-foreground/70"
-              }`}
-            >
-              <span className="block w-full min-w-0 overflow-hidden text-ellipsis">
-                {seg}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="mt-2 text-[11px] text-muted-foreground">
-        Selecionados:{" "}
-        <span className="text-foreground font-medium">
-          {selectedSegments.length
-            ? selectedSegments.join(", ")
-            : "—"}
-        </span>
-      </div>
-    </div>
-
-    {/* Quantidade de creators */}
-    <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 shadow-[0_0_0_1px_rgba(59,130,246,0.15)]">
-      <div className="flex items-center gap-2 mb-2">
-        <Users className="w-4 h-4 text-primary" />
-        <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block">
-          Quantidade de creators *
-        </label>
-      </div>
-
-      <div className="text-[12px] text-muted-foreground mb-3">
-        Defina a quantidade de creators que você gostaria que divulgasse sua campanha.
-      </div>
-
-      <input
-        inputMode="numeric"
-        pattern="[0-9]*"
-        value={creatorsNeededInput}
-        onChange={(e) => {
-          const v = e.target.value;
-          if (v === "" || /^\d+$/.test(v)) setCreatorsNeededInput(v);
-        }}
-        onBlur={() => {
-          const safe = creatorsNeededNumber ?? 1;
-          updateData({ creatorsNeeded: safe } as any);
-
-          const cut = selectedCreatorIds.slice(0, safe);
-          if (cut.length !== selectedCreatorIds.length)
-            updateData({ selectedCreatorIds: cut } as any);
-
-          setCreatorsNeededInput(String(safe));
-        }}
-        placeholder="Ex: 5"
-        className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-      />
-
-      <div className="mt-2 text-[11px] text-muted-foreground">
-        Limite: até{" "}
-        <span className="text-foreground font-medium">
-          50 creators
-        </span>.
-      </div>
-    </div>
-
-    {/* Creators sugeridos */}
-    <div className="space-y-2">
-      <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
-        Creators sugeridos
-      </div>
-
-      {!selectedCity || !selectedState || selectedSegments.length === 0 ? (
-        <div className="glass-card p-4 text-sm text-muted-foreground">
-          Defina <span className="text-foreground font-medium">Localização</span> e pelo menos{" "}
-          <span className="text-foreground font-medium">1 segmento</span> para ver sugestões.
-        </div>
-      ) : creatorList.length === 0 && !creatorLoading ? (
-        <div className="glass-card p-4 text-sm text-muted-foreground">
-          Nenhum creator encontrado para os filtros atuais.
-          <span className="text-foreground font-medium">
-            {" "}Selecione outro segmento para ampliar a busca.
-          </span>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {creatorList.map((c) => {
-            const selected = selectedCreatorIds.includes(c.id);
-            const followersLabel = formatIGCount(
-              followersToNumber(c.followers)
-            );
-            const avatarUrl = getCreatorAvatarUrl(c);
-
-            return (
-              <div
-                key={c.id}
-                className={`glass-card p-3 flex items-center gap-3 transition ${
-                  selected ? "border-primary/60 bg-primary/5" : ""
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => openProfileModal(c.id)}
-                  className="flex-1 min-w-0 text-left flex items-center gap-3"
-                >
-                  <div className="w-11 h-11 rounded-full border border-border/50 bg-white/5 overflow-hidden shrink-0 flex items-center justify-center">
-                    {avatarUrl ? (
-                      <img
-                        src={avatarUrl}
-                        alt={c.name || "Creator"}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-xs font-semibold text-muted-foreground">
-                        {initialsFromName(c.name)}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-foreground truncate">
-                      {c.name || "Creator"}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground truncate">
-                      {c.city && c.state
-                        ? `${c.city}, ${c.state}`
-                        : c.city || c.state || "—"}{" "}
-                      • {followersLabel} seguidores
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleSelectCreator(c.id);
-                  }}
-                  className={`shrink-0 text-xs font-semibold px-3 py-2 rounded-xl border transition ${
-                    selected
-                      ? "border-primary/60 text-primary bg-primary/5"
-                      : "border-border/50 text-muted-foreground hover:bg-white/5"
-                  }`}
-                >
-                  {selected ? "Selecionado" : "Selecionar"}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-
-    {/* Creators selecionados */}
-    <div className="glass-card p-4">
-      <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
-        Creators selecionados
-      </div>
-
-      {selectedCreatorIds.length === 0 ? (
-        <div className="mt-3 text-sm text-muted-foreground">
-          Nenhum creator selecionado ainda.
-        </div>
-      ) : (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {selectedCreators.map((c) => (
-            <div
-              key={c.id}
-              className="inline-flex items-center gap-2 rounded-xl border border-border/50 bg-white/5 px-3 py-2 text-sm"
-            >
-              <span className="text-foreground font-medium truncate max-w-[170px]">
-                {c.name || "Creator"}
-              </span>
-              <button
-                type="button"
-                onClick={() => removeSelectedCreator(c.id)}
-                className="p-1 rounded-lg hover:bg-white/10 text-muted-foreground"
-              >
-                <X className="w-4 h-4" />
-              </button>
+          {/* Segments */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Layers className="w-4 h-4 text-primary" />
+              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block">
+                Segmento do conteúdo * <span className="normal-case tracking-normal text-muted-foreground">(até 3)</span>
+              </label>
             </div>
-          ))}
+
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+              {segmentOptions.map((seg) => {
+                const selected = selectedSegments.includes(seg);
+                return (
+                  <button
+                    key={seg}
+                    type="button"
+                    onClick={() => toggleSegment(seg)}
+                    className={`px-2 sm:px-3 py-2.5 sm:py-3 rounded-xl border font-medium transition-all text-center leading-tight
+                    text-[12px] sm:text-[12px] md:text-sm
+                    whitespace-normal break-words min-w-0
+                    ${selected ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"}`}
+                  >
+                    <span className="block w-full min-w-0 overflow-hidden text-ellipsis">{seg}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              Selecionados: <span className="text-foreground font-medium">{selectedSegments.length ? selectedSegments.join(", ") : "—"}</span>
+            </div>
+          </div>
+
+          {/* Quantity (destacado + informativo) */}
+          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 shadow-[0_0_0_1px_rgba(59,130,246,0.15)]">
+            <div className="flex items-center gap-2 mb-2">
+              <Users className="w-4 h-4 text-primary" />
+              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block">Quantidade de creators *</label>
+            </div>
+
+            <div className="text-[12px] text-muted-foreground mb-3">
+              Defina a quantidade de creators que você gostaria que divulgasse sua campanha.
+            </div>
+
+            <input
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={creatorsNeededInput}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "" || /^\d+$/.test(v)) setCreatorsNeededInput(v);
+              }}
+              onBlur={() => {
+                const safe = creatorsNeededNumber ?? 1;
+                updateData({ creatorsNeeded: safe } as any);
+
+                // se reduziu, corta selecionados
+                const cut = selectedCreatorIds.slice(0, safe);
+                if (cut.length !== selectedCreatorIds.length) updateData({ selectedCreatorIds: cut } as any);
+
+                setCreatorsNeededInput(String(safe));
+              }}
+              placeholder="Ex: 5"
+              className="w-full bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30
+              [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              Limite: até <span className="text-foreground font-medium">50 creators</span>.{" "}
+              {creatorsNeededOk ? (
+                <>
+                  Você poderá selecionar até <span className="text-foreground font-medium">{currentLimit}</span>.
+                </>
+              ) : (
+                "Digite um número entre 1 e 50."
+              )}
+            </div>
+          </div>
+
+          {/* Suggested creators */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators sugeridos</div>
+              {creatorLoading ? (
+                <div className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Carregando...
+                </div>
+              ) : null}
+            </div>
+
+            {!selectedCity || !selectedState || selectedSegments.length === 0 ? (
+              <div className="glass-card p-4 text-sm text-muted-foreground">
+                Defina <span className="text-foreground font-medium">Localização</span> e pelo menos{" "}
+                <span className="text-foreground font-medium">1 segmento</span> para ver sugestões.
+              </div>
+            ) : creatorList.length === 0 && !creatorLoading ? (
+              // ✅ AJUSTE DA MENSAGEM (mais adequada para contractor)
+              <div className="glass-card p-4 text-sm text-muted-foreground">
+                Nenhum creator encontrado para os filtros atuais. Selecione outro segmento para ampliar a busca.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {creatorList.map((c) => {
+                  const selected = selectedCreatorIds.includes(c.id);
+                  const followersLabel = formatIGCount(followersToNumber(c.followers));
+                  const avatarUrl = getCreatorAvatarUrl(c);
+
+                  return (
+                    <div
+                      key={c.id}
+                      className={`glass-card p-3 flex items-center gap-3 transition ${selected ? "border-primary/60 bg-primary/5" : ""}`}
+                    >
+                      {/* ✅ Clique no "corpo" abre perfil (modal) */}
+                      <button
+                        type="button"
+                        onClick={() => openProfileModal(c.id)}
+                        className="flex-1 min-w-0 text-left flex items-center gap-3"
+                        aria-label={`Ver perfil de ${c.name || "creator"}`}
+                      >
+                        {/* Avatar */}
+                        <div className="w-11 h-11 rounded-full border border-border/50 bg-white/5 overflow-hidden shrink-0 flex items-center justify-center">
+                          {avatarUrl ? (
+                            <img src={avatarUrl} alt={c.name || "Creator"} className="w-full h-full object-cover" loading="lazy" />
+                          ) : (
+                            <span className="text-xs font-semibold text-muted-foreground">{initialsFromName(c.name)}</span>
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground truncate">{c.name || "Creator"}</div>
+                          <div className="text-[11px] text-muted-foreground truncate">
+                            {c.city && c.state ? `${c.city}, ${c.state}` : c.city || c.state || "—"} • {followersLabel} seguidores
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* ✅ Seleção só no botão (sem abrir perfil) */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSelectCreator(c.id);
+                        }}
+                        className={`shrink-0 text-xs font-semibold px-3 py-2 rounded-xl border transition ${
+                          selected ? "border-primary/60 text-primary bg-primary/5" : "border-border/50 text-muted-foreground hover:bg-white/5"
+                        }`}
+                        aria-label={selected ? "Remover seleção" : "Selecionar creator"}
+                      >
+                        {selected ? "Selecionado" : "Selecionar"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="text-[11px] text-muted-foreground">
+              Clique no card para ver o perfil. Use o botão <span className="text-foreground font-medium">Selecionar</span> para escolher.
+            </div>
+          </div>
+
+          {/* Selected creators */}
+          <div className="glass-card p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators selecionados</div>
+              <div className="text-xs text-muted-foreground">
+                {selectedCreatorIds.length}/{currentLimit}
+              </div>
+            </div>
+
+            {selectedCreatorIds.length === 0 ? (
+              <div className="mt-3 text-sm text-muted-foreground">Nenhum creator selecionado ainda.</div>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selectedCreators.map((c) => (
+                  <div key={c.id} className="inline-flex items-center gap-2 rounded-xl border border-border/50 bg-white/5 px-3 py-2 text-sm">
+                    <span className="text-foreground font-medium truncate max-w-[170px]">{c.name || "Creator"}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeSelectedCreator(c.id)}
+                      className="p-1 rounded-lg hover:bg-white/10 text-muted-foreground"
+                      aria-label="Remover creator"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
-    </div>
-  </div>
-)}
 
       {/* =========================
           STEP 3
@@ -1417,7 +1394,7 @@ export default function CreateCampaign() {
         </div>
       )}
 
-      {/* ✅ Modal de perfil (sem navegar / sem nova aba) */}
+      {/* ✅ Modal de perfil (SEM iframe / SEM redirect de servidor) */}
       {profileOpen && profileCreatorId && (
         <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
           <div className="absolute inset-0 bg-black/60" onMouseDown={closeProfileModal} />
@@ -1433,12 +1410,13 @@ export default function CreateCampaign() {
               </button>
             </div>
 
-            <iframe
-  key={profileCreatorId}
-  title="Perfil do creator"
-  src={buildPublicProfileSrc(profileCreatorId)}
-  className="w-full h-full"
-/>
+            <div className="w-full h-full">
+              <MemoryRouter initialEntries={[`${PUBLIC_PROFILE_ROUTE_PREFIX}/${profileCreatorId}`]}>
+                <Routes>
+                  <Route path={`${PUBLIC_PROFILE_ROUTE_PREFIX}/:id`} element={<PublicProfileKeyed />} />
+                </Routes>
+              </MemoryRouter>
+            </div>
           </div>
         </div>
       )}
