@@ -1,6 +1,6 @@
 // src/pages/PublicProfile.tsx
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { supabase } from "@/integrations/supabase/client";
@@ -492,6 +492,10 @@ export default function PublicProfile() {
   const navigate = useNavigate();
   const { userRole } = useAuth();
 
+  // ✅ detecta embed
+  const [searchParams] = useSearchParams();
+  const isEmbed = searchParams.get("embed") === "1";
+
   const backTo = userRole === "contractor" ? "/dashboard-contratante" : "/dashboard-influenciadora";
 
   const [loading, setLoading] = useState(true);
@@ -758,6 +762,221 @@ export default function PublicProfile() {
 
   const ready = !!id && loadedId === id && !loading;
 
+  const pageContent = (
+    <div className="px-6 py-6 space-y-6">
+      {/* ✅ Em embed: não mostra botão Voltar */}
+      {!isEmbed ? (
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Voltar
+        </button>
+      ) : null}
+
+      {!ready ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      ) : !profile ? (
+        <div className="py-10 text-center">
+          <p className="text-sm text-muted-foreground">Perfil não encontrado.</p>
+        </div>
+      ) : (
+        <>
+          {/* HEADER PREMIUM */}
+          <div className="relative overflow-hidden rounded-3xl border border-border/50 bg-white/5 shadow-sm">
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5" />
+              <div className="absolute inset-0 opacity-[0.06] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:16px_16px]" />
+            </div>
+
+            <div className="relative p-5">
+              <div className="flex items-start gap-4">
+                {/* avatar/logo */}
+                <div className="relative shrink-0">
+                  <div className="absolute -inset-2 rounded-3xl bg-primary/10 blur-lg opacity-60" />
+                  <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-primary/20 bg-white/5 flex items-center justify-center">
+                    {role === "contractor" ? (
+                      org?.logo_url ? (
+                        <img src={org.logo_url} alt="Logo" className="w-full h-full object-cover block" referrerPolicy="no-referrer" />
+                      ) : (
+                        <span className="text-primary font-bold">{initials(headerName)}</span>
+                      )
+                    ) : profile.avatar_url ? (
+                      <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover block" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="text-primary font-bold">{initials(headerName)}</span>
+                    )}
+                  </div>
+
+                  <div className="pointer-events-none absolute inset-0 rounded-3xl ring-2 ring-white/10" />
+                </div>
+
+                {/* infos */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h1 className="text-xl font-semibold text-foreground leading-tight break-words">{headerName}</h1>
+                    {isVerified ? (
+                      <span className="shrink-0">
+                        <VerifiedBadge size="sm" />
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {/* ✅ texto cinza abaixo do nome */}
+                  <div className="mt-1 text-xs text-muted-foreground">{roleLabel}</div>
+
+                  {/* ✅ Bio (mantém completa, só clampa visual 1 linha) */}
+                  <div className="mt-2 text-sm text-foreground/90 leading-relaxed">
+                    {headerBio ? <span className="block line-clamp-1">{headerBio}</span> : <span className="text-muted-foreground">Sem descrição.</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Ações públicas */}
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <IconButton
+                  icon={<Instagram className="w-4 h-4" />}
+                  label={igHandle ? `@${igHandle}` : "Instagram"}
+                  onClick={() => openInstagram(role === "contractor" ? org?.instagram : profile.instagram)}
+                  disabled={!igHandle}
+                  className="w-full justify-center"
+                />
+
+                {role === "contractor" ? (
+                  <IconButton
+                    icon={<Globe className="w-4 h-4" />}
+                    label="Site"
+                    onClick={() => (website ? window.open(website, "_blank", "noopener,noreferrer") : null)}
+                    disabled={!website}
+                    className="w-full justify-center"
+                  />
+                ) : (
+                  <IconButton
+                    icon={<MapPin className="w-4 h-4" />}
+                    label="Maps"
+                    onClick={() => openMapsQuery([neighborhoodLabel, cityLabel, stateUF].filter((x) => x && x !== "—").join(", "))}
+                    disabled={!cityLabel || cityLabel === "—"}
+                    className="w-full justify-center"
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* CHIPS */}
+          {role === "contractor" ? (
+            <div className="grid grid-cols-3 gap-2">
+              <LocationInfoChip
+                icon={<MapPin className="w-4 h-4" />}
+                label="Localização"
+                value={contractorLocationLabel}
+                title="Abrir no Google Maps"
+                onClick={openContractorMaps}
+              />
+              <MicroChip icon={<Building2 className="w-4 h-4" />} label="Categoria" value={(org?.business_category || "—").trim() || "—"} />
+              <MicroChip icon={<Package className="w-4 h-4" />} label="Produto" value={(org?.product_or_brand || "—").trim() || "—"} />
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              <MicroChip
+                icon={<Users className="w-4 h-4" />}
+                label="Seguidores"
+                value={followersCompact}
+                title={followersNum ? `Seguidores: ${followersNum.toLocaleString("pt-BR")}` : "—"}
+              />
+              <MicroChip icon={<Sparkles className="w-4 h-4" />} label="Conteúdo" value={contentStylePrimary} title={contentStylePrimary} />
+              <MicroChip icon={<MapPin className="w-4 h-4" />} label="Localização" value={cityLabel || "—"} title={`Cidade: ${cityLabel}`} />
+            </div>
+          )}
+
+          {/* AUDIÊNCIA + LOCALIZAÇÕES (influencer) */}
+          {role === "influencer" ? (
+            <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
+              <div className="flex items-center gap-2 mb-3">
+                <BarChart3 className="w-4 h-4 text-primary" />
+                <p className="text-xs text-muted-foreground uppercase tracking-widest">Audiência</p>
+              </div>
+
+              <div className="space-y-4">
+                <DualDonutChart
+                  aPct={clamp(Number((gender as any)?.female ?? 50), 0, 100)}
+                  bPct={clamp(Number((gender as any)?.male ?? 50), 0, 100)}
+                  label="Gênero"
+                  aLabel="Feminino"
+                  bLabel="Masculino"
+                />
+
+                <AgeBarsCard data={audienceAge} buckets={[...AGE_BARS_BUCKETS]} />
+
+                <div>
+                  <div className="text-xs text-muted-foreground mb-2">Principais localizações</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <LocationInfoChip
+                      icon={<MapIcon className="w-4 h-4" />}
+                      label="Estado"
+                      value={stateUF ? stateUF : "—"}
+                      title={stateUF ? `Abrir no Maps: ${stateUF}` : "Estado não informado"}
+                      onClick={stateUF ? () => openMapsQuery(stateMapsQuery) : undefined}
+                    />
+                    <LocationInfoChip
+                      icon={<Building2 className="w-4 h-4" />}
+                      label="Cidade"
+                      value={cityLabel || "—"}
+                      title={cityLabel && cityLabel !== "—" ? `Abrir no Maps: ${cityLabel}` : "Cidade não informada"}
+                      onClick={cityLabel && cityLabel !== "—" ? () => openMapsQuery(cityMapsQuery) : undefined}
+                    />
+                    <LocationInfoChip
+                      icon={<Home className="w-4 h-4" />}
+                      label="Bairro"
+                      value={neighborhoodLabel || "—"}
+                      title={neighborhoodLabel && neighborhoodLabel !== "—" ? `Abrir no Maps: ${neighborhoodLabel}` : "Bairro não informado"}
+                      onClick={neighborhoodLabel && neighborhoodLabel !== "—" ? () => openMapsQuery(neighborhoodMapsQuery) : undefined}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* AVALIAÇÕES (REAIS) */}
+          <RatingsCard rating={ratingAvg} count={ratingCount} loading={loadingRatings} />
+
+          {/* ATIVAÇÕES (somente influencer) */}
+          {role === "influencer" ? (
+            <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
+              <div className="text-sm font-semibold text-foreground text-center">Ativações e campanhas</div>
+
+              {loadingAccepted ? (
+                <div className="mt-4 space-y-2">
+                  <div className="flex justify-center">
+                    <SkeletonLine w="42%" h={18} />
+                  </div>
+                  <div className="flex justify-center">
+                    <SkeletonLine w="64%" h={10} />
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 text-center">
+                  <div className="text-xs text-muted-foreground">Realizadas:</div>
+                  <div className="mt-1 text-2xl font-semibold text-foreground">{acceptedCount}</div>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+
+  // ✅ Em embed: não renderiza MobileLayout (evita interferência/redirect)
+  if (isEmbed) {
+    return <div className="min-h-screen bg-background">{pageContent}</div>;
+  }
+
   return (
     <MobileLayout
       title="Perfil"
@@ -767,214 +986,7 @@ export default function PublicProfile() {
       showNav={false}
       showHome={false}
     >
-      <div className="px-6 py-6 space-y-6">
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Voltar
-        </button>
-
-        {!ready ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="w-8 h-8 text-primary animate-spin" />
-          </div>
-        ) : !profile ? (
-          <div className="py-10 text-center">
-            <p className="text-sm text-muted-foreground">Perfil não encontrado.</p>
-          </div>
-        ) : (
-          <>
-            {/* HEADER PREMIUM */}
-            <div className="relative overflow-hidden rounded-3xl border border-border/50 bg-white/5 shadow-sm">
-              <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5" />
-                <div className="absolute inset-0 opacity-[0.06] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:16px_16px]" />
-              </div>
-
-              <div className="relative p-5">
-                <div className="flex items-start gap-4">
-                  {/* avatar/logo */}
-                  <div className="relative shrink-0">
-                    <div className="absolute -inset-2 rounded-3xl bg-primary/10 blur-lg opacity-60" />
-                    <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-primary/20 bg-white/5 flex items-center justify-center">
-                      {role === "contractor" ? (
-                        org?.logo_url ? (
-                          <img src={org.logo_url} alt="Logo" className="w-full h-full object-cover block" referrerPolicy="no-referrer" />
-                        ) : (
-                          <span className="text-primary font-bold">{initials(headerName)}</span>
-                        )
-                      ) : profile.avatar_url ? (
-                        <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover block" referrerPolicy="no-referrer" />
-                      ) : (
-                        <span className="text-primary font-bold">{initials(headerName)}</span>
-                      )}
-                    </div>
-
-                    <div className="pointer-events-none absolute inset-0 rounded-3xl ring-2 ring-white/10" />
-                  </div>
-
-                  {/* infos */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <h1 className="text-xl font-semibold text-foreground leading-tight break-words">{headerName}</h1>
-                      {isVerified ? (
-                        <span className="shrink-0">
-                          <VerifiedBadge size="sm" />
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {/* ✅ texto cinza abaixo do nome */}
-                    <div className="mt-1 text-xs text-muted-foreground">{roleLabel}</div>
-
-                    {/* ✅ Bio (mantém completa, só clampa visual 1 linha) */}
-                    <div className="mt-2 text-sm text-foreground/90 leading-relaxed">
-                      {headerBio ? (
-                        <span className="block line-clamp-1">{headerBio}</span>
-                      ) : (
-                        <span className="text-muted-foreground">Sem descrição.</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Ações públicas */}
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <IconButton
-                    icon={<Instagram className="w-4 h-4" />}
-                    label={igHandle ? `@${igHandle}` : "Instagram"}
-                    onClick={() => openInstagram(role === "contractor" ? org?.instagram : profile.instagram)}
-                    disabled={!igHandle}
-                    className="w-full justify-center"
-                  />
-
-                  {role === "contractor" ? (
-                    <IconButton
-                      icon={<Globe className="w-4 h-4" />}
-                      label="Site"
-                      onClick={() => (website ? window.open(website, "_blank", "noopener,noreferrer") : null)}
-                      disabled={!website}
-                      className="w-full justify-center"
-                    />
-                  ) : (
-                    <IconButton
-                      icon={<MapPin className="w-4 h-4" />}
-                      label="Maps"
-                      onClick={() => openMapsQuery([neighborhoodLabel, cityLabel, stateUF].filter((x) => x && x !== "—").join(", "))}
-                      disabled={!cityLabel || cityLabel === "—"}
-                      className="w-full justify-center"
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* CHIPS */}
-            {role === "contractor" ? (
-              <div className="grid grid-cols-3 gap-2">
-                <LocationInfoChip
-                  icon={<MapPin className="w-4 h-4" />}
-                  label="Localização"
-                  value={contractorLocationLabel}
-                  title="Abrir no Google Maps"
-                  onClick={openContractorMaps}
-                />
-                <MicroChip icon={<Building2 className="w-4 h-4" />} label="Categoria" value={(org?.business_category || "—").trim() || "—"} />
-                <MicroChip icon={<Package className="w-4 h-4" />} label="Produto" value={(org?.product_or_brand || "—").trim() || "—"} />
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                <MicroChip
-                  icon={<Users className="w-4 h-4" />}
-                  label="Seguidores"
-                  value={followersCompact}
-                  title={followersNum ? `Seguidores: ${followersNum.toLocaleString("pt-BR")}` : "—"}
-                />
-                <MicroChip icon={<Sparkles className="w-4 h-4" />} label="Conteúdo" value={contentStylePrimary} title={contentStylePrimary} />
-                <MicroChip icon={<MapPin className="w-4 h-4" />} label="Localização" value={cityLabel || "—"} title={`Cidade: ${cityLabel}`} />
-              </div>
-            )}
-
-            {/* AUDIÊNCIA + LOCALIZAÇÕES (influencer) */}
-            {role === "influencer" ? (
-              <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
-                <div className="flex items-center gap-2 mb-3">
-                  <BarChart3 className="w-4 h-4 text-primary" />
-                  <p className="text-xs text-muted-foreground uppercase tracking-widest">Audiência</p>
-                </div>
-
-                <div className="space-y-4">
-                  <DualDonutChart
-                    aPct={clamp(Number((gender as any)?.female ?? 50), 0, 100)}
-                    bPct={clamp(Number((gender as any)?.male ?? 50), 0, 100)}
-                    label="Gênero"
-                    aLabel="Feminino"
-                    bLabel="Masculino"
-                  />
-
-                  <AgeBarsCard data={audienceAge} buckets={[...AGE_BARS_BUCKETS]} />
-
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-2">Principais localizações</div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <LocationInfoChip
-                        icon={<MapIcon className="w-4 h-4" />}
-                        label="Estado"
-                        value={stateUF ? stateUF : "—"}
-                        title={stateUF ? `Abrir no Maps: ${stateUF}` : "Estado não informado"}
-                        onClick={stateUF ? () => openMapsQuery(stateMapsQuery) : undefined}
-                      />
-                      <LocationInfoChip
-                        icon={<Building2 className="w-4 h-4" />}
-                        label="Cidade"
-                        value={cityLabel || "—"}
-                        title={cityLabel && cityLabel !== "—" ? `Abrir no Maps: ${cityLabel}` : "Cidade não informada"}
-                        onClick={cityLabel && cityLabel !== "—" ? () => openMapsQuery(cityMapsQuery) : undefined}
-                      />
-                      <LocationInfoChip
-                        icon={<Home className="w-4 h-4" />}
-                        label="Bairro"
-                        value={neighborhoodLabel || "—"}
-                        title={neighborhoodLabel && neighborhoodLabel !== "—" ? `Abrir no Maps: ${neighborhoodLabel}` : "Bairro não informado"}
-                        onClick={neighborhoodLabel && neighborhoodLabel !== "—" ? () => openMapsQuery(neighborhoodMapsQuery) : undefined}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {/* AVALIAÇÕES (REAIS) */}
-            <RatingsCard rating={ratingAvg} count={ratingCount} loading={loadingRatings} />
-
-            {/* ATIVAÇÕES (somente influencer) */}
-            {role === "influencer" ? (
-              <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
-                <div className="text-sm font-semibold text-foreground text-center">Ativações e campanhas</div>
-
-                {loadingAccepted ? (
-                  <div className="mt-4 space-y-2">
-                    <div className="flex justify-center">
-                      <SkeletonLine w="42%" h={18} />
-                    </div>
-                    <div className="flex justify-center">
-                      <SkeletonLine w="64%" h={10} />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-4 text-center">
-                    <div className="text-xs text-muted-foreground">Realizadas:</div>
-                    <div className="mt-1 text-2xl font-semibold text-foreground">{acceptedCount}</div>
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </>
-        )}
-      </div>
+      {pageContent}
     </MobileLayout>
   );
 }
