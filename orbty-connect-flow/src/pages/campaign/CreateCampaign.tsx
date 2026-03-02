@@ -27,7 +27,13 @@ import { toast } from "sonner";
    Consts
 ========================= */
 
-const PUBLIC_PROFILE_ROUTE_PREFIX = "/u"; // ✅ conforme App.tsx
+const PUBLIC_PROFILE_ROUTE_PREFIX = "/u";
+
+function buildPublicProfileSrc(creatorId: string) {
+  const isHashRouter = window.location.hash.startsWith("#/");
+  // HashRouter precisa de /#/u/:id
+  return isHashRouter ? `/#${PUBLIC_PROFILE_ROUTE_PREFIX}/${creatorId}` : `${PUBLIC_PROFILE_ROUTE_PREFIX}/${creatorId}`;
+}
 const STEP_STORAGE_KEY = "orbty:create_campaign:step:v1";
 
 const campaignTypes = [
@@ -1428,10 +1434,10 @@ export default function CreateCampaign() {
             </div>
 
             <iframe
+  key={profileCreatorId}
   title="Perfil do creator"
-  src={`${PUBLIC_PROFILE_ROUTE_PREFIX}/${profileCreatorId}?embed=1`}
+  src={buildPublicProfileSrc(profileCreatorId)}
   className="w-full h-full"
-  referrerPolicy="no-referrer"
 />
           </div>
         </div>
