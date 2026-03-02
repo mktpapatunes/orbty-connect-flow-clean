@@ -183,13 +183,9 @@ const App = () => (
 
               {/* Perfil público */}
               <Route
-                path="/u/:id"
-                element={
-                  <ProtectedRoute>
-                    <PublicProfileKeyed />
-                  </ProtectedRoute>
-                }
-              />
+  path="/u/:id"
+  element={<PublicProfileKeyed />}
+/>
 
               <Route
                 path="/perfil-contratante/dados-pessoais"
