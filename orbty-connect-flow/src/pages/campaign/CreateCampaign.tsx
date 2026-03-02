@@ -1411,11 +1411,11 @@ export default function CreateCampaign() {
             </div>
 
             <div className="w-full h-full">
-              <MemoryRouter initialEntries={[`${PUBLIC_PROFILE_ROUTE_PREFIX}/${profileCreatorId}`]}>
-                <Routes>
-                  <Route path={`${PUBLIC_PROFILE_ROUTE_PREFIX}/:id`} element={<PublicProfileKeyed />} />
-                </Routes>
-              </MemoryRouter>
+              <MemoryRouter initialEntries={[`/u/${profileCreatorId}`]}>
+  <Routes>
+    <Route path="/u/:id" element={<PublicProfileKeyed />} />
+  </Routes>
+</MemoryRouter>
             </div>
           </div>
         </div>
