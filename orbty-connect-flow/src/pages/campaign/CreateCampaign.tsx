@@ -68,11 +68,11 @@ const segmentOptions = [
 
 type SegmentOption = (typeof segmentOptions)[number];
 
+// ✅ REMOVIDO Combo do visual
 const postFormatOptions = [
   { id: "stories", label: "Stories" },
   { id: "reels", label: "Reels" },
   { id: "feed", label: "Feed" },
-  { id: "combo", label: "Combo" },
 ] as const;
 
 type PostFormat = (typeof postFormatOptions)[number]["id"];
@@ -749,7 +749,10 @@ export default function CreateCampaign() {
 
   const postsOk = postsNumber !== null && postsNumber >= 1 && postsNumber <= 20;
 
-  const formatFromData = String((data as any).format || "stories") as PostFormat;
+  // ✅ normaliza formato (se vier "combo" antigo, cai para stories)
+  const rawFormat = String((data as any).format || "stories").toLowerCase();
+  const formatFromData: PostFormat =
+    rawFormat === "reels" || rawFormat === "feed" || rawFormat === "stories" ? (rawFormat as PostFormat) : "stories";
   const formatOk = !!String(formatFromData || "").trim();
 
   const collabValue = (data as any).collab;
@@ -785,14 +788,42 @@ export default function CreateCampaign() {
   const canPublish = canStep4;
 
   /* =========================
-     Quote (Step 4)
+     Quote (Step 4) + CUPOM (aplicar no botão)
   ========================= */
 
-  const [couponCode, setCouponCode] = useState<string>(String((data as any).couponCode || ""));
+  // input livre (digitar NÃO aplica)
+  const [couponInput, setCouponInput] = useState<string>(String((data as any).couponInput || ""));
   useEffect(() => {
-    updateData({ couponCode } as any);
+    updateData({ couponInput } as any);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [couponCode]);
+  }, [couponInput]);
+
+  // cupom efetivamente aplicado
+  const [couponApplied, setCouponApplied] = useState<string>(String((data as any).couponApplied || ""));
+  useEffect(() => {
+    updateData({ couponApplied } as any);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [couponApplied]);
+
+  const hasCouponApplied = !!couponApplied.trim();
+
+  const applyIntentRef = useRef<{ pending: boolean; code: string | null }>({ pending: false, code: null });
+
+  const onCouponButtonClick = () => {
+    if (hasCouponApplied) {
+      // ✅ remover
+      setCouponApplied("");
+      applyIntentRef.current = { pending: false, code: null };
+      toast.message("Cupom removido.");
+      return;
+    }
+
+    const code = couponInput.trim();
+    if (!code) return;
+
+    applyIntentRef.current = { pending: true, code };
+    setCouponApplied(code);
+  };
 
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
@@ -817,7 +848,7 @@ export default function CreateCampaign() {
           p_creators_needed: creatorsNeededFinal,
           p_posts: postsFinal,
           p_format: formatFromData,
-          p_coupon_code: couponCode?.trim() ? couponCode.trim() : null,
+          p_coupon_code: couponApplied?.trim() ? couponApplied.trim() : null,
         });
 
         if (!alive) return;
@@ -832,15 +863,22 @@ export default function CreateCampaign() {
         const q = (rpcData || null) as QuoteResponse | null;
         setQuote(q);
 
-        const msg = q?.coupon?.message;
-        if (couponCode.trim()) {
-          if (q?.coupon?.applied) toast.success(msg || "Cupom aplicado.");
-          else if (msg) toast.error(msg);
+        // ✅ toast só quando clicou em "Aplicar"
+        if (applyIntentRef.current.pending) {
+          applyIntentRef.current.pending = false;
+
+          const msg = q?.coupon?.message || null;
+          const applied = !!q?.coupon?.applied;
+
+          if (applied) toast.success(msg || "Cupom aplicado.");
+          else toast.error(msg || "Cupom inválido.");
         }
       } catch (e) {
         console.error("QUOTE_CAMPAIGN_PRICE_EXCEPTION", e);
         if (!alive) return;
         setQuote(null);
+
+        if (applyIntentRef.current.pending) applyIntentRef.current.pending = false;
         toast.error("Erro ao calcular o valor. Tente novamente.");
       } finally {
         if (alive) setQuoteLoading(false);
@@ -852,7 +890,16 @@ export default function CreateCampaign() {
       clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, canStep4, creatorsNeededNumber, creatorsNeededFromData, postsNumber, postsFromData, formatFromData, couponCode]);
+  }, [
+    step,
+    canStep4,
+    creatorsNeededNumber,
+    creatorsNeededFromData,
+    postsNumber,
+    postsFromData,
+    formatFromData,
+    couponApplied, // ✅ recalcula só ao aplicar/remover
+  ]);
 
   /* =========================
      Files
@@ -887,7 +934,7 @@ export default function CreateCampaign() {
 
       const requirements = {
         posts: postsFinal,
-        format: String((data as any).format || "stories"),
+        format: formatFromData,
         hashtags: String((data as any).hashtags || "")
           ? String((data as any).hashtags)
               .split(",")
@@ -907,8 +954,8 @@ export default function CreateCampaign() {
         content_segments: selectedSegments,
         selected_creator_ids: selectedCreatorIds,
 
-        // ✅ salva para auditoria/checkout futuro (opcional)
-        coupon_code: couponCode?.trim() ? couponCode.trim() : null,
+        // ✅ salva cupom aplicado (não o digitado)
+        coupon_code: couponApplied?.trim() ? couponApplied.trim() : null,
         quote_total: quote?.total ?? null,
         quote_subtotal: quote?.subtotal ?? null,
         quote_discount: quote?.discount ?? null,
@@ -1700,23 +1747,24 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Coupon */}
+          {/* Coupon (✅ aplica/remover no botão; digitar não aplica) */}
           <div className="glass-card p-4 space-y-2">
             <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Cupom</h4>
 
             <div className="flex gap-2">
               <input
-                value={couponCode}
-                onChange={(e) => setCouponCode(e.target.value)}
+                value={couponInput}
+                onChange={(e) => setCouponInput(e.target.value)}
                 placeholder="Digite seu cupom (ex: ORBTY10)"
                 className="flex-1 bg-input border border-border/50 rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
               <button
                 type="button"
-                onClick={() => setCouponCode((v) => v.trim())}
-                className="px-4 py-3 rounded-xl border border-border/50 text-muted-foreground font-semibold text-sm hover:bg-white/5"
+                onClick={onCouponButtonClick}
+                disabled={!hasCouponApplied && !couponInput.trim()}
+                className="px-4 py-3 rounded-xl border border-border/50 text-muted-foreground font-semibold text-sm hover:bg-white/5 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Aplicar
+                {hasCouponApplied ? "Remover" : "Aplicar"}
               </button>
             </div>
 
