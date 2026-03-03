@@ -14,32 +14,32 @@ import ContractorRegistration from "./pages/registration/ContractorRegistration"
 import InfluencerRegistration from "./pages/registration/InfluencerRegistration";
 import PendingApproval from "./pages/PendingApproval";
 import RejectedStatus from "./pages/RejectedStatus";
+
 import AdminDashboard from "./pages/admin/AdminDashboard";
 
 import ContractorDashboard from "./pages/contractor/Dashboard";
-import ContractorCampaigns from "./pages/contractor/Campaigns";
 
 import InfluencerDashboard from "./pages/influencer/Dashboard";
+import MyCampaigns from "./pages/influencer/MyCampaigns";
+
 import CreateCampaign from "./pages/campaign/CreateCampaign";
 import CampaignView from "./pages/campaign/CampaignView";
+
 import MyApplications from "./pages/influencer/MyApplications";
 import AcceptedCampaignDetail from "./pages/influencer/AcceptedCampaignDetail";
 
 import ProfileRouter from "@/pages/profile/ProfileRouter";
 import ContractorProfile from "@/pages/profile/ContractorProfile";
 import InfluencerProfile from "@/pages/profile/InfluencerProfile";
-
 import InfluencerPersonalData from "@/pages/profile/InfluencerPersonalData";
-import PublicProfileKeyed from "@/pages/profile/PublicProfileKeyed";
+import ContractorPersonalData from "@/pages/profile/ContractorPersonalData";
 
+import PublicProfileKeyed from "@/pages/profile/PublicProfileKeyed";
 import History from "./pages/History";
 import CheckEmail from "./pages/CheckEmail";
 import NotFound from "./pages/NotFound";
-
 import LegacyProfile from "@/pages/Profile";
-import ContractorPersonalData from "@/pages/profile/ContractorPersonalData";
 
-// ✅ NOVO: tela de pagamento (simulado)
 import PaymentSimulated from "./pages/campaign/PaymentSimulated";
 
 const queryClient = new QueryClient();
@@ -53,9 +53,11 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
+
+              {/* Redirect raiz */}
               <Route path="/" element={<Navigate to="/welcome" replace />} />
 
-              {/* Public auth flow */}
+              {/* ===== PUBLIC AUTH FLOW ===== */}
               <Route path="/welcome" element={<Welcome />} />
               <Route path="/login" element={<Login />} />
               <Route path="/check-email" element={<CheckEmail />} />
@@ -63,7 +65,7 @@ const App = () => (
               <Route path="/cadastro-contratante" element={<ContractorRegistration />} />
               <Route path="/cadastro-influenciadora" element={<InfluencerRegistration />} />
 
-              {/* Status pages (require login but NOT approval) */}
+              {/* ===== STATUS PAGES ===== */}
               <Route
                 path="/aguardando-aprovacao"
                 element={
@@ -81,7 +83,7 @@ const App = () => (
                 }
               />
 
-              {/* Admin panel */}
+              {/* ===== ADMIN ===== */}
               <Route
                 path="/admin"
                 element={
@@ -91,22 +93,15 @@ const App = () => (
                 }
               />
 
-              {/* Contractor flow */}
+              {/* ===================================================== */}
+              {/* ================== CONTRACTOR FLOW ================== */}
+              {/* ===================================================== */}
+
               <Route
                 path="/dashboard-contratante"
                 element={
                   <ProtectedRoute requiredRole="contractor">
                     <ContractorDashboard />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* ✅ NOVO: Minhas campanhas (lista + tabs + métricas) */}
-              <Route
-                path="/campanhas"
-                element={
-                  <ProtectedRoute requiredRole="contractor">
-                    <ContractorCampaigns />
                   </ProtectedRoute>
                 }
               />
@@ -120,7 +115,6 @@ const App = () => (
                 }
               />
 
-              {/* ✅ NOVO: Pagamento */}
               <Route
                 path="/pagamento/:id"
                 element={
@@ -130,7 +124,11 @@ const App = () => (
                 }
               />
 
-              {/* Influencer flow */}
+              {/* ===================================================== */}
+              {/* ================== INFLUENCER FLOW ================== */}
+              {/* ===================================================== */}
+
+              {/* HOME (atrativa) */}
               <Route
                 path="/dashboard-influenciadora"
                 element={
@@ -139,6 +137,17 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+
+              {/* ✅ NOVA ROTA: Minhas campanhas (operacional) */}
+              <Route
+                path="/minhas-campanhas"
+                element={
+                  <ProtectedRoute requiredRole="influencer">
+                    <MyCampaigns />
+                  </ProtectedRoute>
+                }
+              />
+
               <Route
                 path="/minhas-candidaturas"
                 element={
@@ -147,6 +156,7 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+
               <Route
                 path="/campanha-detalhe/:id"
                 element={
@@ -156,7 +166,7 @@ const App = () => (
                 }
               />
 
-              {/* Shared campaign view (role-aware) */}
+              {/* ===== Shared campaign view ===== */}
               <Route
                 path="/campanha/:id"
                 element={
@@ -166,7 +176,10 @@ const App = () => (
                 }
               />
 
-              {/* Profile routes (NEW) */}
+              {/* ===================================================== */}
+              {/* ====================== PERFIL ======================= */}
+              {/* ===================================================== */}
+
               <Route
                 path="/perfil"
                 element={
@@ -203,9 +216,6 @@ const App = () => (
                 }
               />
 
-              {/* Perfil público */}
-              <Route path="/u/:id" element={<PublicProfileKeyed />} />
-
               <Route
                 path="/perfil-contratante/dados-pessoais"
                 element={
@@ -224,6 +234,10 @@ const App = () => (
                 }
               />
 
+              {/* Perfil público */}
+              <Route path="/u/:id" element={<PublicProfileKeyed />} />
+
+              {/* ===== Histórico (role-aware) ===== */}
               <Route
                 path="/historico"
                 element={
@@ -233,7 +247,9 @@ const App = () => (
                 }
               />
 
+              {/* ===== 404 ===== */}
               <Route path="*" element={<NotFound />} />
+
             </Routes>
           </BrowserRouter>
         </CampaignProvider>
