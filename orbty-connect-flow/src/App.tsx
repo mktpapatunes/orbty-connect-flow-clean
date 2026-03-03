@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { CampaignProvider } from "@/contexts/CampaignContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import FAQ from "./pages/FAQ";
 
 import Welcome from "./pages/Welcome";
 import Login from "./pages/Login";
@@ -236,6 +237,15 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+
+              <Route
+  path="/ajuda"
+  element={
+    <ProtectedRoute>
+      <FAQ />
+    </ProtectedRoute>
+  }
+/>
 
               {/* ===== 404 ===== */}
               <Route path="*" element={<NotFound />} />
