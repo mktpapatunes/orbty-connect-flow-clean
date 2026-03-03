@@ -63,8 +63,8 @@ const ContractorDashboard = () => {
   const ctas = useMemo(() => {
     const primary =
       approvalStatus === "approved"
-        ? { label: "Ir para minhas campanhas", route: "/campanhas" }
-        : { label: "Ver como funciona", route: "/campanhas" };
+        ? { label: "Ir para minhas campanhas", route: "/campanha" }
+        : { label: "Ver como funciona", route: "/campanha" };
 
     const secondary =
       approvalStatus === "rejected"
@@ -106,7 +106,7 @@ const ContractorDashboard = () => {
       title: "Crie e gerencie campanhas",
       desc: "A lista e as ações ficam em “Minhas campanhas”.",
       icon: Zap,
-      action: () => navigate("/campanhas"),
+      action: () => navigate("/campanha"),
       actionLabel: "Ver campanhas",
     },
     {
@@ -114,7 +114,7 @@ const ContractorDashboard = () => {
       title: "Acompanhe dentro da campanha",
       desc: "Detalhes, prazos e entregas ficam no detalhe de cada campanha.",
       icon: ArrowRight,
-      action: () => navigate("/campanhas"),
+      action: () => navigate("/campanha"),
       actionLabel: "Abrir lista",
     },
   ];
@@ -124,7 +124,7 @@ const ContractorDashboard = () => {
       title: "Minhas campanhas",
       desc: "Acompanhe andamento e detalhes.",
       icon: Zap,
-      route: "/campanhas",
+      route: "/campanha",
     },
     {
       title: "Criar campanha",
