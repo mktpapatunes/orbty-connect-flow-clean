@@ -21,12 +21,11 @@ import ContractorDashboard from "./pages/contractor/Dashboard";
 
 import InfluencerDashboard from "./pages/influencer/Dashboard";
 import MyCampaigns from "./pages/influencer/MyCampaigns";
+import MyApplications from "./pages/influencer/MyApplications";
+import AcceptedCampaignDetail from "./pages/influencer/AcceptedCampaignDetail";
 
 import CreateCampaign from "./pages/campaign/CreateCampaign";
 import CampaignView from "./pages/campaign/CampaignView";
-
-import MyApplications from "./pages/influencer/MyApplications";
-import AcceptedCampaignDetail from "./pages/influencer/AcceptedCampaignDetail";
 
 import ProfileRouter from "@/pages/profile/ProfileRouter";
 import ContractorProfile from "@/pages/profile/ContractorProfile";
@@ -53,7 +52,6 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-
               {/* Redirect raiz */}
               <Route path="/" element={<Navigate to="/welcome" replace />} />
 
@@ -93,10 +91,7 @@ const App = () => (
                 }
               />
 
-              {/* ===================================================== */}
               {/* ================== CONTRACTOR FLOW ================== */}
-              {/* ===================================================== */}
-
               <Route
                 path="/dashboard-contratante"
                 element={
@@ -124,10 +119,7 @@ const App = () => (
                 }
               />
 
-              {/* ===================================================== */}
               {/* ================== INFLUENCER FLOW ================== */}
-              {/* ===================================================== */}
-
               {/* HOME (atrativa) */}
               <Route
                 path="/dashboard-influenciadora"
@@ -138,7 +130,7 @@ const App = () => (
                 }
               />
 
-              {/* ✅ NOVA ROTA: Minhas campanhas (operacional) */}
+              {/* Minhas campanhas (operacional) */}
               <Route
                 path="/minhas-campanhas"
                 element={
@@ -148,6 +140,7 @@ const App = () => (
                 }
               />
 
+              {/* ✅ ROTA LEGADA: mantida por compatibilidade, mas agora é HISTÓRICO do influencer */}
               <Route
                 path="/minhas-candidaturas"
                 element={
@@ -166,7 +159,7 @@ const App = () => (
                 }
               />
 
-              {/* ===== Shared campaign view ===== */}
+              {/* ===== Shared campaign view (role-aware) ===== */}
               <Route
                 path="/campanha/:id"
                 element={
@@ -176,10 +169,7 @@ const App = () => (
                 }
               />
 
-              {/* ===================================================== */}
               {/* ====================== PERFIL ======================= */}
-              {/* ===================================================== */}
-
               <Route
                 path="/perfil"
                 element={
@@ -237,7 +227,7 @@ const App = () => (
               {/* Perfil público */}
               <Route path="/u/:id" element={<PublicProfileKeyed />} />
 
-              {/* ===== Histórico (role-aware) ===== */}
+              {/* ===== Histórico compartilhado (role-aware) ===== */}
               <Route
                 path="/historico"
                 element={
@@ -249,7 +239,6 @@ const App = () => (
 
               {/* ===== 404 ===== */}
               <Route path="*" element={<NotFound />} />
-
             </Routes>
           </BrowserRouter>
         </CampaignProvider>

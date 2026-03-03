@@ -94,18 +94,38 @@ const InfluencerDashboard = () => {
     },
     {
       n: "03",
-      title: "Acompanhe candidaturas",
-      desc: "Veja solicitações e status em “Minhas candidaturas”.",
+      title: "Acompanhe seu histórico",
+      desc: "Veja participações aprovadas e campanhas concluídas/encerradas.",
       icon: ArrowRight,
-      action: () => navigate("/minhas-candidaturas"),
+      action: () => navigate("/minhas-candidaturas"), // ✅ agora é HISTÓRICO
     },
   ];
 
   const quickActions = [
-    { title: "Minhas campanhas", desc: "Convites, entregas e status.", icon: Zap, route: "/minhas-campanhas" },
-    { title: "Minhas candidaturas", desc: "Status das candidaturas.", icon: ArrowRight, route: "/minhas-candidaturas" },
-    { title: "Meu perfil", desc: "Atualizar informações.", icon: User, route: "/perfil" },
-    { title: "Ajuda / FAQ", desc: "Dúvidas rápidas.", icon: CircleHelp, route: "/ajuda" }, // se não existir, troque por "/perfil" ou remova
+    {
+      title: "Minhas campanhas",
+      desc: "Convites, entregas e status.",
+      icon: Zap,
+      route: "/minhas-campanhas",
+    },
+    {
+      title: "Histórico",
+      desc: "Participações aprovadas e campanhas concluídas.",
+      icon: ArrowRight,
+      route: "/minhas-candidaturas", // ✅ mantém rota, muda significado
+    },
+    {
+      title: "Meu perfil",
+      desc: "Atualizar informações.",
+      icon: User,
+      route: "/perfil",
+    },
+    {
+      title: "Ajuda / FAQ",
+      desc: "Dúvidas rápidas.",
+      icon: CircleHelp,
+      route: "/ajuda", // se não existir, troque por "/perfil" ou remova
+    },
   ];
 
   return (
@@ -180,7 +200,7 @@ const InfluencerDashboard = () => {
               disabled={loading}
               className="py-3 rounded-xl border border-border/50 bg-card/60 text-foreground font-semibold text-xs hover:bg-card transition-colors"
             >
-              Minhas candidaturas
+              Ver histórico
             </button>
           </div>
         </motion.div>

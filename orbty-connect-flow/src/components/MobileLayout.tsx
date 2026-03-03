@@ -10,6 +10,7 @@ import {
   LogOut,
   Trophy,
   Settings,
+  Briefcase,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -33,6 +34,7 @@ const contractorNav = [
   { icon: User, label: "Perfil", path: "/perfil" },
 ];
 
+// ✅ legado (não usamos mais no bottom nav do influencer, mas pode manter sem problema)
 const influencerNav = [
   { icon: LayoutDashboard, label: "Início", path: "/dashboard-influenciadora" },
   { icon: Clock, label: "Candidaturas", path: "/minhas-candidaturas" },
@@ -59,6 +61,7 @@ const MobileLayout = ({
 
   const navItems = navType === "contractor" ? contractorNav : influencerNav;
   const isContractor = navType === "contractor";
+  const isInfluencer = navType === "influencer";
 
   const handleBack = () => {
     if (backTo) {
@@ -215,8 +218,80 @@ const MobileLayout = ({
                 <span className="text-[10px] font-medium">Config</span>
               </button>
             </div>
+          ) : isInfluencer ? (
+            /* ===== INFLUENCER NAV (igual contractor) ===== */
+            <div className="flex items-center justify-between py-2 px-4">
+              {/* Início */}
+              <button
+                onClick={() => navigate("/dashboard-influenciadora")}
+                className={`flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 ${
+                  location.pathname === "/dashboard-influenciadora"
+                    ? "text-primary"
+                    : "text-muted-foreground"
+                }`}
+              >
+                <LayoutDashboard className="w-5 h-5" />
+                <span className="text-[10px] font-medium">Início</span>
+                {location.pathname === "/dashboard-influenciadora" && (
+                  <motion.div
+                    layoutId="nav-indicator"
+                    className="w-1 h-1 rounded-full bg-primary"
+                  />
+                )}
+              </button>
+
+              {/* Ranking (inativo) */}
+              <button
+                type="button"
+                disabled
+                className="flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 text-muted-foreground opacity-60 cursor-not-allowed"
+                title="Ranking (em breve)"
+              >
+                <Trophy className="w-5 h-5" />
+                <span className="text-[10px] font-medium">Ranking</span>
+              </button>
+
+              {/* Minhas Campanhas (central destacado) */}
+              <button
+                onClick={() => navigate("/minhas-campanhas")}
+                className="w-12 h-12 rounded-full bg-gradient-neon glow-blue flex items-center justify-center shadow-md transition hover:scale-105 active:scale-95"
+                title="Minhas campanhas"
+              >
+                <Briefcase className="w-6 h-6 text-primary-foreground" />
+              </button>
+
+              {/* Perfil */}
+              <button
+                onClick={() => navigate("/perfil")}
+                className={`flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 ${
+                  location.pathname === "/perfil"
+                    ? "text-primary"
+                    : "text-muted-foreground"
+                }`}
+              >
+                <User className="w-5 h-5" />
+                <span className="text-[10px] font-medium">Perfil</span>
+                {location.pathname === "/perfil" && (
+                  <motion.div
+                    layoutId="nav-indicator"
+                    className="w-1 h-1 rounded-full bg-primary"
+                  />
+                )}
+              </button>
+
+              {/* Configuração (inativo) */}
+              <button
+                type="button"
+                disabled
+                className="flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 text-muted-foreground opacity-60 cursor-not-allowed"
+                title="Configurações (em breve)"
+              >
+                <Settings className="w-5 h-5" />
+                <span className="text-[10px] font-medium">Config</span>
+              </button>
+            </div>
           ) : (
-            /* ===== INFLUENCER NAV (mantido) ===== */
+            /* fallback (não deve acontecer) */
             <div className="flex items-center justify-around py-2 px-4">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.path;
@@ -229,9 +304,7 @@ const MobileLayout = ({
                     }`}
                   >
                     <item.icon className="w-5 h-5" />
-                    <span className="text-[10px] font-medium">
-                      {item.label}
-                    </span>
+                    <span className="text-[10px] font-medium">{item.label}</span>
                     {isActive && (
                       <motion.div
                         layoutId="nav-indicator"

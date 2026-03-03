@@ -1,35 +1,51 @@
-import { useMemo, useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
-import { Hourglass, CheckCircle2, XCircle, Loader2, MapPin, Calendar, Send, Clock, Ban, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  Loader2,
+  MapPin,
+  Calendar,
+  Clock,
+  Hourglass,
+  CheckCircle2,
+  BadgeCheck,
+  Upload,
+  Ban,
+  Trash2,
+} from "lucide-react";
 
-interface ApplicationWithCampaign {
-  application_id: string;
+type ParticipantStatus = "invited" | "confirmed" | "delivered" | "approved";
+
+type FeedRow = {
   campaign_id: string;
-  status: string; // pending | accepted | rejected
-  note: string | null;
-  applied_at: string;
-
-  campaign_title: string;
-  campaign_type: string;
-  campaign_city: string;
-  campaign_state: string;
+  title: string;
+  type: string;
+  state: string;
+  city: string;
   campaign_date: string | null;
+  apply_deadline: string | null;
 
-  campaign_apply_deadline: string | null;
-  campaign_status: string | null; // active | closed | draft | closed_manual | completed | deleted ...
-  campaign_created_at: string | null;
-}
+  // pode variar conforme seu RPC — tratamos defensivamente
+  campaign_status: string | null; // active | closed_manual | closed_expired | completed | deleted | draft ...
+  participant_status: ParticipantStatus;
+
+  invited_at: string | null;
+  confirmed_at: string | null;
+  delivered_at: string | null;
+  approved_at: string | null;
+};
 
 const formatDateBR = (value?: string | null) => {
-  if (!value) return null;
+  if (!value) return "-";
   const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
   const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
+  if (Number.isNaN(d.getTime())) return "-";
+  return isDateOnly
+    ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" })
+    : d.toLocaleDateString("pt-BR");
 };
 
 const isPastDateUTC = (dateString?: string | null) => {
@@ -55,136 +71,148 @@ const toUTCDateMs = (dateString?: string | null) => {
   return Number.isNaN(t) ? null : t;
 };
 
-const statusConfig: Record<string, { label: string; color: string; icon: typeof Hourglass }> = {
-  pending: { label: "Aguardando", color: "text-warning", icon: Hourglass },
-  accepted: { label: "Aprovada", color: "text-accent", icon: CheckCircle2 },
-  rejected: { label: "Não selecionada", color: "text-muted-foreground", icon: XCircle },
+const statusUi: Record<ParticipantStatus, { label: string; cls: string; Icon: any }> = {
+  invited: { label: "Convite", cls: "text-primary", Icon: Hourglass },
+  confirmed: { label: "Confirmada", cls: "text-accent", Icon: CheckCircle2 },
+  delivered: { label: "Entregue", cls: "text-warning", Icon: Upload },
+  approved: { label: "Aprovada", cls: "text-accent", Icon: BadgeCheck },
 };
 
-const campaignStatusLabel = (status?: string | null, deadlineExpired?: boolean) => {
-  if (!status) return null;
+type FilterKey = "all" | "history" | "approved" | "completed" | "deleted";
 
-  if (status === "active" && deadlineExpired) return { label: "Prazo vencido", cls: "text-destructive" };
-  if (status === "active") return { label: "Ativa", cls: "text-primary" };
+function isHistoryRow(r: FeedRow) {
+  // Histórico do influencer:
+  // - participação aprovada
+  // - ou campanha encerrada/concluída/excluída (caso apareça no feed)
+  const cs = (r.campaign_status || "").toLowerCase();
+  const ps = (r.participant_status || "").toLowerCase();
 
-  if (status === "closed_manual") return { label: "Encerrada", cls: "text-muted-foreground" };
-  if (status === "completed") return { label: "Concluída", cls: "text-accent" };
-  if (status === "deleted") return { label: "Excluída", cls: "text-muted-foreground" };
+  if (ps === "approved") return true;
 
-  if (status === "closed") return { label: "Encerrada", cls: "text-muted-foreground" };
-  if (status === "draft") return { label: "Rascunho", cls: "text-muted-foreground" };
+  if (cs === "completed") return true;
+  if (cs === "closed_manual") return true;
+  if (cs === "closed_expired") return true;
+  if (cs === "deleted") return true;
 
-  return { label: status, cls: "text-muted-foreground" };
-};
-
-type FilterKey = "all" | "pending" | "accepted" | "rejected" | "completed";
+  return false;
+}
 
 const MyApplications = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [applications, setApplications] = useState<ApplicationWithCampaign[]>([]);
+
   const [isLoading, setIsLoading] = useState(true);
-  const [filter, setFilter] = useState<FilterKey>("all");
+  const [rows, setRows] = useState<FeedRow[]>([]);
+  const [filter, setFilter] = useState<FilterKey>("history"); // ✅ default já abre no histórico
+
+  async function refetch() {
+    if (!user) return;
+    setIsLoading(true);
+
+    // ✅ novo: usa o feed atual (mesmo do MyCampaigns)
+    const { data, error } = await supabase.rpc("get_influencer_campaigns_feed" as any);
+
+    if (error) {
+      console.error("GET_INFLUENCER_CAMPAIGNS_FEED_ERROR", error);
+      setRows([]);
+      setIsLoading(false);
+      return;
+    }
+
+    const cleaned = ((data || []) as any[]).filter((x) => x?.campaign_id);
+    setRows(cleaned as FeedRow[]);
+    setIsLoading(false);
+  }
 
   useEffect(() => {
-    const fetchApplications = async () => {
-      if (!user) {
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(true);
-
-      const { data, error } = await supabase.rpc("get_my_applications_feed" as any);
-
-      if (error) {
-        console.error("MY_APPLICATIONS_FEED_ERROR", error);
-        setApplications([]);
-        setIsLoading(false);
-        return;
-      }
-
-      setApplications(((data || []) as unknown) as ApplicationWithCampaign[]);
+    if (!user) {
       setIsLoading(false);
-    };
-
-    fetchApplications();
+      return;
+    }
+    refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const counts = useMemo(() => {
-    const completed = applications.filter((a) => a.campaign_status === "completed").length;
-    const pending = applications.filter((a) => a.status === "pending").length;
-    const accepted = applications.filter((a) => a.status === "accepted").length;
-    const rejected = applications.filter((a) => a.status === "rejected").length;
-    return { completed, pending, accepted, rejected, total: applications.length };
-  }, [applications]);
+    const approved = rows.filter((r) => (r.participant_status || "").toLowerCase() === "approved").length;
+    const completed = rows.filter((r) => (r.campaign_status || "").toLowerCase() === "completed").length;
+    const deleted = rows.filter((r) => (r.campaign_status || "").toLowerCase() === "deleted").length;
+    const history = rows.filter(isHistoryRow).length;
+    return { approved, completed, deleted, history, total: rows.length };
+  }, [rows]);
 
   const filteredSorted = useMemo(() => {
     const base =
       filter === "all"
-        ? applications
-        : filter === "completed"
-        ? applications.filter((a) => a.campaign_status === "completed")
-        : applications.filter((a) => a.status === filter);
+        ? rows
+        : filter === "history"
+          ? rows.filter(isHistoryRow)
+          : filter === "approved"
+            ? rows.filter((r) => (r.participant_status || "").toLowerCase() === "approved")
+            : filter === "completed"
+              ? rows.filter((r) => (r.campaign_status || "").toLowerCase() === "completed")
+              : rows.filter((r) => (r.campaign_status || "").toLowerCase() === "deleted");
 
-    const rank = (a: ApplicationWithCampaign) => {
-      if (a.campaign_status === "completed") return 0;
-      if (a.status === "accepted") return 1;
-      if (a.status === "pending") return 2;
-      return 3;
-    };
-
-    const dateKey = (a: ApplicationWithCampaign) => {
-      const eventMs = toUTCDateMs(a.campaign_date);
+    // ordenação: mais recente primeiro (por data do evento > prazo > timestamps)
+    const dateKey = (r: FeedRow) => {
+      const eventMs = toUTCDateMs(r.campaign_date);
       if (eventMs !== null) return eventMs;
 
-      const deadlineMs = toUTCDateMs(a.campaign_apply_deadline);
+      const deadlineMs = toUTCDateMs(r.apply_deadline);
       if (deadlineMs !== null) return deadlineMs;
 
-      const appliedMs = new Date(a.applied_at).getTime();
-      return Number.isNaN(appliedMs) ? 0 : appliedMs;
+      const anyMs = toUTCDateMs(r.approved_at) ?? toUTCDateMs(r.delivered_at) ?? toUTCDateMs(r.confirmed_at) ?? toUTCDateMs(r.invited_at);
+      if (anyMs !== null) return anyMs;
+
+      return 0;
     };
 
-    return [...base].sort((a, b) => {
-      const ra = rank(a);
-      const rb = rank(b);
-      if (ra !== rb) return ra - rb;
-
-      if (ra === 2) return dateKey(a) - dateKey(b);
-      return dateKey(b) - dateKey(a);
-    });
-  }, [applications, filter]);
+    return [...base].sort((a, b) => dateKey(b) - dateKey(a));
+  }, [rows, filter]);
 
   const tabs = [
-    { key: "all" as const, label: `Todas (${counts.total})` },
-    { key: "pending" as const, label: `Aguardando (${counts.pending})` },
-    { key: "accepted" as const, label: `Aprovadas (${counts.accepted})` },
-    { key: "rejected" as const, label: `Não selecionadas (${counts.rejected})` },
+    { key: "history" as const, label: `Histórico (${counts.history})` },
+    { key: "approved" as const, label: `Aprovadas (${counts.approved})` },
     { key: "completed" as const, label: `Concluídas (${counts.completed})` },
+    { key: "deleted" as const, label: `Excluídas (${counts.deleted})` },
+    { key: "all" as const, label: `Todas (${counts.total})` },
   ];
 
   return (
-    <MobileLayout title="Minhas candidaturas" navType="influencer">
+    <MobileLayout title="Histórico" navType="influencer">
       <div className="px-6 py-6 space-y-6">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <h2 className="font-display text-2xl font-bold text-foreground">
-            Suas <span className="text-gradient-neon">candidaturas</span>
+            Seu <span className="text-gradient-neon">histórico</span>
           </h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Aqui ficam suas participações aprovadas e campanhas encerradas/concluídas.
+          </p>
         </motion.div>
 
-        {!isLoading && applications.length > 0 && (
+        {!isLoading && rows.length > 0 && (
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {tabs.map((t) => (
               <button
                 key={t.key}
                 onClick={() => setFilter(t.key)}
                 className={`px-4 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-                  filter === t.key ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
+                  filter === t.key
+                    ? "bg-primary/10 text-primary border border-primary/30"
+                    : "bg-card text-muted-foreground border border-border/50"
                 }`}
               >
                 {t.label}
               </button>
             ))}
+
+            <button
+              onClick={refetch}
+              className="ml-auto px-3 py-2 rounded-full text-xs font-medium border border-border/50 bg-card/60 text-muted-foreground hover:text-foreground transition"
+              title="Atualizar"
+            >
+              Atualizar
+            </button>
           </div>
         )}
 
@@ -192,30 +220,35 @@ const MyApplications = () => {
           <div className="flex justify-center py-12">
             <Loader2 className="w-6 h-6 text-primary animate-spin" />
           </div>
-        ) : applications.length === 0 ? (
-          <div className="py-12 text-center">
-            <Send className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Nenhuma candidatura enviada ainda.</p>
-          </div>
         ) : filteredSorted.length === 0 ? (
           <div className="py-12 text-center">
-            <Send className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Nenhuma candidatura nessa aba.</p>
+            <Clock className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">Nada no histórico ainda.</p>
+
+            <button
+              onClick={() => navigate("/minhas-campanhas")}
+              className="mt-4 px-4 py-2 rounded-xl border border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground transition"
+            >
+              Ir para minhas campanhas
+            </button>
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredSorted.map((app, i) => {
-              const st = statusConfig[app.status] || statusConfig.pending;
-              const deadlineExpired = isPastDateUTC(app.campaign_apply_deadline);
-              const cs = campaignStatusLabel(app.campaign_status, deadlineExpired);
+            {filteredSorted.map((r, i) => {
+              const ps = (r.participant_status || "invited") as ParticipantStatus;
+              const ui = statusUi[ps] || statusUi.invited;
 
-              const isCompleted = app.campaign_status === "completed";
-              const isDeleted = app.campaign_status === "deleted";
-              const isClosedManual = app.campaign_status === "closed_manual" || app.campaign_status === "closed";
+              const cs = (r.campaign_status || "").toLowerCase();
+              const deadlineExpired = isPastDateUTC(r.apply_deadline);
+
+              const isCompleted = cs === "completed";
+              const isDeleted = cs === "deleted";
+              const isClosedManual = cs === "closed_manual";
+              const isClosedExpired = cs === "closed_expired";
 
               return (
                 <motion.div
-                  key={app.application_id}
+                  key={`${r.campaign_id}-${r.participant_status}-${r.invited_at || ""}`}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.08 + i * 0.05 }}
@@ -224,7 +257,7 @@ const MyApplications = () => {
                   <div className="flex items-start justify-between mb-2 gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-semibold text-foreground text-sm truncate">{app.campaign_title || "Campanha"}</h4>
+                        <h4 className="font-semibold text-foreground text-sm truncate">{r.title || "Campanha"}</h4>
 
                         {isCompleted && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full border border-accent/30 bg-accent/10 text-accent font-medium flex items-center gap-1">
@@ -240,6 +273,12 @@ const MyApplications = () => {
                           </span>
                         )}
 
+                        {isClosedExpired && !isCompleted && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full border border-destructive/30 bg-destructive/5 text-destructive font-medium">
+                            Prazo vencido
+                          </span>
+                        )}
+
                         {isDeleted && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground font-medium flex items-center gap-1">
                             <Trash2 className="w-3 h-3" />
@@ -248,27 +287,24 @@ const MyApplications = () => {
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <p className="text-xs text-muted-foreground capitalize">{app.campaign_type || ""}</p>
-                        {cs && <span className={`text-[10px] font-medium ${cs.cls}`}>• {cs.label}</span>}
-                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 capitalize">{r.type || ""}</p>
                     </div>
 
-                    <div className={`flex items-center gap-1 shrink-0 ${st.color}`}>
-                      <st.icon className="w-3.5 h-3.5" />
-                      <span className="text-xs font-medium">{st.label}</span>
+                    <div className={`flex items-center gap-1 shrink-0 ${ui.cls}`}>
+                      <ui.Icon className="w-3.5 h-3.5" />
+                      <span className="text-xs font-medium">{ui.label}</span>
                     </div>
                   </div>
 
                   <div className="text-xs text-muted-foreground flex items-center gap-1">
-                    {app.campaign_city && (
+                    {r.city ? (
                       <>
                         <MapPin className="w-3 h-3" />
                         <span>
-                          {app.campaign_city}, {app.campaign_state}
+                          {r.city}, {r.state}
                         </span>
                       </>
-                    )}
+                    ) : null}
                   </div>
 
                   <div className="mt-3 grid grid-cols-2 gap-2">
@@ -278,30 +314,44 @@ const MyApplications = () => {
                         Data do evento
                       </div>
                       <div className="text-sm font-semibold text-foreground mt-0.5">
-                        {app.campaign_date ? formatDateBR(app.campaign_date) : "A definir"}
+                        {r.campaign_date ? formatDateBR(r.campaign_date) : "A definir"}
                       </div>
                     </div>
 
-                    <div className={`rounded-xl border px-3 py-2 ${deadlineExpired ? "border-destructive/30 bg-destructive/5" : "border-border/50 bg-card/60"}`}>
+                    <div
+                      className={`rounded-xl border px-3 py-2 ${
+                        deadlineExpired ? "border-destructive/30 bg-destructive/5" : "border-border/50 bg-card/60"
+                      }`}
+                    >
                       <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                         <Clock className={`w-3 h-3 ${deadlineExpired ? "text-destructive" : ""}`} />
-                        Prazo candidatura
+                        Prazo (registro)
                       </div>
                       <div className={`text-sm font-semibold mt-0.5 ${deadlineExpired ? "text-destructive" : "text-foreground"}`}>
-                        {app.campaign_apply_deadline ? (deadlineExpired ? "Encerrado" : formatDateBR(app.campaign_apply_deadline)) : "-"}
+                        {r.apply_deadline ? (deadlineExpired ? "Encerrado" : formatDateBR(r.apply_deadline)) : "-"}
                       </div>
                     </div>
                   </div>
 
-                  {app.status === "accepted" && (
-                    <button
-                      onClick={() => navigate(`/campanha-detalhe/${app.campaign_id}`)}
-                      className="mt-3 w-full py-2.5 rounded-xl border border-accent/30 bg-accent/5 text-accent font-semibold text-xs flex items-center justify-center gap-1.5"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Ver detalhes completos
-                    </button>
-                  )}
+                  {/* CTA: sempre abre detalhes (ou confirmação se ainda for convite) */}
+                  <div className="mt-3 pt-3 border-t border-border/30">
+                    {ps === "invited" ? (
+                      <button
+                        onClick={() => navigate(`/campanha/${r.campaign_id}`)}
+                        className="w-full py-2.5 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-xs glow-blue"
+                      >
+                        Ver convite
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => navigate(`/campanha-detalhe/${r.campaign_id}`)}
+                        className="w-full py-2.5 rounded-xl border border-accent/30 bg-accent/5 text-accent font-semibold text-xs flex items-center justify-center gap-1.5"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Ver detalhes
+                      </button>
+                    )}
+                  </div>
                 </motion.div>
               );
             })}

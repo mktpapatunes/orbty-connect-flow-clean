@@ -39,7 +39,9 @@ const formatDateBR = (value?: string | null) => {
   const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
   const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
   if (Number.isNaN(d.getTime())) return "-";
-  return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
+  return isDateOnly
+    ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" })
+    : d.toLocaleDateString("pt-BR");
 };
 
 const statusUi: Record<ParticipantStatus, { label: string; cls: string; Icon: any }> = {
@@ -110,12 +112,25 @@ export default function MyCampaigns() {
     <MobileLayout title="Minhas campanhas" navType="influencer">
       <div className="px-6 py-6 space-y-6">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <h2 className="font-display text-2xl font-bold text-foreground">
-            Minhas <span className="text-gradient-neon">campanhas</span>
-          </h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            Aqui aparecem seus convites e participações (somente após a campanha ficar ativa).
-          </p>
+          {/* ✅ Header com botão de histórico (mesma lógica do contractor) */}
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <h2 className="font-display text-2xl font-bold text-foreground">
+                Minhas <span className="text-gradient-neon">campanhas</span>
+              </h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                Aqui aparecem seus convites e participações (somente após a campanha ficar ativa).
+              </p>
+            </div>
+
+            <button
+              onClick={() => navigate("/minhas-candidaturas")}
+              className="text-[11px] text-muted-foreground hover:text-primary transition-colors"
+              title="Ver histórico"
+            >
+              Histórico
+            </button>
+          </div>
         </motion.div>
 
         {!isLoading && rows.length > 0 && (
@@ -155,7 +170,7 @@ export default function MyCampaigns() {
               onClick={() => navigate("/dashboard-influenciadora")}
               className="mt-4 px-4 py-2 rounded-xl border border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground transition"
             >
-              Ver campanhas disponíveis
+              Voltar para o início
             </button>
           </div>
         ) : filtered.length === 0 ? (
@@ -168,7 +183,7 @@ export default function MyCampaigns() {
             {filtered.map((r, i) => {
               const ui = statusUi[r.participant_status];
               const isInvited = r.participant_status === "invited";
-              const canOpen = r.participant_status !== "invited"; // após confirmar, já pode abrir detalhes/arquivos
+              const canOpen = r.participant_status !== "invited";
 
               return (
                 <motion.div
@@ -180,7 +195,9 @@ export default function MyCampaigns() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h4 className="font-semibold text-foreground text-sm truncate">{r.title || "Campanha"}</h4>
+                      <h4 className="font-semibold text-foreground text-sm truncate">
+                        {r.title || "Campanha"}
+                      </h4>
                       <p className="text-xs text-muted-foreground mt-0.5 capitalize">{r.type}</p>
 
                       <div className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
@@ -219,7 +236,6 @@ export default function MyCampaigns() {
                     </div>
                   </div>
 
-                  {/* CTAs */}
                   <div className="mt-3 pt-3 border-t border-border/30">
                     {isInvited ? (
                       <button
