@@ -794,7 +794,7 @@ export default function ContractorProfile() {
           {/* MINHAS CAMPANHAS */}
           <button
             type="button"
-            onClick={() => navigate("/historico")}
+            onClick={() => navigate("/campanhas")}
             className="w-full rounded-2xl bg-gradient-neon text-primary-foreground glow-blue
             px-5 py-4 font-semibold text-base flex items-center justify-between
             active:scale-[0.99] transition"
