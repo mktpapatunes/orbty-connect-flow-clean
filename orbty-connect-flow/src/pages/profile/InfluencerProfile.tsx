@@ -1078,7 +1078,7 @@ export default function InfluencerProfile() {
         {/* MINHAS CAMPANHAS */}
         <button
           type="button"
-          onClick={() => navigate("/campanhas")}
+          onClick={() => navigate("/minhas-campanhas")}
           className="w-full rounded-2xl bg-gradient-neon text-primary-foreground glow-blue
           px-5 py-4 font-semibold text-base flex items-center justify-between
           active:scale-[0.99] transition"
