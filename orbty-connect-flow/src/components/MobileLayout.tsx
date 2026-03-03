@@ -10,7 +10,7 @@ import {
   LogOut,
   Trophy,
   Settings,
-  Megaphone,
+  Rocket,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -262,7 +262,7 @@ const MobileLayout = ({
                 className="w-12 h-12 rounded-full bg-gradient-neon glow-blue flex items-center justify-center shadow-md transition hover:scale-105 active:scale-95"
                 title="Minhas campanhas"
               >
-                <Megaphone className="w-6 h-6 text-primary-foreground" />
+                <Rocket className="w-6 h-6 text-primary-foreground" />
               </button>
 
               {/* Perfil */}
