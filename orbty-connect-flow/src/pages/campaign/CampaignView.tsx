@@ -1,7 +1,3 @@
-// src/pages/campaign/CampaignView.tsx
-// ✅ ARQUIVO COMPLETO — com navegação para perfil público do influencer (/u/:id)
-// (Ajustes: Applicants tab + Timeline (chips/itens) clicáveis quando houver influencer_id)
-
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
@@ -46,14 +42,11 @@ type CampaignTimelineRow = {
   created_at: string;
   actor_id: string | null;
   actor_role: string | null;
-
   actor_name: string | null;
-
   application_id: string | null;
   influencer_id: string | null;
   influencer_name: string | null;
   influencer_instagram: string | null;
-
   from_status: string | null;
   to_status: string | null;
   reason: string | null;
@@ -85,11 +78,7 @@ type RenderItem =
   | { kind: "day"; key: string; label: string; isSearchMode?: boolean }
   | TimelineItem;
 
-type SearchSuggestion = {
-  key: string;
-  label: string;
-  value: string;
-};
+type SearchSuggestion = { key: string; label: string; value: string };
 
 type TabKey = "details" | "applicants" | "history" | "files";
 
@@ -115,23 +104,18 @@ const CampaignView = () => {
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [expandedClusters, setExpandedClusters] = useState<Record<string, boolean>>({});
 
-  // ✅ Busca premium: raw (digitando) + debounced (cálculo)
   const [searchRaw, setSearchRaw] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  // ✅ Toggle: mostrar só top matches quando buscando
   const [onlyTop, setOnlyTop] = useState(false);
 
   const [metrics, setMetrics] = useState<CampaignMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
 
-  // ✅ DEFINIÇÕES CRÍTICAS (pra não quebrar a tela)
   const isContractor = userRole === "contractor";
   const influencerAccepted = applicationStatus === "accepted";
 
-  // ✅ Navegação para perfil público
-  // OBS: esta tela assume que existe uma rota tipo: /u/:id
   const goToPublicProfile = useCallback(
     (userId?: string | null) => {
       if (!userId) return;
@@ -140,10 +124,6 @@ const CampaignView = () => {
     [navigate]
   );
 
-  /* =========================
-     URL state (tab)
-  ========================= */
-
   const setTabWithUrl = useCallback(
     (next: TabKey) => {
       setTab(next);
@@ -151,13 +131,7 @@ const CampaignView = () => {
       const sp = new URLSearchParams(location.search);
       sp.set("tab", next);
 
-      navigate(
-        {
-          pathname: location.pathname,
-          search: sp.toString(),
-        },
-        { replace: true }
-      );
+      navigate({ pathname: location.pathname, search: sp.toString() }, { replace: true });
     },
     [location.pathname, location.search, navigate]
   );
@@ -171,8 +145,6 @@ const CampaignView = () => {
     if (t && allowed.includes(t as TabKey)) {
       const next = t as TabKey;
 
-      // regras simples:
-      // - influencer sem aceite não deve ficar em files
       if (!isContractor && next === "files" && !influencerAccepted) {
         if (tab !== "details") setTab("details");
         return;
@@ -181,13 +153,8 @@ const CampaignView = () => {
       if (tab !== next) setTab(next);
       return;
     }
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search, isContractor, influencerAccepted]);
-
-  /* =========================
-     Utils
-  ========================= */
 
   const formatDateBR = (value?: string | null) => {
     if (!value) return "-";
@@ -230,7 +197,6 @@ const CampaignView = () => {
 
   const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-  // ✅ highlight discreto (premium + minimal)
   const highlight = (text: string, rawQuery: string) => {
     const q = (rawQuery || "").trim();
     if (!q) return text;
@@ -310,10 +276,6 @@ const CampaignView = () => {
     return d.toLocaleDateString("pt-BR");
   };
 
-  /* =========================
-     Debounce: raw -> term
-  ========================= */
-
   useEffect(() => {
     const t = setTimeout(() => setSearchTerm(searchRaw.trim()), 180);
     return () => clearTimeout(t);
@@ -325,10 +287,6 @@ const CampaignView = () => {
     if (!isSearchMode) setOnlyTop(false);
   }, [isSearchMode]);
 
-  /* =========================
-     Timeline helpers
-  ========================= */
-
   const isContractorActionEvent = (t: CampaignTimelineRow) => {
     if (t.event_type === "application.accepted") return true;
     if (t.event_type === "application.rejected") return true;
@@ -338,7 +296,6 @@ const CampaignView = () => {
       if (t.to_status === "completed") return true;
       if (t.to_status === "deleted") return true;
     }
-
     return false;
   };
 
@@ -360,18 +317,10 @@ const CampaignView = () => {
     const name = t.influencer_name || "Creator";
     const ig = normalizeAt(t.influencer_instagram);
 
-    if (t.event_type === "application.submitted") {
-      return ig ? `Candidatura enviada por ${name} (${ig})` : `Candidatura enviada por ${name}`;
-    }
-    if (t.event_type === "application.accepted") {
-      return ig ? `Creator aprovado: ${name} (${ig})` : `Creator aprovado: ${name}`;
-    }
-    if (t.event_type === "application.rejected") {
-      return ig ? `Creator recusado: ${name} (${ig})` : `Creator recusado: ${name}`;
-    }
-    if (t.event_type === "campaign.status_changed") {
-      return `Status atualizado: ${statusLabel(t.from_status)} → ${statusLabel(t.to_status)}`;
-    }
+    if (t.event_type === "application.submitted") return ig ? `Candidatura enviada por ${name} (${ig})` : `Candidatura enviada por ${name}`;
+    if (t.event_type === "application.accepted") return ig ? `Creator aprovado: ${name} (${ig})` : `Creator aprovado: ${name}`;
+    if (t.event_type === "application.rejected") return ig ? `Creator recusado: ${name} (${ig})` : `Creator recusado: ${name}`;
+    if (t.event_type === "campaign.status_changed") return `Status atualizado: ${statusLabel(t.from_status)} → ${statusLabel(t.to_status)}`;
     return "Evento";
   };
 
@@ -380,26 +329,15 @@ const CampaignView = () => {
 
     if (isContractorActionEvent(t)) {
       const by = t.actor_name ? `por ${t.actor_name}` : "por contratante";
-      if (t.event_type === "campaign.status_changed" && t.reason) {
-        return `${when} · ${by} · Motivo: ${t.reason}`;
-      }
+      if (t.event_type === "campaign.status_changed" && t.reason) return `${when} · ${by} · Motivo: ${t.reason}`;
       return `${when} · ${by}`;
     }
 
-    if (t.event_type === "application.submitted") {
-      return t.note ? `${when} · Nota: "${t.note}"` : when;
-    }
-
-    if (t.event_type === "campaign.status_changed" && t.reason) {
-      return `${when} · Motivo: ${t.reason}`;
-    }
+    if (t.event_type === "application.submitted") return t.note ? `${when} · Nota: "${t.note}"` : when;
+    if (t.event_type === "campaign.status_changed" && t.reason) return `${when} · Motivo: ${t.reason}`;
 
     return when;
   };
-
-  /* =========================
-     Busca premium: score + chips
-  ========================= */
 
   const scoreEventForQuery = (e: CampaignTimelineRow, qNormRaw: string) => {
     const qNorm = qNormRaw.trim();
@@ -459,8 +397,7 @@ const CampaignView = () => {
       const atNorm = normalizeSearch(atNo);
 
       const matchInfluencer =
-        (name && (nameNorm.startsWith(q) || nameNorm.includes(q))) ||
-        (atNo && (atNorm.startsWith(qNoAt) || atNorm.includes(qNoAt)));
+        (name && (nameNorm.startsWith(q) || nameNorm.includes(q))) || (atNo && (atNorm.startsWith(qNoAt) || atNorm.includes(qNoAt)));
 
       if (matchInfluencer && (name || at)) {
         const label = `${name || "Creator"}${at ? ` · ${at}` : ""}`;
@@ -479,16 +416,11 @@ const CampaignView = () => {
     return res;
   };
 
-  /* =========================
-     Filtrar + ordenar por relevância na busca
-  ========================= */
-
   const baseFilteredByType = useMemo(() => {
     let arr = timeline || [];
 
     if (historyFilter === "applications") arr = arr.filter((e) => e.event_type === "application.submitted");
-    else if (historyFilter === "decisions")
-      arr = arr.filter((e) => e.event_type === "application.accepted" || e.event_type === "application.rejected");
+    else if (historyFilter === "decisions") arr = arr.filter((e) => e.event_type === "application.accepted" || e.event_type === "application.rejected");
     else if (historyFilter === "status") arr = arr.filter((e) => e.event_type === "campaign.status_changed");
 
     return arr;
@@ -517,10 +449,6 @@ const CampaignView = () => {
   const topMatches = useMemo(() => (isSearchMode ? filteredTimeline.slice(0, 3) : []), [filteredTimeline, isSearchMode]);
 
   const resultsCount = useMemo(() => (isSearchMode ? filteredTimeline.length : (timeline || []).length), [filteredTimeline, isSearchMode, timeline]);
-
-  /* =========================
-     Cluster (desliga em busca)
-  ========================= */
 
   const timelineItems: TimelineItem[] = useMemo(() => {
     const events = filteredTimeline || [];
@@ -614,9 +542,7 @@ const CampaignView = () => {
   const timelineRenderItems: RenderItem[] = useMemo(() => {
     let items = timelineItems;
 
-    if (isSearchMode && onlyTop) {
-      items = topMatches.map((ev) => ({ kind: "event" as const, ev }));
-    }
+    if (isSearchMode && onlyTop) items = topMatches.map((ev) => ({ kind: "event" as const, ev }));
 
     const out: RenderItem[] = [];
     let lastDay: string | null = null;
@@ -629,16 +555,11 @@ const CampaignView = () => {
         out.push({ kind: "day", key: `day-${dk}`, label: dayLabel(firstDate), isSearchMode });
         lastDay = dk;
       }
-
       out.push(item);
     }
 
     return out;
   }, [timelineItems, isSearchMode, onlyTop, topMatches]);
-
-  /* =========================
-     RPC fetchers
-  ========================= */
 
   const fetchTimeline = useCallback(async () => {
     if (!id || !user) return;
@@ -649,8 +570,7 @@ const CampaignView = () => {
 
       if (error) {
         const msg = (error.message || "").toLowerCase();
-        const looksMissing =
-          msg.includes("could not find the function") || msg.includes("does not exist") || msg.includes("schema cache");
+        const looksMissing = msg.includes("could not find the function") || msg.includes("does not exist") || msg.includes("schema cache");
 
         if (!looksMissing) console.error("GET_CAMPAIGN_TIMELINE_ERROR", error);
 
@@ -673,8 +593,7 @@ const CampaignView = () => {
 
       if (error) {
         const msg = (error.message || "").toLowerCase();
-        const missing =
-          msg.includes("could not find the function") || msg.includes("does not exist") || msg.includes("schema cache");
+        const missing = msg.includes("could not find the function") || msg.includes("does not exist") || msg.includes("schema cache");
 
         if (!missing) console.error("CAMPAIGN_METRICS_ERROR", error);
 
@@ -702,10 +621,6 @@ const CampaignView = () => {
     }
   }, [id, user, isContractor]);
 
-  /* =========================
-     Boot fetch
-  ========================= */
-
   useEffect(() => {
     const fetchData = async () => {
       if (!id || !user) {
@@ -728,9 +643,7 @@ const CampaignView = () => {
 
           setCampaign((campaignData ?? null) as unknown as PublicCampaignFeed);
 
-          const { data: applicantData, error: applicantsError } = await supabase.rpc("get_campaign_applicants" as any, {
-            p_campaign_id: id,
-          });
+          const { data: applicantData, error: applicantsError } = await supabase.rpc("get_campaign_applicants" as any, { p_campaign_id: id });
 
           if (applicantsError) console.error("CAMPAIGNVIEW_APPLICANTS_ERROR", applicantsError);
 
@@ -773,10 +686,6 @@ const CampaignView = () => {
     if (tab === "history") fetchTimeline();
   }, [tab, fetchTimeline]);
 
-  /* =========================
-     Actions
-  ========================= */
-
   const handleApply = async () => {
     if (!id || !user) return;
 
@@ -803,7 +712,6 @@ const CampaignView = () => {
     } else {
       toast.success("Candidatura enviada!");
       setApplicationStatus("pending");
-
       if (tab !== "details") setTabWithUrl("details");
     }
 
@@ -823,9 +731,7 @@ const CampaignView = () => {
     } else {
       toast.success(decision === "accepted" ? "Influenciadora aprovada!" : "Candidatura recusada.");
 
-      const { data: applicantData, error: applicantsError } = await supabase.rpc("get_campaign_applicants" as any, {
-        p_campaign_id: id,
-      });
+      const { data: applicantData, error: applicantsError } = await supabase.rpc("get_campaign_applicants" as any, { p_campaign_id: id });
 
       if (applicantsError) console.error("CAMPAIGNVIEW_APPLICANTS_REFRESH_ERROR", applicantsError);
 
@@ -845,10 +751,6 @@ const CampaignView = () => {
     setOnlyTop(false);
     requestAnimationFrame(() => searchInputRef.current?.focus());
   };
-
-  /* =========================
-     Render
-  ========================= */
 
   const backTo = isContractor ? "/dashboard-contratante" : "/dashboard-influenciadora";
   const navType = isContractor ? "contractor" : "influencer";
@@ -889,7 +791,6 @@ const CampaignView = () => {
   return (
     <MobileLayout title={campaign.title} showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
       <div className="px-6 py-6 space-y-4">
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium capitalize">{campaign.type}</span>
@@ -906,7 +807,6 @@ const CampaignView = () => {
           <h2 className="font-display text-2xl font-bold text-foreground">{campaign.title}</h2>
         </motion.div>
 
-        {/* Tabs (contractor) */}
         {isContractor && (
           <div className="flex gap-2">
             <button
@@ -950,7 +850,6 @@ const CampaignView = () => {
           </div>
         )}
 
-        {/* Tabs (influencer) — só quando aceita */}
         {!isContractor && influencerAccepted && (
           <div className="flex gap-2">
             <button
@@ -974,15 +873,12 @@ const CampaignView = () => {
           </div>
         )}
 
-        {/* Files tab */}
         {tab === "files" && (
           <CampaignFilesTab campaignId={String(id)} role={isContractor ? "contractor" : "influencer"} influencerAccepted={!!influencerAccepted} />
         )}
 
-        {/* Details tab */}
         {(tab === "details" || (!isContractor && !influencerAccepted)) && (
           <>
-            {/* Região */}
             <div className="glass-card p-4">
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-primary" />
@@ -995,7 +891,6 @@ const CampaignView = () => {
               </div>
             </div>
 
-            {/* Datas destacadas */}
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-border/50 bg-card/60 p-4">
                 <div className="flex items-center gap-2 mb-2">
@@ -1020,7 +915,6 @@ const CampaignView = () => {
               </div>
             </motion.div>
 
-            {/* Métricas (contractor) */}
             {isContractor && (
               <div className="glass-card p-4">
                 <div className="flex items-center justify-between mb-3">
@@ -1063,7 +957,6 @@ const CampaignView = () => {
               </div>
             )}
 
-            {/* Brief */}
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="w-4 h-4 text-primary" />
@@ -1072,12 +965,14 @@ const CampaignView = () => {
               <p className="text-sm text-foreground/70 leading-relaxed glass-card p-4">{campaign.brief_public}</p>
             </div>
 
-            {/* Influencer accepted hint */}
             {!isContractor && influencerAccepted && (
               <div className="glass-card p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm text-muted-foreground">Você pode acessar **Arquivos** para ver briefing/arte e enviar comprovantes.</div>
-                  <button onClick={() => setTabWithUrl("files")} className="px-3 py-2 rounded-xl text-xs font-medium border border-primary/30 bg-primary/10 text-primary">
+                  <div className="text-sm text-muted-foreground">Você pode acessar Arquivos para ver briefing/arte e enviar comprovantes.</div>
+                  <button
+                    onClick={() => setTabWithUrl("files")}
+                    className="px-3 py-2 rounded-xl text-xs font-medium border border-primary/30 bg-primary/10 text-primary"
+                  >
                     Abrir arquivos
                   </button>
                 </div>
@@ -1086,7 +981,6 @@ const CampaignView = () => {
           </>
         )}
 
-        {/* Applicants tab */}
         {isContractor && tab === "applicants" && (
           <div className="space-y-3">
             {applicants.length === 0 ? (
@@ -1097,8 +991,12 @@ const CampaignView = () => {
             ) : (
               applicants.map((app) => (
                 <motion.div key={app.application_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-4 space-y-3">
-                  {/* ✅ Header clicável → perfil público */}
-                  <button type="button" onClick={() => goToPublicProfile((app as any).influencer_id ?? null)} className="w-full text-left" title="Ver perfil público">
+                  <button
+                    type="button"
+                    onClick={() => goToPublicProfile((app as any).influencer_id ?? null)}
+                    className="w-full text-left"
+                    title="Ver perfil público"
+                  >
                     <div className="flex items-start gap-3">
                       <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                         <UserIcon className="w-5 h-5 text-primary" />
@@ -1161,7 +1059,6 @@ const CampaignView = () => {
           </div>
         )}
 
-        {/* History tab */}
         {tab === "history" && (
           <div className="space-y-3">
             <div className="glass-card p-4">
@@ -1298,7 +1195,6 @@ const CampaignView = () => {
                           <p className="text-sm font-semibold text-foreground">{highlight(title, searchTerm)}</p>
                           <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
 
-                          {/* ✅ Link rápido pro perfil quando tiver influencer_id */}
                           {ev.influencer_id && (
                             <button
                               type="button"
@@ -1345,8 +1241,7 @@ const CampaignView = () => {
                     const ev = item.ev;
                     const Icon = timelineIconFor(ev);
 
-                    const isPositive =
-                      ev.event_type === "application.accepted" || (ev.event_type === "campaign.status_changed" && ev.to_status === "completed");
+                    const isPositive = ev.event_type === "application.accepted" || (ev.event_type === "campaign.status_changed" && ev.to_status === "completed");
 
                     const isNegative =
                       ev.event_type === "application.rejected" ||
@@ -1361,11 +1256,7 @@ const CampaignView = () => {
                         <div className="flex items-start gap-3">
                           <div
                             className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
-                              isPositive
-                                ? "bg-accent/10 border-accent/25"
-                                : isNegative
-                                ? "bg-destructive/10 border-destructive/25"
-                                : "bg-primary/10 border-primary/25"
+                              isPositive ? "bg-accent/10 border-accent/25" : isNegative ? "bg-destructive/10 border-destructive/25" : "bg-primary/10 border-primary/25"
                             }`}
                             title={avatarName || ""}
                           >
@@ -1388,9 +1279,7 @@ const CampaignView = () => {
                                 onClick={() => goToPublicProfile(ev.influencer_id)}
                                 disabled={!ev.influencer_id}
                                 className={`mt-2 inline-flex items-center gap-2 text-[10px] px-2 py-1 rounded-full border bg-card/60 ${
-                                  ev.influencer_id
-                                    ? "border-border/50 text-muted-foreground hover:text-foreground transition"
-                                    : "border-border/30 text-muted-foreground/60 cursor-default"
+                                  ev.influencer_id ? "border-border/50 text-muted-foreground hover:text-foreground transition" : "border-border/30 text-muted-foreground/60 cursor-default"
                                 }`}
                                 title={ev.influencer_id ? "Ver perfil público" : ""}
                               >
@@ -1411,7 +1300,6 @@ const CampaignView = () => {
                     );
                   }
 
-                  // cluster (só em modo cronológico)
                   const { clusterType, events, key } = item;
                   const accent = clusterAccent(clusterType);
                   const count = events.length;
@@ -1528,7 +1416,6 @@ const CampaignView = () => {
         )}
       </div>
 
-      {/* Influencer apply button */}
       {!isContractor && (
         <div className="sticky bottom-0 px-6 py-4 bg-background/80 backdrop-blur-xl border-t border-border/30">
           {!applicationStatus && (

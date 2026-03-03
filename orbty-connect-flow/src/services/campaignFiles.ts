@@ -1,3 +1,4 @@
+// src/services/campaignFiles.ts
 import { supabase } from "@/integrations/supabase/client";
 
 export type CampaignFileKind = "assets" | "deliverables";
@@ -44,10 +45,12 @@ export async function uploadCampaignFile(params: {
   upsert?: boolean;
 }): Promise<{ path: string }> {
   if (!params.file) throw new Error("Arquivo inválido.");
+
+  // hoje deixo imagem + pdf (briefing)
   if (!params.file.type?.startsWith("image/") && params.file.type !== "application/pdf") {
-    // você pode liberar mais tipos depois
-    // hoje deixo imagem + pdf (briefing)
+    throw new Error("Tipo de arquivo não permitido. Envie imagem ou PDF.");
   }
+
   if (params.file.size > 10 * 1024 * 1024) {
     throw new Error("Arquivo muito grande. Máximo 10MB.");
   }
@@ -76,12 +79,6 @@ export async function listCampaignFiles(params: {
 }): Promise<CampaignFileItem[]> {
   const prefix = params.kind ? `${params.campaignId}/${params.kind}` : `${params.campaignId}`;
 
-  // list() lista por "folder". Então precisamos:
-  // 1) listar os "subfolders" (assets/ ou deliverables/)
-  // 2) listar os owners dentro de cada
-  // 3) listar arquivos dentro de cada owner
-  // Para manter simples/robusto, vamos varrer até 3 níveis.
-
   async function listFolder(path: string) {
     const { data, error } = await supabase.storage.from(BUCKET).list(path, {
       limit: 100,
@@ -95,15 +92,11 @@ export async function listCampaignFiles(params: {
 
   const level1 = await listFolder(prefix); // ex: ["assets", "deliverables"] ou owners/arquivos
   for (const a of level1) {
-    // no storage list, "id" geralmente vem null para folders e "name" indica folder
     const l1Name = a.name;
     const l1Path = `${prefix}/${l1Name}`;
 
-    // se já estamos em campaignId (sem kind), l1Name pode ser "assets" ou "deliverables"
-    // se estamos em campaignId/kind, l1Name pode ser ownerId
     const level2 = await listFolder(l1Path);
 
-    // se level2 vazio e a parece ser arquivo, adiciona direto
     if (level2.length === 0 && a.id) {
       // arquivo diretamente no prefix (não esperado)
       const parts = l1Path.split("/");
@@ -116,8 +109,8 @@ export async function listCampaignFiles(params: {
         ownerId,
         path: l1Path,
         name: l1Name,
-        size: a.metadata?.size ?? null,
-        mimetype: a.metadata?.mimetype ?? null,
+        size: (a as any).metadata?.size ?? null,
+        mimetype: (a as any).metadata?.mimetype ?? null,
         updated_at: a.updated_at ?? null,
       });
       continue;
@@ -141,14 +134,14 @@ export async function listCampaignFiles(params: {
           ownerId,
           path: l2Path,
           name: l2Name,
-          size: b.metadata?.size ?? null,
-          mimetype: b.metadata?.mimetype ?? null,
+          size: (b as any).metadata?.size ?? null,
+          mimetype: (b as any).metadata?.mimetype ?? null,
           updated_at: b.updated_at ?? null,
         });
         continue;
       }
 
-      // Aqui estamos no nível dos arquivos (owner folder)
+      // nível dos arquivos (owner folder)
       for (const f of level3) {
         if (!f.id) continue; // folder
         const parts = l2Path.split("/");
@@ -162,15 +155,14 @@ export async function listCampaignFiles(params: {
           ownerId,
           path: `${l2Path}/${f.name}`,
           name: f.name,
-          size: f.metadata?.size ?? null,
-          mimetype: f.metadata?.mimetype ?? null,
+          size: (f as any).metadata?.size ?? null,
+          mimetype: (f as any).metadata?.mimetype ?? null,
           updated_at: f.updated_at ?? null,
         });
       }
     }
   }
 
-  // ordena por updated desc
   items.sort((x, y) => (y.updated_at || "").localeCompare(x.updated_at || ""));
   return items;
 }

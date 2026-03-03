@@ -2,18 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
-import {
-  Hourglass,
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  MapPin,
-  Calendar,
-  Send,
-  Clock,
-  Ban,
-  Trash2,
-} from "lucide-react";
+import { Hourglass, CheckCircle2, XCircle, Loader2, MapPin, Calendar, Send, Clock, Ban, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -35,25 +24,14 @@ interface ApplicationWithCampaign {
   campaign_created_at: string | null;
 }
 
-/* =========================
-   Utils (premium + sem bug de fuso)
-========================= */
-
-// ✅ Formata datas para pt-BR (DD/MM/AAAA) sem bug de fuso em YYYY-MM-DD
 const formatDateBR = (value?: string | null) => {
   if (!value) return null;
-
   const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
   const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
-
   if (Number.isNaN(d.getTime())) return null;
-
-  return isDateOnly
-    ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" })
-    : d.toLocaleDateString("pt-BR");
+  return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
 };
 
-// ✅ Prazo vencido (UTC) para DATE do banco (YYYY-MM-DD)
 const isPastDateUTC = (dateString?: string | null) => {
   if (!dateString) return false;
 
@@ -64,7 +42,6 @@ const isPastDateUTC = (dateString?: string | null) => {
   const deadlineUTC = new Date(`${dateString}T00:00:00Z`);
   const now = new Date();
   const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-
   return deadlineUTC.getTime() < todayUTC.getTime();
 };
 
@@ -78,8 +55,6 @@ const toUTCDateMs = (dateString?: string | null) => {
   return Number.isNaN(t) ? null : t;
 };
 
-/* ========================= */
-
 const statusConfig: Record<string, { label: string; color: string; icon: typeof Hourglass }> = {
   pending: { label: "Aguardando", color: "text-warning", icon: Hourglass },
   accepted: { label: "Aprovada", color: "text-accent", icon: CheckCircle2 },
@@ -89,16 +64,13 @@ const statusConfig: Record<string, { label: string; color: string; icon: typeof 
 const campaignStatusLabel = (status?: string | null, deadlineExpired?: boolean) => {
   if (!status) return null;
 
-  // ✅ compatibilidade: antes do SQL novo pode vir "closed"
   if (status === "active" && deadlineExpired) return { label: "Prazo vencido", cls: "text-destructive" };
   if (status === "active") return { label: "Ativa", cls: "text-primary" };
 
-  // novos status (recomendados)
   if (status === "closed_manual") return { label: "Encerrada", cls: "text-muted-foreground" };
   if (status === "completed") return { label: "Concluída", cls: "text-accent" };
   if (status === "deleted") return { label: "Excluída", cls: "text-muted-foreground" };
 
-  // antigos (compat)
   if (status === "closed") return { label: "Encerrada", cls: "text-muted-foreground" };
   if (status === "draft") return { label: "Rascunho", cls: "text-muted-foreground" };
 
@@ -139,7 +111,6 @@ const MyApplications = () => {
     fetchApplications();
   }, [user]);
 
-  // ✅ Contadores (pra tabs)
   const counts = useMemo(() => {
     const completed = applications.filter((a) => a.campaign_status === "completed").length;
     const pending = applications.filter((a) => a.status === "pending").length;
@@ -148,20 +119,14 @@ const MyApplications = () => {
     return { completed, pending, accepted, rejected, total: applications.length };
   }, [applications]);
 
-  // ✅ Filtro + ordenação premium
   const filteredSorted = useMemo(() => {
     const base =
       filter === "all"
         ? applications
         : filter === "completed"
-          ? applications.filter((a) => a.campaign_status === "completed")
-          : applications.filter((a) => a.status === filter);
+        ? applications.filter((a) => a.campaign_status === "completed")
+        : applications.filter((a) => a.status === filter);
 
-    // Ranking premium:
-    // 1) Concluída (campaign_status completed)
-    // 2) Aprovada
-    // 3) Aguardando
-    // 4) Rejeitada
     const rank = (a: ApplicationWithCampaign) => {
       if (a.campaign_status === "completed") return 0;
       if (a.status === "accepted") return 1;
@@ -169,10 +134,6 @@ const MyApplications = () => {
       return 3;
     };
 
-    // Dentro do rank:
-    // - se tiver data do evento, usa ela
-    // - senão usa prazo de candidatura
-    // - senão usa applied_at
     const dateKey = (a: ApplicationWithCampaign) => {
       const eventMs = toUTCDateMs(a.campaign_date);
       if (eventMs !== null) return eventMs;
@@ -189,11 +150,7 @@ const MyApplications = () => {
       const rb = rank(b);
       if (ra !== rb) return ra - rb;
 
-      // Concluídas e aprovadas: mais recentes primeiro (pra ver as mais atuais)
-      // Pendentes: prazo mais próximo primeiro (pra urgência)
-      if (ra === 2) {
-        return dateKey(a) - dateKey(b);
-      }
+      if (ra === 2) return dateKey(a) - dateKey(b);
       return dateKey(b) - dateKey(a);
     });
   }, [applications, filter]);
@@ -215,7 +172,6 @@ const MyApplications = () => {
           </h2>
         </motion.div>
 
-        {/* ✅ Tabs premium */}
         {!isLoading && applications.length > 0 && (
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {tabs.map((t) => (
@@ -223,9 +179,7 @@ const MyApplications = () => {
                 key={t.key}
                 onClick={() => setFilter(t.key)}
                 className={`px-4 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-                  filter === t.key
-                    ? "bg-primary/10 text-primary border border-primary/30"
-                    : "bg-card text-muted-foreground border border-border/50"
+                  filter === t.key ? "bg-primary/10 text-primary border border-primary/30" : "bg-card text-muted-foreground border border-border/50"
                 }`}
               >
                 {t.label}
@@ -252,7 +206,6 @@ const MyApplications = () => {
           <div className="space-y-3">
             {filteredSorted.map((app, i) => {
               const st = statusConfig[app.status] || statusConfig.pending;
-
               const deadlineExpired = isPastDateUTC(app.campaign_apply_deadline);
               const cs = campaignStatusLabel(app.campaign_status, deadlineExpired);
 
@@ -271,11 +224,8 @@ const MyApplications = () => {
                   <div className="flex items-start justify-between mb-2 gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-semibold text-foreground text-sm truncate">
-                          {app.campaign_title || "Campanha"}
-                        </h4>
+                        <h4 className="font-semibold text-foreground text-sm truncate">{app.campaign_title || "Campanha"}</h4>
 
-                        {/* ✅ Badge premium "Concluída" */}
                         {isCompleted && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full border border-accent/30 bg-accent/10 text-accent font-medium flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3" />
@@ -300,11 +250,7 @@ const MyApplications = () => {
 
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <p className="text-xs text-muted-foreground capitalize">{app.campaign_type || ""}</p>
-                        {cs && (
-                          <span className={`text-[10px] font-medium ${cs.cls}`}>
-                            • {cs.label}
-                          </span>
-                        )}
+                        {cs && <span className={`text-[10px] font-medium ${cs.cls}`}>• {cs.label}</span>}
                       </div>
                     </div>
 
@@ -314,17 +260,17 @@ const MyApplications = () => {
                     </div>
                   </div>
 
-                  {/* Região */}
                   <div className="text-xs text-muted-foreground flex items-center gap-1">
                     {app.campaign_city && (
                       <>
                         <MapPin className="w-3 h-3" />
-                        <span>{app.campaign_city}, {app.campaign_state}</span>
+                        <span>
+                          {app.campaign_city}, {app.campaign_state}
+                        </span>
                       </>
                     )}
                   </div>
 
-                  {/* ✅ Chips de datas (premium) */}
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <div className="rounded-xl border border-border/50 bg-card/60 px-3 py-2">
                       <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -336,26 +282,17 @@ const MyApplications = () => {
                       </div>
                     </div>
 
-                    <div
-                      className={`rounded-xl border px-3 py-2 ${
-                        deadlineExpired ? "border-destructive/30 bg-destructive/5" : "border-border/50 bg-card/60"
-                      }`}
-                    >
+                    <div className={`rounded-xl border px-3 py-2 ${deadlineExpired ? "border-destructive/30 bg-destructive/5" : "border-border/50 bg-card/60"}`}>
                       <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                         <Clock className={`w-3 h-3 ${deadlineExpired ? "text-destructive" : ""}`} />
                         Prazo candidatura
                       </div>
                       <div className={`text-sm font-semibold mt-0.5 ${deadlineExpired ? "text-destructive" : "text-foreground"}`}>
-                        {app.campaign_apply_deadline
-                          ? deadlineExpired
-                            ? "Encerrado"
-                            : formatDateBR(app.campaign_apply_deadline)
-                          : "-"}
+                        {app.campaign_apply_deadline ? (deadlineExpired ? "Encerrado" : formatDateBR(app.campaign_apply_deadline)) : "-"}
                       </div>
                     </div>
                   </div>
 
-                  {/* CTA */}
                   {app.status === "accepted" && (
                     <button
                       onClick={() => navigate(`/campanha-detalhe/${app.campaign_id}`)}
