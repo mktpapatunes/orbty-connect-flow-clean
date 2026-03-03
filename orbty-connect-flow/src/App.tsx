@@ -41,6 +41,7 @@ import NotFound from "./pages/NotFound";
 import LegacyProfile from "@/pages/Profile";
 
 import PaymentSimulated from "./pages/campaign/PaymentSimulated";
+import Settings from "./pages/Settings";
 
 const queryClient = new QueryClient();
 
@@ -243,6 +244,15 @@ const App = () => (
   element={
     <ProtectedRoute>
       <FAQ />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/configuracoes"
+  element={
+    <ProtectedRoute>
+      <Settings />
     </ProtectedRoute>
   }
 />

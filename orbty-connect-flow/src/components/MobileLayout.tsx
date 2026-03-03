@@ -26,7 +26,7 @@ interface MobileLayoutProps {
 }
 
 /* =========================
-   NAV DEFINITIONS
+   NAV DEFINITIONS (legacy / optional)
 ========================= */
 
 const contractorNav = [
@@ -34,7 +34,7 @@ const contractorNav = [
   { icon: User, label: "Perfil", path: "/perfil" },
 ];
 
-// ✅ legado (não usamos mais no bottom nav do influencer, mas pode manter sem problema)
+// legado (não usado no bottom nav atual do influencer)
 const influencerNav = [
   { icon: LayoutDashboard, label: "Início", path: "/dashboard-influenciadora" },
   { icon: Clock, label: "Candidaturas", path: "/minhas-candidaturas" },
@@ -64,11 +64,8 @@ const MobileLayout = ({
   const isInfluencer = navType === "influencer";
 
   const handleBack = () => {
-    if (backTo) {
-      navigate(backTo);
-    } else {
-      navigate(-1);
-    }
+    if (backTo) navigate(backTo);
+    else navigate(-1);
   };
 
   const handleHome = () => {
@@ -83,10 +80,11 @@ const MobileLayout = ({
   const handleSignOut = async () => {
     const ok = window.confirm("Você tem certeza que deseja sair da conta?");
     if (!ok) return;
-
     await signOut();
     navigate("/welcome");
   };
+
+  const isActivePath = (path: string) => location.pathname === path;
 
   return (
     <div className="mobile-container flex flex-col bg-background">
@@ -153,14 +151,14 @@ const MobileLayout = ({
               <button
                 onClick={() => navigate("/dashboard-contratante")}
                 className={`flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 ${
-                  location.pathname === "/dashboard-contratante"
+                  isActivePath("/dashboard-contratante")
                     ? "text-primary"
                     : "text-muted-foreground"
                 }`}
               >
                 <LayoutDashboard className="w-5 h-5" />
                 <span className="text-[10px] font-medium">Início</span>
-                {location.pathname === "/dashboard-contratante" && (
+                {isActivePath("/dashboard-contratante") && (
                   <motion.div
                     layoutId="nav-indicator"
                     className="w-1 h-1 rounded-full bg-primary"
@@ -192,14 +190,12 @@ const MobileLayout = ({
               <button
                 onClick={() => navigate("/perfil")}
                 className={`flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 ${
-                  location.pathname === "/perfil"
-                    ? "text-primary"
-                    : "text-muted-foreground"
+                  isActivePath("/perfil") ? "text-primary" : "text-muted-foreground"
                 }`}
               >
                 <User className="w-5 h-5" />
                 <span className="text-[10px] font-medium">Perfil</span>
-                {location.pathname === "/perfil" && (
+                {isActivePath("/perfil") && (
                   <motion.div
                     layoutId="nav-indicator"
                     className="w-1 h-1 rounded-full bg-primary"
@@ -207,15 +203,24 @@ const MobileLayout = ({
                 )}
               </button>
 
-              {/* Configuração (inativo) */}
+              {/* Config (ativo) */}
               <button
-                type="button"
-                disabled
-                className="flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 text-muted-foreground opacity-60 cursor-not-allowed"
-                title="Configurações (em breve)"
+                onClick={() => navigate("/configuracoes")}
+                className={`flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 ${
+                  isActivePath("/configuracoes")
+                    ? "text-primary"
+                    : "text-muted-foreground"
+                }`}
+                title="Configurações"
               >
                 <Settings className="w-5 h-5" />
                 <span className="text-[10px] font-medium">Config</span>
+                {isActivePath("/configuracoes") && (
+                  <motion.div
+                    layoutId="nav-indicator"
+                    className="w-1 h-1 rounded-full bg-primary"
+                  />
+                )}
               </button>
             </div>
           ) : isInfluencer ? (
@@ -225,14 +230,14 @@ const MobileLayout = ({
               <button
                 onClick={() => navigate("/dashboard-influenciadora")}
                 className={`flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 ${
-                  location.pathname === "/dashboard-influenciadora"
+                  isActivePath("/dashboard-influenciadora")
                     ? "text-primary"
                     : "text-muted-foreground"
                 }`}
               >
                 <LayoutDashboard className="w-5 h-5" />
                 <span className="text-[10px] font-medium">Início</span>
-                {location.pathname === "/dashboard-influenciadora" && (
+                {isActivePath("/dashboard-influenciadora") && (
                   <motion.div
                     layoutId="nav-indicator"
                     className="w-1 h-1 rounded-full bg-primary"
@@ -264,14 +269,12 @@ const MobileLayout = ({
               <button
                 onClick={() => navigate("/perfil")}
                 className={`flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 ${
-                  location.pathname === "/perfil"
-                    ? "text-primary"
-                    : "text-muted-foreground"
+                  isActivePath("/perfil") ? "text-primary" : "text-muted-foreground"
                 }`}
               >
                 <User className="w-5 h-5" />
                 <span className="text-[10px] font-medium">Perfil</span>
-                {location.pathname === "/perfil" && (
+                {isActivePath("/perfil") && (
                   <motion.div
                     layoutId="nav-indicator"
                     className="w-1 h-1 rounded-full bg-primary"
@@ -279,15 +282,24 @@ const MobileLayout = ({
                 )}
               </button>
 
-              {/* Configuração (inativo) */}
+              {/* Config (ativo) */}
               <button
-                type="button"
-                disabled
-                className="flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 text-muted-foreground opacity-60 cursor-not-allowed"
-                title="Configurações (em breve)"
+                onClick={() => navigate("/configuracoes")}
+                className={`flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 ${
+                  isActivePath("/configuracoes")
+                    ? "text-primary"
+                    : "text-muted-foreground"
+                }`}
+                title="Configurações"
               >
                 <Settings className="w-5 h-5" />
                 <span className="text-[10px] font-medium">Config</span>
+                {isActivePath("/configuracoes") && (
+                  <motion.div
+                    layoutId="nav-indicator"
+                    className="w-1 h-1 rounded-full bg-primary"
+                  />
+                )}
               </button>
             </div>
           ) : (
