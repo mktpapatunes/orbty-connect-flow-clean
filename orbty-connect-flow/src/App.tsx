@@ -19,6 +19,7 @@ import RejectedStatus from "./pages/RejectedStatus";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 
 import ContractorDashboard from "./pages/contractor/Dashboard";
+import ContractorCampaigns from "./pages/contractor/Campaigns";
 
 import InfluencerDashboard from "./pages/influencer/Dashboard";
 import MyCampaigns from "./pages/influencer/MyCampaigns";
@@ -253,6 +254,15 @@ const App = () => (
   element={
     <ProtectedRoute>
       <Settings />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/campanha"
+  element={
+    <ProtectedRoute requiredRole="contractor">
+      <ContractorCampaigns />
     </ProtectedRoute>
   }
 />
