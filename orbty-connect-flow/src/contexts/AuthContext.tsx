@@ -18,7 +18,11 @@ import { toast } from "sonner";
 // ------------------------------------------------------------
 
 function sanitizeRole(v: any): AppRole | null {
-  const s = String(v ?? "").trim().toLowerCase();
+  const sRaw = String(v ?? "").trim().toLowerCase();
+
+  // ✅ compat: alguns lugares usam "contract" ao invés de "contractor"
+  const s = sRaw === "contract" ? "contractor" : sRaw;
+
   if (s === "contractor" || s === "influencer" || s === "admin") return s as AppRole;
   if (s === "creator") return "influencer"; // legado
   return null;
@@ -108,7 +112,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // role/status separados, mas sempre sanitizados
   const [userRole, setUserRole] = useState<AppRole | null | undefined>(undefined);
-  const [rpcApprovalStatus, setRpcApprovalStatus] = useState<ApprovalStatus | null | undefined>(undefined);
+  const [rpcApprovalStatus, setRpcApprovalStatus] = useState<ApprovalStatus | null | undefined>(
+    undefined
+  );
 
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
@@ -119,15 +125,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // ✅ role defensivo (evita “piscar” UI errada)
   const roleFromSession = inferRoleFromSession(session);
-  const roleToUse: AppRole | null | undefined =
-    userRole !== undefined ? userRole : roleFromSession;
+  const roleToUse: AppRole | null | undefined = userRole !== undefined ? userRole : roleFromSession;
 
   const isAdmin = roleToUse === "admin";
 
   // ✅ approval: admin bypass, depois RPC, depois profile
   const approvalStatus: ApprovalStatus | undefined = isAdmin
     ? "approved"
-    : (rpcApprovalStatus ?? inferApprovalFromProfile(profile) ?? undefined);
+    : rpcApprovalStatus ?? inferApprovalFromProfile(profile) ?? undefined;
 
   const clearUserState = useCallback(() => {
     if (!mountedRef.current) return;
@@ -168,6 +173,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           console.error("get_my_context error:", error);
         } else if (Array.isArray(data) && data.length > 0) {
           const ctx = data[0] as any;
+
           roleFromRpc = sanitizeRole(ctx?.role);
           approvalFromRpc = sanitizeApproval(ctx?.approval_status);
 
@@ -196,8 +202,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const p = profileData as unknown as Profile;
         setProfile(p);
 
+        // ✅ desired_role é "role desejada" do cadastro.
+        // ✅ role oficial para painel deve vir da RPC (user_roles).
         const roleFromProfile = inferRoleFromProfile(p);
-        const finalRole = roleFromProfile ?? roleFromSess ?? roleFromRpc ?? null;
+
+        // ✅ AJUSTE PRINCIPAL: prioridade correta
+        const finalRole = roleFromRpc ?? roleFromSess ?? roleFromProfile ?? null;
         setUserRole(finalRole);
 
         // approval fallback
@@ -208,7 +218,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       // Sem profile
       setProfile(null);
-      setUserRole(roleFromSess ?? roleFromRpc ?? null);
+
+      // ✅ Consistência: mantém mesma prioridade
+      setUserRole(roleFromRpc ?? roleFromSess ?? null);
       setRpcApprovalStatus((prev) => prev ?? approvalFromRpc ?? null);
     } catch (e) {
       console.error("fetchUserData exception:", e);
