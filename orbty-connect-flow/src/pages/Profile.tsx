@@ -158,7 +158,7 @@ const Profile = () => {
               {profile?.name || "Usuário Orbty"}
             </h3>
             <p className="text-sm text-muted-foreground">
-              {userRole === "influencer" ? "Creator" : "Contratante"}
+              {userRole === "influencer" ? "Creator" : "Marca/Negócios"}
             </p>
             {isVerifiedInfluencer && (
               <div className="mt-2 flex justify-center">

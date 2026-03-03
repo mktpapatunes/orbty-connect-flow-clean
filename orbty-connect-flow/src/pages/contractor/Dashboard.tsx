@@ -151,7 +151,7 @@ const ContractorDashboard = () => {
       <div className="px-6 py-6 space-y-6">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <p className="text-muted-foreground text-xs uppercase tracking-widest mb-1">
-            Painel do contratante
+            Painel de Marca/Negócios
           </p>
 
           <h2 className="font-display text-2xl font-bold text-foreground">

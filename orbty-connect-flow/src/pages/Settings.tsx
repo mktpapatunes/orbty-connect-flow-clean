@@ -63,7 +63,7 @@ export default function Settings() {
             {
               icon: FileText,
               title: "Dados pessoais",
-              desc: "Informações do contratante.",
+              desc: "Informações de Marca/Negócios.",
               route: "/perfil-contratante/dados-pessoais",
             } as Item,
           ]

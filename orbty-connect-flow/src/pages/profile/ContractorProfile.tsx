@@ -153,7 +153,7 @@ function MetricCard(props: { label: string; value: React.ReactNode; icon?: React
   );
 }
 
-/** ✅ Selo verificado do CONTRATANTE em amarelo luxo */
+/** ✅ Selo verificado de MARCA/NEGÓCIOS em amarelo luxo */
 function ContractorVerifiedBadge() {
   return (
     <span

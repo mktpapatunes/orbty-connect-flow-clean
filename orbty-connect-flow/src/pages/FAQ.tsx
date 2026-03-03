@@ -44,7 +44,7 @@ const FALLBACK_FAQ: FAQRow[] = [
   },
   {
     id: "fallback-3",
-    question: "Como funciona para contratantes?",
+    question: "Como funciona para Marca/Negócios?",
     answer:
       "Você cria campanhas, acompanha participações e aprova entregas dentro de cada campanha.",
     audience: "contractor",
@@ -129,7 +129,7 @@ export default function FAQ() {
     const tabs: { key: Audience; label: string }[] = [
       { key: "all", label: "Geral" },
       { key: "influencer", label: "Creators" },
-      { key: "contractor", label: "Contratantes" },
+      { key: "contractor", label: "Marca/Negócios" },
     ];
     return tabs;
   }, []);
