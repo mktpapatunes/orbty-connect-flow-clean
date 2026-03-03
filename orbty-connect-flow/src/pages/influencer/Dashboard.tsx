@@ -47,7 +47,7 @@ export default function InfluencerDashboard() {
     if (!user) return;
 
     setIsLoading(true);
-    const { data, error } = await supabase.rpc("get_creator_campaigns_feed" as any);
+    const { data, error } = await supabase.rpc("get_influencer_campaigns_feed" as any);
 
     if (error) {
       console.error("GET_CREATOR_CAMPAIGNS_FEED_ERROR", error);
