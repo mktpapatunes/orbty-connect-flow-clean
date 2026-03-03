@@ -30,10 +30,22 @@ export default function PaymentSimulated() {
   const [campaign, setCampaign] = useState<CampaignRow | null>(null);
 
   const quoteTotal = useMemo(() => {
-    const v = campaign?.requirements?.quote_total;
+    const v = campaign?.requirements?.quote_total ?? campaign?.requirements?.quoteTotal ?? null;
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }, [campaign]);
+
+  const fetchCampaign = async (campaignId: string) => {
+    // RLS deve garantir que só o owner veja
+    const { data, error } = await supabase
+      .from("campaigns")
+      .select("id,title,status,requirements")
+      .eq("id", campaignId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return (data as any) as CampaignRow | null;
+  };
 
   useEffect(() => {
     let alive = true;
@@ -47,30 +59,17 @@ export default function PaymentSimulated() {
     (async () => {
       try {
         setLoading(true);
-
-        // RLS deve garantir que só o owner veja
-        const { data, error } = await supabase
-          .from("campaigns")
-          .select("id,title,status,requirements")
-          .eq("id", id)
-          .maybeSingle();
+        const row = await fetchCampaign(id);
 
         if (!alive) return;
 
-        if (error) {
-          console.error("PAYMENT_FETCH_CAMPAIGN_ERROR", error);
-          toast.error("Não foi possível carregar a campanha.");
-          setCampaign(null);
-          return;
-        }
-
-        if (!data) {
+        if (!row) {
           toast.error("Campanha não encontrada ou acesso negado.");
           setCampaign(null);
           return;
         }
 
-        setCampaign(data as any);
+        setCampaign(row);
       } catch (e) {
         console.error("PAYMENT_FETCH_CAMPAIGN_EXCEPTION", e);
         if (!alive) return;
@@ -113,6 +112,15 @@ export default function PaymentSimulated() {
       }
 
       toast.success(message || "Pagamento aprovado!");
+
+      // ✅ Recarrega a campanha pra garantir status atualizado antes de sair
+      try {
+        const updated = await fetchCampaign(id);
+        if (updated) setCampaign(updated);
+      } catch (e) {
+        // se falhar, segue fluxo mesmo
+        console.warn("PAYMENT_RELOAD_CAMPAIGN_FAILED", e);
+      }
 
       // ✅ agora que deu tudo certo, limpa wizard + step persistente
       resetData();
