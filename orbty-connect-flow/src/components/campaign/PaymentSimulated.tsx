@@ -36,7 +36,6 @@ export default function PaymentSimulated() {
   }, [campaign]);
 
   const fetchCampaign = async (campaignId: string) => {
-    // RLS deve garantir que só o owner veja
     const { data, error } = await supabase
       .from("campaigns")
       .select("id,title,status,requirements")
@@ -88,7 +87,7 @@ export default function PaymentSimulated() {
   const canPay = !!campaign && campaign.status === "pending_payment" && quoteTotal !== null && quoteTotal > 0;
 
   const onPaySimulated = async () => {
-    if (!id || !canPay) return;
+    if (!id || !canPay || paying) return;
 
     try {
       setPaying(true);
@@ -113,16 +112,13 @@ export default function PaymentSimulated() {
 
       toast.success(message || "Pagamento aprovado!");
 
-      // ✅ Recarrega a campanha pra garantir status atualizado antes de sair
       try {
         const updated = await fetchCampaign(id);
         if (updated) setCampaign(updated);
       } catch (e) {
-        // se falhar, segue fluxo mesmo
         console.warn("PAYMENT_RELOAD_CAMPAIGN_FAILED", e);
       }
 
-      // ✅ agora que deu tudo certo, limpa wizard + step persistente
       resetData();
       try {
         localStorage.removeItem("orbty:create_campaign:step:v1");
@@ -199,7 +195,7 @@ export default function PaymentSimulated() {
               }`}
             >
               {paying ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              {paying ? "Processando..." : "Pagar agora (simulado)"}
+              {paying ? "Processando..." : "Simular pagamento aprovado"}
             </button>
 
             <button

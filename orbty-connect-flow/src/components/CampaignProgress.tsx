@@ -9,13 +9,14 @@ const stepLabels: Record<number, string> = {
   1: "Informações",
   2: "Requisitos",
   3: "Arquivos & Publicar",
-  4: "Resumo & Pagamento",
+  4: "Resumo",
+  5: "Pagamento",
 };
 
 const clampInt = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
-const CampaignProgress = ({ currentStep, totalSteps = 3 }: CampaignProgressProps) => {
-  const safeTotal = Number.isFinite(totalSteps) ? clampInt(Math.floor(totalSteps), 1, 20) : 3;
+const CampaignProgress = ({ currentStep, totalSteps = 5 }: CampaignProgressProps) => {
+  const safeTotal = Number.isFinite(totalSteps) ? clampInt(Math.floor(totalSteps), 1, 20) : 5;
   const safeCurrent = Number.isFinite(currentStep) ? clampInt(Math.floor(currentStep), 1, safeTotal) : 1;
 
   return (

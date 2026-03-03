@@ -15,6 +15,7 @@ import {
   Search,
   Users,
   Layers,
+  ArrowLeft,
 } from "lucide-react";
 import MobileLayout from "@/components/MobileLayout";
 import CampaignProgress from "@/components/CampaignProgress";
@@ -68,7 +69,6 @@ const segmentOptions = [
 
 type SegmentOption = (typeof segmentOptions)[number];
 
-// ✅ REMOVIDO Combo do visual
 const postFormatOptions = [
   { id: "stories", label: "Stories" },
   { id: "reels", label: "Reels" },
@@ -246,12 +246,12 @@ function formatBRL(value: any) {
 export default function CreateCampaign() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { data, updateData } = useCampaign();
+  const { data, updateData, resetData } = useCampaign();
 
   const [step, setStep] = useState<number>(() => {
     const raw = localStorage.getItem(STEP_STORAGE_KEY);
     const n = Number(raw);
-    return Number.isFinite(n) ? clamp(Math.floor(n), 1, 4) : 1;
+    return Number.isFinite(n) ? clamp(Math.floor(n), 1, 5) : 1;
   });
 
   useEffect(() => {
@@ -266,7 +266,6 @@ export default function CreateCampaign() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ✅ evita vazamento de memória de previews
   useEffect(() => {
     return () => {
       for (const f of files) {
@@ -759,7 +758,6 @@ export default function CreateCampaign() {
 
   const postsOk = postsNumber !== null && postsNumber >= 1 && postsNumber <= 20;
 
-  // ✅ normaliza formato (se vier "combo" antigo, cai para stories)
   const rawFormat = String((data as any).format || "stories").toLowerCase();
   const formatFromData: PostFormat =
     rawFormat === "reels" || rawFormat === "feed" || rawFormat === "stories" ? (rawFormat as PostFormat) : "stories";
@@ -795,20 +793,18 @@ export default function CreateCampaign() {
     selectedCreatorIds.length <= currentLimit;
 
   const canStep4 = canStep2 && canStep3 && postsOk && formatOk;
-  const canPublish = canStep4;
+  const canGoPayment = canStep4;
 
   /* =========================
-     Quote (Step 4) + CUPOM (aplicar no botão)
+     Quote (Step 4) + CUPOM
   ========================= */
 
-  // input livre (digitar NÃO aplica)
   const [couponInput, setCouponInput] = useState<string>(String((data as any).couponInput || ""));
   useEffect(() => {
     updateData({ couponInput } as any);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [couponInput]);
 
-  // cupom efetivamente aplicado
   const [couponApplied, setCouponApplied] = useState<string>(String((data as any).couponApplied || ""));
   useEffect(() => {
     updateData({ couponApplied } as any);
@@ -821,7 +817,6 @@ export default function CreateCampaign() {
 
   const onCouponButtonClick = () => {
     if (hasCouponApplied) {
-      // ✅ remover
       setCouponApplied("");
       applyIntentRef.current = { pending: false, code: null };
       toast.message("Cupom removido.");
@@ -873,7 +868,6 @@ export default function CreateCampaign() {
         const q = (rpcData || null) as QuoteResponse | null;
         setQuote(q);
 
-        // ✅ toast só quando clicou em "Aplicar"
         if (applyIntentRef.current.pending) {
           applyIntentRef.current.pending = false;
 
@@ -908,7 +902,7 @@ export default function CreateCampaign() {
     postsNumber,
     postsFromData,
     formatFromData,
-    couponApplied, // ✅ recalcula só ao aplicar/remover
+    couponApplied,
   ]);
 
   /* =========================
@@ -936,12 +930,29 @@ export default function CreateCampaign() {
   };
 
   /* =========================
-     Publish (agora -> ir para pagamento simulado)
+     Step 4 -> Step 5
   ========================= */
 
-  const handlePublish = async () => {
-    if (!user || !canPublish) return;
+  const handleGoToPayment = () => {
+    if (!canGoPayment) return;
+    setStep(5);
+  };
+
+  /* =========================
+     Step 5: Create + Simulate approved
+  ========================= */
+
+  const quoteTotal = useMemo(() => {
+    const n = Number(quote?.total ?? null);
+    return Number.isFinite(n) ? n : null;
+  }, [quote]);
+
+  const canSimulatePay = !!user && canGoPayment && quote?.ok && quoteTotal !== null && quoteTotal > 0;
+
+  const onSimulateApproved = async () => {
+    if (!user || !canSimulatePay) return;
     if (isSubmitting) return;
+
     setIsSubmitting(true);
 
     try {
@@ -970,8 +981,6 @@ export default function CreateCampaign() {
         creators_needed: creatorsNeededFinal,
         content_segments: selectedSegments,
         selected_creator_ids: selectedCreatorIds,
-
-        // ✅ salva cupom aplicado (não o digitado)
         coupon_code: couponApplied?.trim() ? couponApplied.trim() : null,
         quote_total: quote?.total ?? null,
         quote_subtotal: quote?.subtotal ?? null,
@@ -1016,14 +1025,37 @@ export default function CreateCampaign() {
         } as any);
       }
 
-      // ✅ IMPORTANTE:
-      // Não limpar o wizard aqui. Só limpa após "pagamento aprovado" no PaymentSimulated.
-      toast.success("Campanha criada! Finalize o pagamento para ativar.");
+      const { data: payData, error: payError } = await (supabase.rpc as any)("simulate_campaign_payment", {
+        p_campaign_id: campaignId,
+      });
 
-      navigate(`/pagamento/${campaignId}`);
+      if (payError) {
+        console.error("SIMULATE_PAYMENT_RPC_ERROR", payError);
+        toast.error("Não foi possível simular o pagamento.");
+        return;
+      }
+
+      const ok = !!payData?.ok;
+      const message = String(payData?.message || "");
+
+      if (!ok) {
+        toast.error(message || "Pagamento não aprovado.");
+        return;
+      }
+
+      toast.success(message || "Pagamento aprovado!");
+
+      resetData();
+      try {
+        localStorage.removeItem(STEP_STORAGE_KEY);
+      } catch {
+        // ignore
+      }
+
+      navigate("/dashboard-contratante");
     } catch (error: any) {
-      console.error("CREATE_CAMPAIGN_ERROR", error);
-      toast.error(error.message || "Erro ao criar campanha. Tente novamente.");
+      console.error("PAYMENT_STEP_EXCEPTION", error);
+      toast.error(error?.message || "Erro ao processar o pagamento.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1042,7 +1074,7 @@ export default function CreateCampaign() {
       showHome
       homeRoute="/dashboard-contratante"
     >
-      <CampaignProgress currentStep={step} totalSteps={4} />
+      <CampaignProgress currentStep={step} totalSteps={5} />
 
       {/* =========================
           STEP 1
@@ -1051,7 +1083,6 @@ export default function CreateCampaign() {
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Informações da campanha</h3>
 
-          {/* Title */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Título</label>
             <input
@@ -1063,7 +1094,6 @@ export default function CreateCampaign() {
             />
           </div>
 
-          {/* Type */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Tipo</label>
             <div className="grid grid-cols-3 gap-2">
@@ -1087,7 +1117,6 @@ export default function CreateCampaign() {
             <p className="mt-2 text-[11px] text-muted-foreground">Dica: clique novamente no tipo selecionado para remover.</p>
           </div>
 
-          {/* Objectives */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
               Objetivo da campanha * <span className="normal-case tracking-normal text-muted-foreground">(até 3)</span>
@@ -1117,7 +1146,6 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Location */}
           <div className="space-y-2" ref={autocompleteWrapRef}>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1 block">Localização</label>
 
@@ -1195,7 +1223,6 @@ export default function CreateCampaign() {
             ) : null}
           </div>
 
-          {/* Period */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Período de campanha *</label>
 
@@ -1220,7 +1247,6 @@ export default function CreateCampaign() {
             )}
           </div>
 
-          {/* Period Modal */}
           {periodOpen && (
             <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
               <div className="absolute inset-0 bg-black/60" onMouseDown={closePeriodModal} />
@@ -1309,7 +1335,6 @@ export default function CreateCampaign() {
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Requisitos da campanha</h3>
 
-          {/* Segments */}
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Layers className="w-4 h-4 text-primary" />
@@ -1338,11 +1363,11 @@ export default function CreateCampaign() {
             </div>
 
             <div className="mt-2 text-[11px] text-muted-foreground">
-              Selecionados: <span className="text-foreground font-medium">{selectedSegments.length ? selectedSegments.join(", ") : "—"}</span>
+              Selecionados:{" "}
+              <span className="text-foreground font-medium">{selectedSegments.length ? selectedSegments.join(", ") : "—"}</span>
             </div>
           </div>
 
-          {/* Quantity */}
           <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 shadow-[0_0_0_1px_rgba(59,130,246,0.15)]">
             <div className="flex items-center gap-2 mb-2">
               <Users className="w-4 h-4 text-primary" />
@@ -1387,7 +1412,6 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Suggested creators */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators sugeridos</div>
@@ -1466,7 +1490,6 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Selected creators */}
           <div className="glass-card p-4">
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators selecionados</div>
@@ -1505,7 +1528,6 @@ export default function CreateCampaign() {
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Arquivos & Publicação</h3>
 
-          {/* Posts + Format */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Posts por creator *</label>
@@ -1555,7 +1577,6 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Briefing */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
               Briefing <span className="normal-case tracking-normal text-muted-foreground">(Descreva as informações da sua campanha)</span>
@@ -1569,7 +1590,6 @@ export default function CreateCampaign() {
             />
           </div>
 
-          {/* Menções */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
               Menções <span className="normal-case tracking-normal text-muted-foreground">(Adicione o @ dos perfis que devem ser marcados)</span>
@@ -1583,7 +1603,6 @@ export default function CreateCampaign() {
             />
           </div>
 
-          {/* Collab */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Collab</label>
 
@@ -1646,7 +1665,6 @@ export default function CreateCampaign() {
             ) : null}
           </div>
 
-          {/* Hashtags */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
               Hashtags <span className="normal-case tracking-normal text-muted-foreground">(Adicione as hashtags que devem estar na publicação)</span>
@@ -1660,7 +1678,6 @@ export default function CreateCampaign() {
             />
           </div>
 
-          {/* Upload */}
           <input ref={fileInputRef} type="file" multiple accept="image/*,video/*,.pdf" onChange={handleFileSelect} className="hidden" />
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -1695,7 +1712,6 @@ export default function CreateCampaign() {
             </div>
           )}
 
-          {/* Legenda */}
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
               Legenda <span className="normal-case tracking-normal text-muted-foreground">(Sugestão de texto para o post, caso necessário)</span>
@@ -1723,9 +1739,8 @@ export default function CreateCampaign() {
       ========================= */}
       {step === 4 && (
         <div className="px-6 py-4 space-y-4">
-          <h3 className="font-display text-xl font-bold text-foreground">Resumo & Pagamento</h3>
+          <h3 className="font-display text-xl font-bold text-foreground">Resumo</h3>
 
-          {/* Summary */}
           <div className="glass-card p-4 space-y-2">
             <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Resumo</h4>
 
@@ -1761,7 +1776,6 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Coupon (✅ aplica/remover no botão; digitar não aplica) */}
           <div className="glass-card p-4 space-y-2">
             <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Cupom</h4>
 
@@ -1795,7 +1809,6 @@ export default function CreateCampaign() {
             </div>
           </div>
 
-          {/* Pricing */}
           <div className="glass-card p-4 space-y-2">
             <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Valores</h4>
 
@@ -1851,17 +1864,16 @@ export default function CreateCampaign() {
             )}
           </div>
 
-          {/* Payment CTA */}
           <button
-            onClick={handlePublish}
-            disabled={!canPublish || isSubmitting}
+            onClick={handleGoToPayment}
+            disabled={!canGoPayment}
             className={`w-full py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
-              canPublish && !isSubmitting ? "bg-gradient-neon text-primary-foreground glow-blue" : "bg-secondary text-muted-foreground"
+              canGoPayment ? "bg-gradient-neon text-primary-foreground glow-blue" : "bg-secondary text-muted-foreground"
             }`}
             type="button"
           >
-            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-            {isSubmitting ? "Processando..." : "Ir para pagamento"}
+            <CheckCircle2 className="w-4 h-4" />
+            Ir para pagamento
           </button>
 
           <button
@@ -1869,6 +1881,44 @@ export default function CreateCampaign() {
             onClick={() => setStep(3)}
             className="w-full py-4 rounded-xl border border-border/50 text-muted-foreground font-medium text-sm"
           >
+            Voltar
+          </button>
+        </div>
+      )}
+
+      {/* =========================
+          STEP 5
+      ========================= */}
+      {step === 5 && (
+        <div className="px-6 py-4 space-y-4">
+          <h3 className="font-display text-xl font-bold text-foreground">Pagamento</h3>
+
+          <div className="glass-card p-4 space-y-2">
+            <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Total</div>
+            <div className="text-2xl font-bold text-foreground">{formatBRL(quoteTotal)}</div>
+            <div className="text-[11px] text-muted-foreground">Simulação.</div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onSimulateApproved}
+            disabled={!canSimulatePay || isSubmitting}
+            className={`w-full py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
+              canSimulatePay && !isSubmitting
+                ? "bg-gradient-neon text-primary-foreground glow-blue"
+                : "bg-secondary text-muted-foreground"
+            }`}
+          >
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            {isSubmitting ? "Processando..." : "Simular pagamento aprovado"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setStep(4)}
+            className="w-full py-4 rounded-xl border border-border/50 text-muted-foreground font-medium text-sm inline-flex items-center justify-center gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
             Voltar
           </button>
         </div>
