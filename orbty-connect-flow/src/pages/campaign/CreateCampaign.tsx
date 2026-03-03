@@ -246,7 +246,7 @@ function formatBRL(value: any) {
 export default function CreateCampaign() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { data, updateData, resetData } = useCampaign();
+  const { data, updateData } = useCampaign();
 
   const [step, setStep] = useState<number>(() => {
     const raw = localStorage.getItem(STEP_STORAGE_KEY);
@@ -265,6 +265,16 @@ export default function CreateCampaign() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ✅ evita vazamento de memória de previews
+  useEffect(() => {
+    return () => {
+      for (const f of files) {
+        if (f.preview) URL.revokeObjectURL(f.preview);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const todayISO = useMemo(() => {
     const d = new Date();
@@ -908,15 +918,21 @@ export default function CreateCampaign() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files;
     if (!selected) return;
+
     const newFiles: UploadedFile[] = Array.from(selected).map((file) => ({
       file,
       preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
     }));
+
     setFiles((prev) => [...prev, ...newFiles]);
   };
 
   const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+    setFiles((prev) => {
+      const item = prev[index];
+      if (item?.preview) URL.revokeObjectURL(item.preview);
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   /* =========================

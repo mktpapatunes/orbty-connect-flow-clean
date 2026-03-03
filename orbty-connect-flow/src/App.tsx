@@ -36,8 +36,8 @@ import NotFound from "./pages/NotFound";
 import LegacyProfile from "@/pages/Profile";
 import ContractorPersonalData from "@/pages/profile/ContractorPersonalData";
 
-// ✅ NOVO: Pagamento simulado
-import PaymentSimulated from "@/pages/payment/PaymentSimulated";
+// ✅ NOVO: tela de pagamento (simulado)
+import PaymentSimulated from "./pages/campaign/PaymentSimulated";
 
 const queryClient = new QueryClient();
 
@@ -106,7 +106,7 @@ const App = () => (
                 }
               />
 
-              {/* ✅ NOVO: pagamento (simulado) */}
+              {/* ✅ NOVO: Pagamento */}
               <Route
                 path="/pagamento/:id"
                 element={
@@ -152,7 +152,7 @@ const App = () => (
                 }
               />
 
-              {/* Profile routes */}
+              {/* Profile routes (NEW) */}
               <Route
                 path="/perfil"
                 element={
