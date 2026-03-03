@@ -15,7 +15,10 @@ import InfluencerRegistration from "./pages/registration/InfluencerRegistration"
 import PendingApproval from "./pages/PendingApproval";
 import RejectedStatus from "./pages/RejectedStatus";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+
 import ContractorDashboard from "./pages/contractor/Dashboard";
+import ContractorCampaigns from "./pages/contractor/Campaigns";
+
 import InfluencerDashboard from "./pages/influencer/Dashboard";
 import CreateCampaign from "./pages/campaign/CreateCampaign";
 import CampaignView from "./pages/campaign/CampaignView";
@@ -97,6 +100,17 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+
+              {/* ✅ NOVO: Minhas campanhas (lista + tabs + métricas) */}
+              <Route
+                path="/campanhas"
+                element={
+                  <ProtectedRoute requiredRole="contractor">
+                    <ContractorCampaigns />
+                  </ProtectedRoute>
+                }
+              />
+
               <Route
                 path="/criar-campanha"
                 element={

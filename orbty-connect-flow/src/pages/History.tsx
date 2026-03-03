@@ -20,6 +20,7 @@ interface HistoryCampaign {
 const History = () => {
   const navigate = useNavigate();
   const { user, userRole } = useAuth();
+
   const [campaigns, setCampaigns] = useState<HistoryCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -34,20 +35,38 @@ const History = () => {
       setIsLoading(true);
 
       try {
+        // ==============================
+        // CONTRACTOR HISTORY
+        // ==============================
         if (userRole === "contractor") {
+          const HISTORY_STATUSES = [
+            "closed_manual",
+            "closed_expired",
+            "completed",
+            "deleted",
+          ];
+
           const { data, error } = await supabase
             .from("campaigns")
-            .select("id,title,type,city,state,campaign_date,status,created_at")
+            .select(
+              "id,title,type,city,state,campaign_date,status,created_at"
+            )
             .eq("created_by", user.id)
+            .in("status", HISTORY_STATUSES)
             .order("created_at", { ascending: false });
 
           if (error) {
             console.error("HISTORY_CONTRACTOR_FETCH_ERROR", error);
             setCampaigns([]);
           } else {
-            setCampaigns((data || []) as unknown as HistoryCampaign[]);
+            setCampaigns((data || []) as HistoryCampaign[]);
           }
-        } else {
+        }
+
+        // ==============================
+        // INFLUENCER HISTORY
+        // ==============================
+        else if (userRole === "influencer") {
           const { data: apps, error: appsError } = await supabase
             .from("campaign_applications")
             .select("campaign_id")
@@ -58,23 +77,30 @@ const History = () => {
             console.error("HISTORY_INFLUENCER_APPS_ERROR", appsError);
             setCampaigns([]);
           } else if (apps && apps.length > 0) {
-            const ids = (apps as any[]).map((a: any) => a.campaign_id);
+            const ids = apps.map((a: any) => a.campaign_id);
 
             const { data: campData, error: campError } = await supabase
               .from("campaigns")
-              .select("id,title,type,city,state,campaign_date,status,created_at")
+              .select(
+                "id,title,type,city,state,campaign_date,status,created_at"
+              )
               .in("id", ids)
               .order("created_at", { ascending: false });
 
             if (campError) {
-              console.error("HISTORY_INFLUENCER_CAMPAIGNS_ERROR", campError);
+              console.error(
+                "HISTORY_INFLUENCER_CAMPAIGNS_ERROR",
+                campError
+              );
               setCampaigns([]);
             } else {
-              setCampaigns((campData || []) as unknown as HistoryCampaign[]);
+              setCampaigns((campData || []) as HistoryCampaign[]);
             }
           } else {
             setCampaigns([]);
           }
+        } else {
+          setCampaigns([]);
         }
       } catch (e) {
         console.error("HISTORY_UNEXPECTED_ERROR", e);
@@ -87,14 +113,23 @@ const History = () => {
     fetchHistory();
   }, [user, userRole]);
 
-  const navType = userRole === "influencer" ? "influencer" : "contractor";
+  const navType =
+    userRole === "influencer" ? "influencer" : "contractor";
 
   return (
-    <MobileLayout title="Histórico" showBack navType={navType as "contractor" | "influencer"}>
+    <MobileLayout
+      title="Histórico"
+      showBack
+      navType={navType as "contractor" | "influencer"}
+    >
       <div className="px-6 py-6 space-y-6">
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
           <h2 className="font-display text-2xl font-bold text-foreground">
-            Campanhas <span className="text-gradient-neon">anteriores</span>
+            Campanhas{" "}
+            <span className="text-gradient-neon">anteriores</span>
           </h2>
         </motion.div>
 
@@ -105,7 +140,9 @@ const History = () => {
         ) : campaigns.length === 0 ? (
           <div className="py-12 text-center">
             <Zap className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Nenhuma campanha no histórico.</p>
+            <p className="text-sm text-muted-foreground">
+              Nenhuma campanha no histórico.
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -113,7 +150,7 @@ const History = () => {
               <motion.button
                 type="button"
                 key={campaign.id}
-                onClick={() => navigate(`/campanha/${campaign.id}`)} // ✅ SEMPRE ID
+                onClick={() => navigate(`/campanha/${campaign.id}`)}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 + i * 0.08 }}
@@ -121,12 +158,19 @@ const History = () => {
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h4 className="font-semibold text-foreground text-sm">{campaign.title}</h4>
-                    <p className="text-xs text-muted-foreground mt-0.5 capitalize">{campaign.type}</p>
+                    <h4 className="font-semibold text-foreground text-sm">
+                      {campaign.title}
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-0.5 capitalize">
+                      {campaign.type}
+                    </p>
                   </div>
+
                   <div className="flex items-center gap-1 text-muted-foreground">
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span className="text-xs font-medium capitalize">{campaign.status}</span>
+                    <span className="text-xs font-medium capitalize">
+                      {campaign.status}
+                    </span>
                   </div>
                 </div>
 
@@ -135,6 +179,7 @@ const History = () => {
                     <MapPin className="w-3 h-3" />
                     {campaign.city}, {campaign.state}
                   </span>
+
                   {campaign.campaign_date && (
                     <span className="flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
