@@ -12,9 +12,7 @@ import {
   ClipboardCheck,
   ShieldCheck,
   BadgeCheck,
-  XCircle,
   Info,
-  Tag,
   TicketPercent,
   Wallet,
   Eye,
@@ -23,6 +21,7 @@ import {
   FileText,
   CheckSquare,
   Square,
+  Target,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -142,6 +141,7 @@ const IconActionButton = (props: {
   title: string;
   children: React.ReactNode;
   tone?: "default" | "primary" | "accent";
+  showDot?: boolean;
 }) => {
   const tone = props.tone ?? "default";
 
@@ -159,8 +159,12 @@ const IconActionButton = (props: {
       disabled={props.disabled}
       title={props.title}
       aria-label={props.title}
-      className={`w-10 h-10 rounded-2xl border transition flex items-center justify-center ${toneClass} disabled:opacity-60`}
+      className={`relative w-10 h-10 rounded-2xl border transition flex items-center justify-center ${toneClass} disabled:opacity-60`}
     >
+      {/* micro dot */}
+      {props.showDot && !props.disabled && (
+        <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent border border-background shadow" />
+      )}
       {props.children}
     </button>
   );
@@ -516,9 +520,8 @@ const CampaignView = () => {
   const quoteDiscount = typeof req?.quote_discount === "number" ? req.quote_discount : req?.quote_discount ? Number(req.quote_discount) : null;
   const couponCode = typeof req?.coupon_code === "string" ? req.coupon_code.trim() : null;
 
-  const contentSegments: string[] = Array.isArray(req?.content_segments)
-    ? req.content_segments.filter((x: any) => typeof x === "string" && x.trim().length > 0)
-    : [];
+  const creatorRequirementsEntries = Object.entries(req || {}).filter(([k]) => k !== "selected_creator_ids");
+  const otherEntries = creatorRequirementsEntries.filter(([k]) => !VALUE_KEYS.has(k));
 
   const selectedCreatorIds: string[] = Array.isArray(req?.selected_creator_ids)
     ? req.selected_creator_ids.filter((x: any) => typeof x === "string" && x.trim().length > 0)
@@ -526,9 +529,6 @@ const CampaignView = () => {
 
   const creatorsCount =
     typeof req?.creators_needed === "number" ? req.creators_needed : req?.creators_needed ? Number(req.creators_needed) : null;
-
-  const contractorRequirementsEntries = Object.entries(req || {}).filter(([k]) => k !== "selected_creator_ids");
-  const otherEntries = contractorRequirementsEntries.filter(([k]) => !VALUE_KEYS.has(k));
 
   const creatorsToRender = Array.from(new Set([...(selectedCreatorIds || []), ...(participants.map((p) => p.influencer_id) || [])]));
 
@@ -653,30 +653,13 @@ const CampaignView = () => {
               </div>
             </div>
 
-            <div className="glass-card p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Tag className="w-4 h-4 text-primary" />
-                <h4 className="font-semibold text-foreground text-sm">Segmento</h4>
-              </div>
-
-              {contentSegments.length === 0 ? (
-                <p className="text-sm text-muted-foreground">—</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {contentSegments.map((s, idx) => (
-                    <span key={`${s}-${idx}`} className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
-                      {s}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* ✅ removido Segmento (já existe em descrição/segmentos) */}
 
             {!!briefPublic && (
               <div className="glass-card p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Info className="w-4 h-4 text-accent" />
-                  <h4 className="font-semibold text-foreground text-sm">Resumo</h4>
+                  <Target className="w-4 h-4 text-accent" />
+                  <h4 className="font-semibold text-foreground text-sm">Objetivos</h4>
                 </div>
                 <p className="text-sm text-foreground/75 leading-relaxed whitespace-pre-line">{briefPublic}</p>
               </div>
@@ -690,7 +673,6 @@ const CampaignView = () => {
                 </div>
 
                 <div className="glass-card p-4">
-                  {/* ✅ texto compacto, 1 linha */}
                   <div className="text-[11px] text-muted-foreground flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 shrink-0" />
                     <span className="whitespace-nowrap overflow-hidden text-ellipsis">Valide entregas por creator.</span>
@@ -711,6 +693,9 @@ const CampaignView = () => {
                         const hasDeliverables = !!deliverablesMap[creatorId];
                         const isBusy = approvingCreatorId === creatorId;
 
+                        // ✅ micro-dot: só quando tem entregas e ainda não aprovou
+                        const showDeliverablesDot = hasDeliverables && !isApproved;
+
                         return (
                           <div key={creatorId} className="rounded-2xl border border-border/50 bg-white/5 px-3 py-2.5">
                             <div className="flex items-center justify-between gap-3">
@@ -729,7 +714,6 @@ const CampaignView = () => {
                                 </div>
                               </div>
 
-                              {/* ✅ ações por ícones */}
                               <div className="flex items-center gap-2 shrink-0">
                                 <IconActionButton
                                   onClick={() => {
@@ -742,6 +726,7 @@ const CampaignView = () => {
                                   disabled={!hasDeliverables}
                                   title={hasDeliverables ? "Ver entregas" : "Ainda sem entregas"}
                                   tone="default"
+                                  showDot={showDeliverablesDot}
                                 >
                                   <ClipboardCheck className="w-4 h-4" />
                                 </IconActionButton>
@@ -926,11 +911,7 @@ const CampaignView = () => {
                           <div className="space-y-2">
                             {checklistEntries.map((it) => (
                               <div key={it.key} className="flex items-center gap-2 rounded-xl border border-border/40 bg-white/5 px-3 py-2">
-                                {it.value ? (
-                                  <CheckSquare className="w-4 h-4 text-accent" />
-                                ) : (
-                                  <Square className="w-4 h-4 text-muted-foreground" />
-                                )}
+                                {it.value ? <CheckSquare className="w-4 h-4 text-accent" /> : <Square className="w-4 h-4 text-muted-foreground" />}
                                 <div className={`text-sm ${it.value ? "text-foreground/85" : "text-muted-foreground"}`}>{it.label}</div>
                               </div>
                             ))}
