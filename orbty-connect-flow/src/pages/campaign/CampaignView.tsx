@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
@@ -8,10 +8,6 @@ import {
   FileText,
   Loader2,
   CheckCircle2,
-  BadgeCheck,
-  Ban,
-  Clock,
-  Trash2,
   Paperclip,
   ClipboardList,
   Info,
@@ -43,7 +39,7 @@ const humanizeKey = (key: string) => {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 };
 
-const renderValue = (v: any) => {
+const renderValue = (v: any): any => {
   if (v === null || v === undefined || v === "") return "—";
   if (typeof v === "boolean") return v ? "Sim" : "Não";
   if (typeof v === "number") return String(v);
@@ -91,7 +87,6 @@ const statusLabel = (s?: string | null) => {
   return s;
 };
 
-// allowlist do invited: só o “resumo principal”
 const getInvitedSummary = (req?: Record<string, any> | null) => {
   const posts = typeof req?.posts === "number" ? req.posts : req?.posts ? Number(req.posts) : undefined;
   const format = typeof req?.format === "string" ? req.format : undefined;
@@ -118,7 +113,6 @@ const CampaignView = () => {
 
   const [campaign, setCampaign] = useState<PublicCampaignFeed | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
   const [tab, setTab] = useState<TabKey>("details");
 
   const [myParticipationStatus, setMyParticipationStatus] = useState<ParticipantStatus | null>(null);
@@ -208,6 +202,7 @@ const CampaignView = () => {
           return;
         }
 
+        // influencer
         const { data: cp, error: cpErr } = await supabase
           .from("campaign_participants")
           .select("status")
@@ -287,14 +282,11 @@ const CampaignView = () => {
   const briefPrivate = ((campaign as any)?.brief_private as string | null) ?? null;
   const requirements = ((campaign as any)?.requirements as Record<string, any> | null) ?? null;
 
-  const invitedSummary = useMemo(() => getInvitedSummary(requirements), [requirements]);
+  const invitedSummary = getInvitedSummary(requirements);
 
-  const locationLabel = useMemo(() => {
-    const city = (campaign as any)?.city as string | null;
-    const state = (campaign as any)?.state as string | null;
-    const parts = [city, state].filter(Boolean);
-    return parts.length ? parts.join(", ") : "—";
-  }, [campaign]);
+  const city = ((campaign as any)?.city as string | null) ?? null;
+  const state = ((campaign as any)?.state as string | null) ?? null;
+  const locationLabel = [city, state].filter(Boolean).join(", ") || "—";
 
   return (
     <MobileLayout title={campaign.title} showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
@@ -461,7 +453,7 @@ const CampaignView = () => {
               </div>
             )}
 
-            {/* Bloqueia conteúdo sensível para invited */}
+            {/* Contractor vê completo (invited não vê o sensível aqui) */}
             {!isInvitedInfluencer && (
               <>
                 {!!briefPrivate && (
