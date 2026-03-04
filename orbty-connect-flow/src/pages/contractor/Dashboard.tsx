@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
 import { useAuth } from "@/contexts/AuthContext";
+import orbtyLogo from "@/assets/orbty-logo-transparent.png";
 import {
   ArrowRight,
   BadgeCheck,
@@ -147,7 +148,16 @@ const ContractorDashboard = () => {
   ];
 
   return (
-    <MobileLayout title="Início" navType="contractor">
+    <MobileLayout
+      title={
+        <img
+          src={orbtyLogo}
+          alt="Orbty"
+          className="h-[22px] w-auto block"
+        />
+      }
+      navType="contractor"
+    >
       <div className="px-6 py-6 space-y-6">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <p className="text-muted-foreground text-xs uppercase tracking-widest mb-1">

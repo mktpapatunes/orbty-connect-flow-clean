@@ -16,7 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 interface MobileLayoutProps {
   children: ReactNode;
-  title?: string;
+  title?: ReactNode;
 
   /**
    * Props legadas. Com enforceGlobalHeader=true (padrão),

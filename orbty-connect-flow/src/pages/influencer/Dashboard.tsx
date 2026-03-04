@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
 import { useAuth } from "@/contexts/AuthContext";
+import orbtyLogo from "@/assets/orbty-logo-transparent.png";
 import {
   ArrowRight,
   BadgeCheck,
@@ -129,7 +130,16 @@ const InfluencerDashboard = () => {
   ];
 
   return (
-    <MobileLayout title="Início" navType="influencer">
+    <MobileLayout
+      title={
+        <img
+          src={orbtyLogo}
+          alt="Orbty"
+          className="h-[22px] w-auto block"
+        />
+      }
+      navType="influencer"
+    >
       <div className="px-6 py-6 space-y-6">
         {/* HERO */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
@@ -171,7 +181,9 @@ const InfluencerDashboard = () => {
                 ) : null}
               </div>
 
-              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{statusBadge.desc}</p>
+              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                {statusBadge.desc}
+              </p>
             </div>
 
             <button
