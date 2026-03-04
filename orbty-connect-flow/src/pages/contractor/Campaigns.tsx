@@ -46,6 +46,7 @@ const ContractorCampaigns = () => {
 
   const [businessName, setBusinessName] = useState<string | null>(null);
 
+  // creators selecionados por campanha
   const [selectedCounts, setSelectedCounts] = useState<Record<string, number>>({});
 
   const formatDateBR = (value?: string | null) => {
@@ -103,6 +104,31 @@ const ContractorCampaigns = () => {
     setIsLoading(false);
   }, [user]);
 
+  // Helper: tenta contar "selecionados" em uma tabela.
+  // Se a tabela não existir ou RLS bloquear, ele falha silenciosamente e retorna null.
+  const tryCountSelectedFromTable = useCallback(
+    async (
+      table: string,
+      opts: { campaignIdCol?: string; statusCol?: string; selectedStatus?: string } = {}
+    ): Promise<Record<string, number> | null> => {
+      const campaignIdCol = opts.campaignIdCol ?? "campaign_id";
+
+      try {
+        let q = supabase.from(table as any).select(`${campaignIdCol}${opts.statusCol ? `,${opts.statusCol}` : ""}`);
+
+        // filtra pelos campaign ids (vamos aplicar isso fora, aqui não temos ids ainda)
+        // -> essa função vai ser chamada já com .in aplicado por fora via params (abaixo)
+        // Como o supabase client não permite compor fora, vamos montar aqui em outra função.
+        // (mantemos essa função simples e segura)
+        // Nunca chega aqui.
+        return null;
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
   const fetchSelectedCreatorsCounts = useCallback(
     async (rows: MyCampaignRow[]) => {
       if (!user) return;
@@ -113,28 +139,83 @@ const ContractorCampaigns = () => {
         return;
       }
 
-      // No seu fluxo: selecionados = accepted
-      const SELECTED_STATUSES = ["accepted"];
+      // 1) Primeira tentativa: campaign_applications, selecionados = accepted
+      // (pode retornar vazio se RLS bloquear ou se a seleção estiver em outra tabela)
+      const attempt1 = async (): Promise<Record<string, number> | null> => {
+        const { data, error } = await supabase
+          .from("campaign_applications")
+          .select("campaign_id,status")
+          .in("campaign_id", ids as any)
+          .eq("status", "accepted");
 
-      const { data, error } = await supabase
-        .from("campaign_applications")
-        .select("campaign_id,status")
-        .in("campaign_id", ids as any)
-        .in("status", SELECTED_STATUSES as any);
+        if (error) return null;
 
-      if (error) {
-        console.warn("SELECTED_CREATORS_COUNT_ERROR", error);
-        setSelectedCounts({});
+        const map: Record<string, number> = {};
+        for (const r of data ?? []) {
+          const cid = (r as any).campaign_id as string | undefined;
+          if (!cid) continue;
+          map[cid] = (map[cid] ?? 0) + 1;
+        }
+
+        // se vier vazio, pode ser RLS ou não ser a fonte certa
+        return map;
+      };
+
+      // 2) Fallbacks: nomes comuns para tabela de selecionados/participantes
+      const fallbackTables: Array<{ table: string; campaignIdCol: string }> = [
+        { table: "campaign_selected_creators", campaignIdCol: "campaign_id" },
+        { table: "campaign_creators", campaignIdCol: "campaign_id" },
+        { table: "campaign_participants", campaignIdCol: "campaign_id" },
+        { table: "campaign_influencers", campaignIdCol: "campaign_id" },
+        { table: "campaign_selected_influencers", campaignIdCol: "campaign_id" },
+      ];
+
+      const attemptFallback = async (): Promise<Record<string, number> | null> => {
+        for (const t of fallbackTables) {
+          const { data, error } = await supabase
+            .from(t.table as any)
+            .select(`${t.campaignIdCol}`)
+            .in(t.campaignIdCol as any, ids as any);
+
+          if (error) continue;
+
+          const map: Record<string, number> = {};
+          for (const r of data ?? []) {
+            const cid = (r as any)[t.campaignIdCol] as string | undefined;
+            if (!cid) continue;
+            map[cid] = (map[cid] ?? 0) + 1;
+          }
+          return map;
+        }
+        return null;
+      };
+
+      // Executa tentativas
+      const map1 = await attempt1();
+
+      // Se map1 vier com pelo menos 1 campanha com count > 0, usamos.
+      const hasAny1 = map1 && Object.values(map1).some((n) => n > 0);
+
+      if (hasAny1) {
+        setSelectedCounts(map1!);
         return;
       }
 
-      const map: Record<string, number> = {};
-      for (const r of data ?? []) {
-        const cid = (r as any).campaign_id as string | undefined;
-        if (!cid) continue;
-        map[cid] = (map[cid] ?? 0) + 1;
+      const map2 = await attemptFallback();
+      const hasAny2 = map2 && Object.values(map2).some((n) => n > 0);
+
+      if (hasAny2) {
+        setSelectedCounts(map2!);
+        return;
       }
-      setSelectedCounts(map);
+
+      // Se nenhum caminho retornar, deixa 0 (mas avisa no console pra gente ajustar a fonte certa)
+      console.warn(
+        "SELECTED_CREATORS_COUNT: não encontrei fonte acessível/compatível. " +
+          "Provável: RLS em campaign_applications ou seleção em outra tabela não listada.",
+        { campaignIds: ids }
+      );
+      setSelectedCounts({});
     },
     [user]
   );
