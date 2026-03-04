@@ -136,6 +136,36 @@ const REQUIREMENTS_LABELS: Record<string, string> = {
 
 const VALUE_KEYS = new Set(["quote_total", "quote_subtotal", "quote_discount"]);
 
+const IconActionButton = (props: {
+  onClick: () => void;
+  disabled?: boolean;
+  title: string;
+  children: React.ReactNode;
+  tone?: "default" | "primary" | "accent";
+}) => {
+  const tone = props.tone ?? "default";
+
+  const toneClass =
+    tone === "primary"
+      ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+      : tone === "accent"
+        ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/15"
+        : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground hover:bg-card/80";
+
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      disabled={props.disabled}
+      title={props.title}
+      aria-label={props.title}
+      className={`w-10 h-10 rounded-2xl border transition flex items-center justify-center ${toneClass} disabled:opacity-60`}
+    >
+      {props.children}
+    </button>
+  );
+};
+
 const CampaignView = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -155,7 +185,6 @@ const CampaignView = () => {
   const [deliverablesMap, setDeliverablesMap] = useState<Record<string, DeliverablesRow>>({});
   const [approvingCreatorId, setApprovingCreatorId] = useState<string | null>(null);
 
-  // modal entregas
   const [deliverableModalOpen, setDeliverableModalOpen] = useState(false);
   const [deliverableModalCreatorId, setDeliverableModalCreatorId] = useState<string | null>(null);
   const [deliverableModalLoading, setDeliverableModalLoading] = useState(false);
@@ -217,7 +246,6 @@ const CampaignView = () => {
     }
   }, [id, user, isInfluencer, navigate]);
 
-  // fetch base
   useEffect(() => {
     const fetchData = async () => {
       if (!authReady || userRole === undefined) return;
@@ -291,7 +319,6 @@ const CampaignView = () => {
     fetchData();
   }, [authReady, userRole, id, user, isContractor, isInfluencer, navigate]);
 
-  // contractor: fetch creators + deliverables minimal
   useEffect(() => {
     const run = async () => {
       if (!isContractor || !id || !user || !campaign) return;
@@ -505,7 +532,6 @@ const CampaignView = () => {
 
   const creatorsToRender = Array.from(new Set([...(selectedCreatorIds || []), ...(participants.map((p) => p.influencer_id) || [])]));
 
-  // modal helpers
   const modalCreatorProfile = deliverableModalCreatorId ? creatorProfiles[deliverableModalCreatorId] : null;
   const modalCreatorName = (modalCreatorProfile?.name || "Creator").trim();
   const modalCreatorIg = normalizeAt(modalCreatorProfile?.instagram) || null;
@@ -529,12 +555,9 @@ const CampaignView = () => {
     }));
   })();
 
-  // ✅ Agora: “Creators confirmados” = status confirmed/approved
-  // Fallback seguro: se não houver participant, mostramos mesmo assim (já que foi selecionado na criação),
-  // mas a expectativa é que confirmed/approved sejam os que aparecem.
   const confirmedCreatorIds = creatorsToRender.filter((cid) => {
     const p = participants.find((x) => x.influencer_id === cid);
-    if (!p) return true; // fallback (não quebra lista)
+    if (!p) return true;
     return p.status === "confirmed" || p.status === "approved";
   });
 
@@ -659,7 +682,6 @@ const CampaignView = () => {
               </div>
             )}
 
-            {/* ✅ Creators confirmados (compacto) */}
             {isContractor && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -668,9 +690,10 @@ const CampaignView = () => {
                 </div>
 
                 <div className="glass-card p-4">
-                  <div className="text-xs text-muted-foreground flex items-start gap-2">
-                    <ShieldCheck className="w-4 h-4 mt-0.5" />
-                    Valide entregas por creator. O botão <b className="text-foreground">Confirmar</b> marca a revisão como concluída.
+                  {/* ✅ texto compacto, 1 linha */}
+                  <div className="text-[11px] text-muted-foreground flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 shrink-0" />
+                    <span className="whitespace-nowrap overflow-hidden text-ellipsis">Valide entregas por creator.</span>
                   </div>
 
                   <div className="mt-4 space-y-2">
@@ -689,7 +712,7 @@ const CampaignView = () => {
                         const isBusy = approvingCreatorId === creatorId;
 
                         return (
-                          <div key={creatorId} className="rounded-2xl border border-border/50 bg-white/5 p-3">
+                          <div key={creatorId} className="rounded-2xl border border-border/50 bg-white/5 px-3 py-2.5">
                             <div className="flex items-center justify-between gap-3">
                               <div className="flex items-center gap-3 min-w-0">
                                 <div className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center shrink-0">
@@ -706,8 +729,9 @@ const CampaignView = () => {
                                 </div>
                               </div>
 
+                              {/* ✅ ações por ícones */}
                               <div className="flex items-center gap-2 shrink-0">
-                                <button
+                                <IconActionButton
                                   onClick={() => {
                                     if (!hasDeliverables) {
                                       toast.message("Este creator ainda não enviou entregas.");
@@ -715,37 +739,25 @@ const CampaignView = () => {
                                     }
                                     openDeliverablesModal(creatorId);
                                   }}
-                                  className={`px-3 py-2 rounded-xl text-xs font-semibold border transition ${
-                                    hasDeliverables
-                                      ? "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground hover:bg-card/80"
-                                      : "border-border/40 bg-card/50 text-muted-foreground/60 cursor-not-allowed"
-                                  }`}
                                   disabled={!hasDeliverables}
-                                  title={hasDeliverables ? "Ver checklist/links/notas" : "Ainda sem entregas"}
+                                  title={hasDeliverables ? "Ver entregas" : "Ainda sem entregas"}
+                                  tone="default"
                                 >
-                                  Entregas
-                                </button>
+                                  <ClipboardCheck className="w-4 h-4" />
+                                </IconActionButton>
 
-                                <button
-                                  onClick={() => setTabWithUrl("files")}
-                                  className="px-3 py-2 rounded-xl text-xs font-semibold border border-border/50 bg-card/60 text-muted-foreground hover:text-foreground hover:bg-card/80 transition"
-                                  title="Ver arquivos da campanha"
-                                >
-                                  Ver arquivos
-                                </button>
+                                <IconActionButton onClick={() => setTabWithUrl("files")} title="Ver arquivos" tone="default">
+                                  <Eye className="w-4 h-4" />
+                                </IconActionButton>
 
-                                <button
+                                <IconActionButton
                                   onClick={() => approveCreator(creatorId)}
                                   disabled={isApproved || isBusy}
-                                  className={`px-3 py-2 rounded-xl text-xs font-semibold border transition ${
-                                    isApproved
-                                      ? "border-accent/30 bg-accent/10 text-accent"
-                                      : "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-                                  } disabled:opacity-60`}
-                                  title={isApproved ? "Revisão já confirmada" : "Confirmar entregas"}
+                                  title={isApproved ? "Confirmado" : "Confirmar entregas"}
+                                  tone={isApproved ? "accent" : "primary"}
                                 >
-                                  {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : isApproved ? "Confirmado" : "Confirmar"}
-                                </button>
+                                  {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <BadgeCheck className="w-4 h-4" />}
+                                </IconActionButton>
                               </div>
                             </div>
                           </div>
@@ -850,7 +862,7 @@ const CampaignView = () => {
         )}
       </div>
 
-      {/* ✅ MODAL ENTREGAS (RESPONSIVO, SEM BOTÃO CONFIRMAR) */}
+      {/* MODAL ENTREGAS (responsivo) */}
       <AnimatePresence>
         {deliverableModalOpen && isContractor && (
           <motion.div
@@ -872,7 +884,6 @@ const CampaignView = () => {
                 style={{ maxHeight: "85vh" }}
                 onMouseDown={(e) => e.stopPropagation()}
               >
-                {/* header */}
                 <div className="px-5 pt-5 pb-4 border-b border-border/40">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -891,7 +902,6 @@ const CampaignView = () => {
                   </div>
                 </div>
 
-                {/* body (scroll interno) */}
                 <div className="px-5 py-5 overflow-auto" style={{ maxHeight: "calc(85vh - 84px)" }}>
                   {deliverableModalLoading ? (
                     <div className="flex justify-center py-10">
@@ -904,7 +914,6 @@ const CampaignView = () => {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {/* checklist */}
                       <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
                         <div className="flex items-center gap-2 mb-3">
                           <ClipboardCheck className="w-4 h-4 text-primary" />
@@ -929,7 +938,6 @@ const CampaignView = () => {
                         )}
                       </div>
 
-                      {/* links */}
                       <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
                         <div className="flex items-center gap-2 mb-3">
                           <LinkIcon className="w-4 h-4 text-accent" />
@@ -954,7 +962,6 @@ const CampaignView = () => {
                         )}
                       </div>
 
-                      {/* notes */}
                       <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
                         <div className="flex items-center gap-2 mb-3">
                           <FileText className="w-4 h-4 text-primary" />
@@ -968,7 +975,6 @@ const CampaignView = () => {
                         )}
                       </div>
 
-                      {/* meta discreto */}
                       <div className="text-[11px] text-muted-foreground flex items-start gap-2">
                         <Info className="w-4 h-4 mt-0.5" />
                         <div>
