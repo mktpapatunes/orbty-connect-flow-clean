@@ -17,7 +17,7 @@ import {
   TrendingUp,
   MapPin,
   Tag,
-  User2,
+  Store,
   RefreshCw,
   CheckCircle2,
 } from "lucide-react";
@@ -31,29 +31,8 @@ type Bucket = "active" | "completed" | "all";
 type MyCampaignRow = MyCampaign & {
   campaign_date?: string | null;
   created_at?: string | null;
-  applicant_count?: number;
   bucket?: string;
   type?: string | null;
-};
-
-const pickDisplayName = (row: any): string | null => {
-  if (!row) return null;
-
-  // Campos comuns de "nome no perfil"
-  const candidates = [
-    row.display_name,
-    row.full_name,
-    row.name,
-    row.username,
-    row.nome,
-    row.nome_publico,
-    row.public_name,
-    row.company_name,
-    row.business_name,
-  ];
-
-  const found = candidates.find((v) => typeof v === "string" && v.trim().length > 0);
-  return found ? String(found).trim() : null;
 };
 
 const ContractorCampaigns = () => {
@@ -65,7 +44,9 @@ const ContractorCampaigns = () => {
   const [bucket, setBucket] = useState<Bucket>("active");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  const [contractorName, setContractorName] = useState<string | null>(null);
+  const [businessName, setBusinessName] = useState<string | null>(null);
+
+  const [selectedCounts, setSelectedCounts] = useState<Record<string, number>>({});
 
   const formatDateBR = (value?: string | null) => {
     if (!value) return "-";
@@ -77,41 +58,30 @@ const ContractorCampaigns = () => {
       : d.toLocaleDateString("pt-BR");
   };
 
-  const fetchContractorName = useCallback(async () => {
+  const fetchBusinessName = useCallback(async () => {
     if (!user) return;
 
-    // Tenta buscar de algumas tabelas conhecidas sem assumir colunas.
-    // Como é o próprio usuário, normalmente RLS permite.
-    const tries: Array<{
-      table: "profiles" | "public_profiles" | "contractor_personal_data";
-      // chaves comuns: profiles geralmente usa id, contractor_personal_data costuma usar user_id
-      col: "id" | "user_id";
-    }> = [
-      { table: "profiles", col: "id" },
-      { table: "public_profiles", col: "id" },
-      { table: "contractor_personal_data", col: "user_id" },
-    ];
+    const linkCols: Array<"created_by" | "owner_id" | "user_id"> = ["created_by", "owner_id", "user_id"];
 
-    for (const t of tries) {
+    for (const col of linkCols) {
       const { data, error } = await supabase
-        .from(t.table)
-        .select("*")
-        .eq(t.col, user.id)
+        .from("organizations")
+        .select("name")
+        .eq(col as any, user.id)
+        .order("created_at" as any, { ascending: false })
+        .limit(1)
         .maybeSingle();
 
-      if (error) {
-        // não interrompe, apenas tenta a próxima
-        continue;
-      }
+      if (error) continue;
 
-      const name = pickDisplayName(data);
-      if (name) {
-        setContractorName(name);
+      const name = (data as any)?.name;
+      if (typeof name === "string" && name.trim().length > 0) {
+        setBusinessName(name.trim());
         return;
       }
     }
 
-    setContractorName(null);
+    setBusinessName(null);
   }, [user]);
 
   const fetchCampaigns = useCallback(async () => {
@@ -123,7 +93,6 @@ const ContractorCampaigns = () => {
     });
 
     if (!error && data) {
-      // Excluídas não devem aparecer em nenhum lugar do front
       const rows = (data as unknown as MyCampaignRow[]).filter((c) => c.bucket !== "deleted");
       setCampaigns(rows);
     } else if (error) {
@@ -134,10 +103,51 @@ const ContractorCampaigns = () => {
     setIsLoading(false);
   }, [user]);
 
+  const fetchSelectedCreatorsCounts = useCallback(
+    async (rows: MyCampaignRow[]) => {
+      if (!user) return;
+
+      const ids = rows.map((c) => c.id).filter(Boolean);
+      if (ids.length === 0) {
+        setSelectedCounts({});
+        return;
+      }
+
+      // No seu fluxo: selecionados = accepted
+      const SELECTED_STATUSES = ["accepted"];
+
+      const { data, error } = await supabase
+        .from("campaign_applications")
+        .select("campaign_id,status")
+        .in("campaign_id", ids as any)
+        .in("status", SELECTED_STATUSES as any);
+
+      if (error) {
+        console.warn("SELECTED_CREATORS_COUNT_ERROR", error);
+        setSelectedCounts({});
+        return;
+      }
+
+      const map: Record<string, number> = {};
+      for (const r of data ?? []) {
+        const cid = (r as any).campaign_id as string | undefined;
+        if (!cid) continue;
+        map[cid] = (map[cid] ?? 0) + 1;
+      }
+      setSelectedCounts(map);
+    },
+    [user]
+  );
+
   useEffect(() => {
     fetchCampaigns();
-    fetchContractorName();
-  }, [fetchCampaigns, fetchContractorName]);
+    fetchBusinessName();
+  }, [fetchCampaigns, fetchBusinessName]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    fetchSelectedCreatorsCounts(campaigns);
+  }, [campaigns, fetchSelectedCreatorsCounts, isLoading]);
 
   const runAction = async (campaignId: string, action: "complete" | "delete") => {
     if (action === "complete") {
@@ -216,27 +226,9 @@ const ContractorCampaigns = () => {
   }, [list]);
 
   const stats = [
-    {
-      label: "Ativas",
-      value: String(groups.active.length),
-      icon: Zap,
-      tone: "text-primary",
-      ring: "border-primary/25 bg-primary/10",
-    },
-    {
-      label: "Concluídas",
-      value: String(groups.completed.length),
-      icon: BadgeCheck,
-      tone: "text-accent",
-      ring: "border-accent/25 bg-accent/10",
-    },
-    {
-      label: "Total",
-      value: String(groups.total),
-      icon: TrendingUp,
-      tone: "text-foreground",
-      ring: "border-border/50 bg-card/60",
-    },
+    { label: "Ativas", value: String(groups.active.length), icon: Zap, tone: "text-primary", ring: "border-primary/25 bg-primary/10" },
+    { label: "Concluídas", value: String(groups.completed.length), icon: BadgeCheck, tone: "text-accent", ring: "border-accent/25 bg-accent/10" },
+    { label: "Total", value: String(groups.total), icon: TrendingUp, tone: "text-foreground", ring: "border-border/50 bg-card/60" },
   ];
 
   const tabs = [
@@ -246,11 +238,7 @@ const ContractorCampaigns = () => {
   ];
 
   const bucketTitle =
-    bucket === "active"
-      ? "Campanhas ativas"
-      : bucket === "completed"
-        ? "Campanhas concluídas"
-        : "Todas as campanhas";
+    bucket === "active" ? "Campanhas ativas" : bucket === "completed" ? "Campanhas concluídas" : "Todas as campanhas";
 
   const getStatusPill = (c: MyCampaignRow) => {
     if (c.bucket === "completed") {
@@ -261,7 +249,6 @@ const ContractorCampaigns = () => {
         </span>
       );
     }
-
     if (c.bucket === "closed_manual") {
       return (
         <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground font-medium flex items-center gap-1">
@@ -270,7 +257,6 @@ const ContractorCampaigns = () => {
         </span>
       );
     }
-
     if (c.bucket === "closed_expired") {
       return (
         <span className="text-[10px] px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning font-medium flex items-center gap-1">
@@ -279,7 +265,6 @@ const ContractorCampaigns = () => {
         </span>
       );
     }
-
     if (c.bucket === "draft") {
       return (
         <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground font-medium">
@@ -287,17 +272,11 @@ const ContractorCampaigns = () => {
         </span>
       );
     }
-
     return null;
   };
 
   const menuItems = [
-    {
-      icon: Users,
-      label: "Histórico",
-      description: "Campanhas finalizadas e informações anteriores",
-      route: "/historico",
-    },
+    { icon: Users, label: "Histórico", description: "Campanhas finalizadas e informações anteriores", route: "/historico" },
   ];
 
   const niceType = (t?: string | null) => {
@@ -318,22 +297,13 @@ const ContractorCampaigns = () => {
   return (
     <MobileLayout title="Minhas campanhas" navType="contractor">
       <div className="px-6 py-6 space-y-6">
-        {/* Header premium */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-end justify-between gap-3"
-        >
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-muted-foreground text-xs uppercase tracking-widest mb-1">
-              Painel do contratante
-            </p>
+            <p className="text-muted-foreground text-xs uppercase tracking-widest mb-1">Painel do contratante</p>
             <h2 className="font-display text-2xl font-bold text-foreground">
               Minhas <span className="text-gradient-neon">campanhas</span>
             </h2>
-            <p className="text-xs text-muted-foreground mt-1">
-              Gerencie suas campanhas com controle e clareza.
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">Gerencie suas campanhas com controle e clareza.</p>
           </div>
 
           <button
@@ -351,18 +321,9 @@ const ContractorCampaigns = () => {
           </div>
         ) : (
           <>
-            {/* Stats */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.08 }}
-              className="grid grid-cols-3 gap-3"
-            >
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="grid grid-cols-3 gap-3">
               {stats.map((stat) => (
-                <div
-                  key={stat.label}
-                  className={`glass-card p-4 flex flex-col items-center text-center gap-2 border ${stat.ring}`}
-                >
+                <div key={stat.label} className={`glass-card p-4 flex flex-col items-center text-center gap-2 border ${stat.ring}`}>
                   <stat.icon className={`w-5 h-5 ${stat.tone}`} />
                   <span className="font-display font-bold text-xl text-foreground">{stat.value}</span>
                   <span className="text-[10px] text-muted-foreground leading-tight">{stat.label}</span>
@@ -370,30 +331,20 @@ const ContractorCampaigns = () => {
               ))}
             </motion.div>
 
-            {/* Dica */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.14 }}
-              className="glass-card p-4 flex items-start gap-3"
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.14 }} className="glass-card p-4 flex items-start gap-3">
               <Sparkles className="w-4 h-4 text-accent shrink-0 mt-0.5" />
               <p className="text-xs text-muted-foreground leading-relaxed">
-                <span className="text-foreground font-medium">Dica inteligente:</span>{" "}
-                Campanhas regionais têm 3x mais engajamento.
+                <span className="text-foreground font-medium">Dica inteligente:</span> Campanhas regionais têm 3x mais engajamento.
               </p>
             </motion.div>
 
-            {/* Tabs */}
             <div className="glass-card p-2 flex items-center gap-2">
               {tabs.map((t) => (
                 <button
                   key={t.key}
                   onClick={() => setBucket(t.key)}
                   className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
-                    bucket === t.key
-                      ? "bg-primary/12 text-primary border border-primary/25"
-                      : "bg-transparent text-muted-foreground hover:text-foreground"
+                    bucket === t.key ? "bg-primary/12 text-primary border border-primary/25" : "bg-transparent text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {t.label}
@@ -401,13 +352,9 @@ const ContractorCampaigns = () => {
               ))}
             </div>
 
-            {/* Lista */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
-                  {bucketTitle}
-                </p>
-
+                <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">{bucketTitle}</p>
                 <button
                   onClick={fetchCampaigns}
                   className="inline-flex items-center gap-2 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
@@ -422,13 +369,6 @@ const ContractorCampaigns = () => {
                 <div className="py-12 text-center glass-card">
                   <Users className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
                   <p className="text-sm text-muted-foreground">Nenhuma campanha nessa aba.</p>
-                  <button
-                    onClick={() => navigate("/criar-campanha")}
-                    className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-card border border-border/50 text-xs text-foreground hover:border-primary/30 transition-colors"
-                  >
-                    <Plus className="w-4 h-4 text-primary" />
-                    Criar campanha
-                  </button>
                 </div>
               ) : (
                 sortedList.map((campaign, i) => {
@@ -439,6 +379,8 @@ const ContractorCampaigns = () => {
                   const locationLabel =
                     campaign.city && campaign.state ? `${campaign.city} · ${campaign.state}` : `${campaign.city || ""}${campaign.state ? ` · ${campaign.state}` : ""}`.trim();
 
+                  const selected = selectedCounts[campaign.id] ?? 0;
+
                   return (
                     <motion.div
                       key={campaign.id}
@@ -447,26 +389,20 @@ const ContractorCampaigns = () => {
                       transition={{ delay: 0.08 + i * 0.05 }}
                       className="glass-card-hover p-4"
                     >
-                      {/* Top row */}
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="font-semibold text-foreground text-sm truncate">
-                              {campaign.title}
-                            </h4>
-
+                            <h4 className="font-semibold text-foreground text-sm truncate">{campaign.title}</h4>
                             {getStatusPill(campaign)}
                           </div>
 
-                          {/* Subtítulo premium: nome do perfil do contratante */}
-                          {contractorName && (
+                          {businessName && (
                             <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
-                              <User2 className="w-3.5 h-3.5" />
-                              Perfil: <span className="text-foreground/90 font-medium">{contractorName}</span>
+                              <Store className="w-3.5 h-3.5" />
+                              Marca/Negócio: <span className="text-foreground/90 font-medium">{businessName}</span>
                             </p>
                           )}
 
-                          {/* Meta chips */}
                           <div className="mt-2 flex items-center gap-2 flex-wrap">
                             {typeLabel && (
                               <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
@@ -484,7 +420,7 @@ const ContractorCampaigns = () => {
 
                             <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
                               <Users className="w-3 h-3" />
-                              {campaign.applicant_count ?? 0} candidatura(s)
+                              {selected} creator(s) selecionado(s)
                             </span>
                           </div>
                         </div>
@@ -498,7 +434,6 @@ const ContractorCampaigns = () => {
                         </button>
                       </div>
 
-                      {/* Info blocks */}
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <div className="rounded-xl border border-border/50 bg-card/60 px-3 py-2">
                           <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -531,7 +466,6 @@ const ContractorCampaigns = () => {
                         </div>
                       </div>
 
-                      {/* CTAs */}
                       <div className="mt-3 pt-3 border-t border-border/30 flex gap-2">
                         <button
                           onClick={() => navigate(`/campanha/${campaign.id}`)}
@@ -540,9 +474,7 @@ const ContractorCampaigns = () => {
                           Abrir campanha
                         </button>
 
-                        {(campaign.bucket === "active" ||
-                          campaign.bucket === "closed_manual" ||
-                          campaign.bucket === "closed_expired") && (
+                        {(campaign.bucket === "active" || campaign.bucket === "closed_manual" || campaign.bucket === "closed_expired") && (
                           <button
                             onClick={() => runAction(campaign.id, "complete")}
                             disabled={isBusy}
@@ -568,7 +500,6 @@ const ContractorCampaigns = () => {
               )}
             </div>
 
-            {/* Menu inferior */}
             <div className="space-y-3">
               {menuItems.map((item, i) => (
                 <motion.button
