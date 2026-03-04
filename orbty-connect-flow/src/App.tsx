@@ -63,8 +63,14 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/check-email" element={<CheckEmail />} />
               <Route path="/escolha-perfil" element={<ProfileChoice />} />
-              <Route path="/cadastro-contratante" element={<ContractorRegistration />} />
-              <Route path="/cadastro-influenciadora" element={<InfluencerRegistration />} />
+              <Route
+                path="/cadastro-contratante"
+                element={<ContractorRegistration />}
+              />
+              <Route
+                path="/cadastro-influenciadora"
+                element={<InfluencerRegistration />}
+              />
 
               {/* ===== STATUS PAGES ===== */}
               <Route
@@ -105,6 +111,15 @@ const App = () => (
               />
 
               <Route
+                path="/campanha"
+                element={
+                  <ProtectedRoute requiredRole="contractor">
+                    <ContractorCampaigns />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
                 path="/criar-campanha"
                 element={
                   <ProtectedRoute requiredRole="contractor">
@@ -123,7 +138,6 @@ const App = () => (
               />
 
               {/* ================== INFLUENCER FLOW ================== */}
-              {/* HOME (atrativa) */}
               <Route
                 path="/dashboard-influenciadora"
                 element={
@@ -133,7 +147,6 @@ const App = () => (
                 }
               />
 
-              {/* Minhas campanhas (operacional) */}
               <Route
                 path="/minhas-campanhas"
                 element={
@@ -143,7 +156,6 @@ const App = () => (
                 }
               />
 
-              {/* ✅ ROTA LEGADA: mantida por compatibilidade, mas agora é HISTÓRICO do influencer */}
               <Route
                 path="/minhas-candidaturas"
                 element={
@@ -241,31 +253,22 @@ const App = () => (
               />
 
               <Route
-  path="/ajuda"
-  element={
-    <ProtectedRoute>
-      <FAQ />
-    </ProtectedRoute>
-  }
-/>
+                path="/ajuda"
+                element={
+                  <ProtectedRoute>
+                    <FAQ />
+                  </ProtectedRoute>
+                }
+              />
 
-<Route
-  path="/configuracoes"
-  element={
-    <ProtectedRoute>
-      <Settings />
-    </ProtectedRoute>
-  }
-/>
-
-<Route
-  path="/campanha"
-  element={
-    <ProtectedRoute requiredRole="contractor">
-      <ContractorCampaigns />
-    </ProtectedRoute>
-  }
-/>
+              <Route
+                path="/configuracoes"
+                element={
+                  <ProtectedRoute>
+                    <Settings />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* ===== 404 ===== */}
               <Route path="*" element={<NotFound />} />

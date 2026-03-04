@@ -16,13 +16,33 @@ import { useAuth } from "@/contexts/AuthContext";
 
 interface MobileLayoutProps {
   children: ReactNode;
-  title: string;
+  title?: string;
+
+  /**
+   * Props legadas. Com enforceGlobalHeader=true (padrão),
+   * elas são ignoradas para back/home.
+   */
   showBack?: boolean;
+
+  /**
+   * Mantido por compatibilidade, mas NÃO é usado no botão voltar.
+   * (Voltar deve ser SEMPRE navigate(-1).)
+   */
   backTo?: string;
+
   showNav?: boolean;
   showHome?: boolean;
+
   homeRoute?: string;
   navType?: "contractor" | "influencer";
+
+  /**
+   * ✅ NOVO (padrão true):
+   * Força o comportamento global:
+   * - back + home em todas as telas exceto dashboards
+   * - back sempre navigate(-1)
+   */
+  enforceGlobalHeader?: boolean;
 }
 
 /* =========================
@@ -48,12 +68,18 @@ const influencerNav = [
 const MobileLayout = ({
   children,
   title,
-  showBack = false,
-  backTo,
+
+  // props legadas
+  showBack,
+  backTo, // mantido apenas para não quebrar chamadas existentes (ignorado no voltar)
   showNav = true,
-  showHome = false,
+  showHome,
+
   homeRoute,
   navType = "contractor",
+
+  // ✅ novo comportamento global ligado por padrão
+  enforceGlobalHeader = true,
 }: MobileLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -63,18 +89,47 @@ const MobileLayout = ({
   const isContractor = navType === "contractor";
   const isInfluencer = navType === "influencer";
 
+  const dashboardPath =
+    homeRoute ||
+    (navType === "contractor"
+      ? "/dashboard-contratante"
+      : "/dashboard-influenciadora");
+
+  /**
+   * ✅ Regra global correta:
+   * Dashboard é sempre um destes dois paths (independente de navType/homeRoute).
+   * Isso evita bug de dashboard do "outro role" aparecer com seta.
+   */
+  const isDashboard =
+    location.pathname === "/dashboard-contratante" ||
+    location.pathname === "/dashboard-influenciadora";
+
+  /**
+   * ✅ Força as regras globais por padrão:
+   * - back + home em todas as telas exceto dashboard
+   *
+   * Se enforceGlobalHeader=false:
+   * mantém comportamento antigo (respeita showBack/showHome).
+   */
+  const shouldShowBack = enforceGlobalHeader
+    ? !isDashboard
+    : typeof showBack === "boolean"
+      ? showBack
+      : !isDashboard;
+
+  const shouldShowHome = enforceGlobalHeader
+    ? !isDashboard
+    : typeof showHome === "boolean"
+      ? showHome
+      : !isDashboard;
+
   const handleBack = () => {
-    if (backTo) navigate(backTo);
-    else navigate(-1);
+    // ✅ regra principal: voltar sempre para a página anterior
+    navigate(-1);
   };
 
   const handleHome = () => {
-    const home =
-      homeRoute ||
-      (navType === "contractor"
-        ? "/dashboard-contratante"
-        : "/dashboard-influenciadora");
-    navigate(home);
+    navigate(dashboardPath);
   };
 
   const handleSignOut = async () => {
@@ -93,25 +148,27 @@ const MobileLayout = ({
       ========================= */}
       <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border/50 px-6 py-4">
         <div className="flex items-center gap-3">
-          {showBack && (
+          {shouldShowBack && (
             <button
               onClick={handleBack}
               className="text-muted-foreground hover:text-foreground transition-colors text-sm"
               title="Voltar"
+              aria-label="Voltar"
             >
               ←
             </button>
           )}
 
           <h2 className="font-display font-semibold text-foreground text-lg flex-1">
-            {title}
+            {title ?? ""}
           </h2>
 
-          {showHome && (
+          {shouldShowHome && (
             <button
               onClick={handleHome}
               className="text-muted-foreground hover:text-primary transition-colors"
-              title="Voltar ao dashboard"
+              title="Início"
+              aria-label="Início"
             >
               <Home className="w-5 h-5" />
             </button>
@@ -121,6 +178,7 @@ const MobileLayout = ({
             onClick={handleSignOut}
             className="text-muted-foreground hover:text-primary transition-colors"
             title="Sair"
+            aria-label="Sair"
           >
             <LogOut className="w-4 h-4" />
           </button>
@@ -203,7 +261,7 @@ const MobileLayout = ({
                 )}
               </button>
 
-              {/* Config (ativo) */}
+              {/* Config */}
               <button
                 onClick={() => navigate("/configuracoes")}
                 className={`flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 ${
@@ -224,7 +282,7 @@ const MobileLayout = ({
               </button>
             </div>
           ) : isInfluencer ? (
-            /* ===== INFLUENCER NAV (igual contractor) ===== */
+            /* ===== INFLUENCER NAV ===== */
             <div className="flex items-center justify-between py-2 px-4">
               {/* Início */}
               <button
@@ -256,7 +314,7 @@ const MobileLayout = ({
                 <span className="text-[10px] font-medium">Ranking</span>
               </button>
 
-              {/* Minhas Campanhas (central destacado) */}
+              {/* Minhas Campanhas */}
               <button
                 onClick={() => navigate("/minhas-campanhas")}
                 className="w-12 h-12 rounded-full bg-gradient-neon glow-blue flex items-center justify-center shadow-md transition hover:scale-105 active:scale-95"
@@ -282,7 +340,7 @@ const MobileLayout = ({
                 )}
               </button>
 
-              {/* Config (ativo) */}
+              {/* Config */}
               <button
                 onClick={() => navigate("/configuracoes")}
                 className={`flex flex-col items-center gap-1 py-2 px-3 rounded-lg transition-all duration-200 ${
@@ -303,7 +361,7 @@ const MobileLayout = ({
               </button>
             </div>
           ) : (
-            /* fallback (não deve acontecer) */
+            /* fallback */
             <div className="flex items-center justify-around py-2 px-4">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.path;
