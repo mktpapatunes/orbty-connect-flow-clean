@@ -159,9 +159,17 @@ const MobileLayout = ({
             </button>
           )}
 
-          <h2 className="font-display font-semibold text-foreground text-lg flex-1">
-            {title ?? ""}
-          </h2>
+          <div className="flex-1 flex items-center min-w-0">
+  {typeof title === "string" || typeof title === "number" ? (
+    <h2 className="font-display font-semibold text-foreground text-lg leading-none truncate">
+      {title ?? ""}
+    </h2>
+  ) : (
+    <div className="flex items-center leading-none">
+      {title ?? null}
+    </div>
+  )}
+</div>
 
           {shouldShowHome && (
             <button

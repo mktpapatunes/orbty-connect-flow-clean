@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
+import TransparentLogo from "@/components/TransparentLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import orbtyLogo from "@/assets/orbty-logo-transparent.png";
 import {
@@ -150,10 +151,11 @@ const ContractorDashboard = () => {
   return (
     <MobileLayout
       title={
-        <img
+        <TransparentLogo
           src={orbtyLogo}
-          alt="Orbty"
-          className="h-[22px] w-auto block"
+          alt="ORBTY"
+          threshold={50}
+          className="h-11 w-auto relative z-10 drop-shadow-[0_0_18px_hsl(200,100%,50%,0.35)]"
         />
       }
       navType="contractor"
