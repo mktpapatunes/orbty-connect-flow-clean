@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
 import TransparentLogo from "@/components/TransparentLogo";
 import { useAuth } from "@/contexts/AuthContext";
-import orbtyLogo from "@/assets/orbty-logo-transparent.png";
+import orbtyLogo from "@/assets/orbty-logo.png";
 import {
   ArrowRight,
   BadgeCheck,
