@@ -16,6 +16,9 @@ import {
   BadgeCheck,
   XCircle,
   Info,
+  CheckSquare,
+  Square,
+  Link as LinkIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -35,9 +38,23 @@ type PublicProfileLite = {
 
 type DeliverablesRowLite = {
   creator_id: string;
-  status: "draft" | "submitted" | "approved" | "changes_requested";
-  updated_at: string;
-  submitted_at: string | null;
+  campaign_id?: string;
+  status?: "draft" | "submitted" | "approved" | "changes_requested";
+  updated_at?: string;
+  submitted_at?: string | null;
+
+  // pode existir na sua tabela (ou não)
+  confirmations?: Record<string, any> | null;
+  checks?: Record<string, any> | null;
+  checklist?: Record<string, any> | null;
+  steps?: Record<string, any> | null;
+
+  // pode existir
+  links?: any;
+  note?: any;
+
+  // fallback: qualquer coisa
+  [k: string]: any;
 };
 
 const formatDateBR = (value?: string | null) => {
@@ -50,7 +67,7 @@ const formatDateBR = (value?: string | null) => {
 
 const formatMoneyBRL = (v?: number | null) => {
   const n = typeof v === "number" ? v : v ? Number(v) : null;
-  if (!n || Number.isNaN(n)) return "—";
+  if (n === null || Number.isNaN(n)) return "—";
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
@@ -68,7 +85,7 @@ const formatLabel = (format?: string | null) => {
   if (f === "reels") return "Reels";
   if (f === "feed") return "Feed";
   if (f === "misto") return "Misto";
-  return format;
+  return format || "—";
 };
 
 const statusLabel = (s?: string | null) => {
@@ -82,7 +99,6 @@ const statusLabel = (s?: string | null) => {
   return s;
 };
 
-// Tradução/ordem amigável dos requirements (para contractor)
 const REQUIREMENTS_LABELS: Record<string, string> = {
   posts: "Quantidade de posts",
   format: "Formato",
@@ -99,15 +115,6 @@ const REQUIREMENTS_LABELS: Record<string, string> = {
   content_segments: "Segmentos",
   selected_creator_ids: "Creators selecionados",
 };
-
-const SENSITIVE_KEYS_INVITED = new Set([
-  "hashtags",
-  "mentions",
-  "caption",
-  "coupon_code",
-  "collab_mentions",
-  "selected_creator_ids",
-]);
 
 const VALUE_KEYS = new Set(["quote_total", "quote_subtotal", "quote_discount"]);
 
@@ -137,6 +144,125 @@ const deliverableStatusLabel = (s?: string | null) => {
   return { text: "—", cls: "border-border/50 bg-card/60 text-muted-foreground" };
 };
 
+const humanizeKey = (key: string) => {
+  const spaced = key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+};
+
+function renderAny(v: any) {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v === "boolean") return v ? "Sim" : "Não";
+  if (typeof v === "number") return String(v);
+  if (typeof v === "string") return v;
+
+  if (Array.isArray(v)) {
+    if (v.length === 0) return "—";
+    return (
+      <ul className="mt-1 space-y-1">
+        {v.map((item: any, idx: number) => (
+          <li key={idx} className="text-sm text-foreground/75 leading-relaxed">
+            • {typeof item === "string" || typeof item === "number" ? String(item) : JSON.stringify(item)}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  if (typeof v === "object") {
+    const entries = Object.entries(v);
+    if (entries.length === 0) return "—";
+    return (
+      <div className="mt-2 grid grid-cols-1 gap-2">
+        {entries.map(([k, val]) => (
+          <div key={k} className="rounded-xl border border-border/50 bg-card/60 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</div>
+            <div className="mt-1 text-sm text-foreground/80 leading-relaxed">{renderAny(val)}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return String(v);
+}
+
+function extractConfirmations(row?: DeliverablesRowLite | null): Array<{ key: string; label: string; done: boolean }> {
+  if (!row) return [];
+
+  const obj =
+    (row.confirmations && typeof row.confirmations === "object" ? row.confirmations : null) ||
+    (row.checks && typeof row.checks === "object" ? row.checks : null) ||
+    (row.checklist && typeof row.checklist === "object" ? row.checklist : null) ||
+    (row.steps && typeof row.steps === "object" ? row.steps : null) ||
+    null;
+
+  const pairs: Array<[string, any]> = obj ? Object.entries(obj) : [];
+
+  // fallback: varre booleans no row
+  if (!pairs.length) {
+    const maybe = Object.entries(row).filter(([k, v]) => {
+      if (typeof v !== "boolean") return false;
+      const kk = k.toLowerCase();
+      return (
+        kk.startsWith("confirm_") ||
+        kk.startsWith("confirmed_") ||
+        kk.startsWith("done_") ||
+        kk.endsWith("_done") ||
+        kk.endsWith("_ok") ||
+        kk.startsWith("is_")
+      );
+    });
+    pairs.push(...maybe);
+  }
+
+  const labelMap: Record<string, string> = {
+    posts: "Realizou os posts combinados",
+    mentions: "Fez as marcações (menções)",
+    hashtags: "Usou as hashtags",
+    caption: "Usou a legenda solicitada",
+    collab: "Publicou em collab",
+    print: "Anexou print de comprovação",
+    link: "Adicionou link da publicação",
+  };
+
+  return pairs
+    .filter(([_, v]) => typeof v === "boolean")
+    .map(([k, v]) => {
+      const clean = k.replace(/^confirm(ed)?_/, "").replace(/^done_/, "").replace(/_done$/, "").replace(/_ok$/, "");
+      return {
+        key: k,
+        label: labelMap[clean] || humanizeKey(clean),
+        done: !!v,
+      };
+    });
+}
+
+function extractLinks(row?: DeliverablesRowLite | null): string[] {
+  if (!row) return [];
+  const raw = row.links;
+
+  if (typeof raw === "string" && raw.trim()) return [raw.trim()];
+  if (Array.isArray(raw)) return raw.map((x) => String(x || "").trim()).filter(Boolean);
+  if (raw && typeof raw === "object") {
+    // ex.: { post: "url", stories: "url" }
+    return Object.values(raw)
+      .map((x) => String(x || "").trim())
+      .filter(Boolean);
+  }
+
+  // fallback: campos comuns
+  const candidates = ["post_link", "publication_link", "link", "url", "reel_link", "story_link"];
+  const out: string[] = [];
+  for (const c of candidates) {
+    const v = row[c];
+    if (typeof v === "string" && v.trim()) out.push(v.trim());
+  }
+  return Array.from(new Set(out));
+}
+
 const CampaignView = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -150,7 +276,6 @@ const CampaignView = () => {
   const [myParticipationStatus, setMyParticipationStatus] = useState<ParticipantStatus | null>(null);
   const [confirming, setConfirming] = useState(false);
 
-  // contractor - creators
   const [creatorProfiles, setCreatorProfiles] = useState<Record<string, PublicProfileLite>>({});
   const [participants, setParticipants] = useState<Array<{ influencer_id: string; status: ParticipantStatus | null }>>([]);
   const [deliverablesMap, setDeliverablesMap] = useState<Record<string, DeliverablesRowLite>>({});
@@ -224,7 +349,6 @@ const CampaignView = () => {
       setIsLoading(true);
 
       try {
-        // ===== CONTRACTOR =====
         if (isContractor) {
           const { data: campaignData, error: campaignError } = await supabase
             .from("campaigns")
@@ -241,7 +365,6 @@ const CampaignView = () => {
           return;
         }
 
-        // ===== INFLUENCER =====
         const { data: cp, error: cpErr } = await supabase
           .from("campaign_participants")
           .select("status")
@@ -260,7 +383,6 @@ const CampaignView = () => {
         const pStatus = (cp.status as ParticipantStatus) || null;
         setMyParticipationStatus(pStatus);
 
-        // se já confirmou/entregou/aprovou -> manda pro detalhe completo do creator
         if (pStatus && pStatus !== "invited") {
           navigate(`/campanha-detalhe/${id}`, { replace: true });
           return;
@@ -288,7 +410,7 @@ const CampaignView = () => {
     fetchData();
   }, [authReady, userRole, id, user, isContractor, isInfluencer, navigate]);
 
-  // Contractor: carregar creators e status individual (participação + deliverables)
+  // Contractor: puxar creators + deliverables (inclui confirmações)
   useEffect(() => {
     const run = async () => {
       if (!isContractor || !id || !user || !campaign) return;
@@ -298,7 +420,6 @@ const CampaignView = () => {
         ? req!.selected_creator_ids.filter((x: any) => typeof x === "string" && x.trim().length > 0)
         : [];
 
-      // 1) participantes (status confirmado/aprovado etc)
       const { data: partData, error: partErr } = await supabase
         .from("campaign_participants")
         .select("influencer_id,status")
@@ -310,13 +431,10 @@ const CampaignView = () => {
         influencer_id: String(r.influencer_id),
         status: (r.status as ParticipantStatus) || null,
       }));
-
       setParticipants(pRows);
 
-      // IDs a consultar: selecionados + participantes (garante consistência)
       const ids = Array.from(new Set([...selectedIds, ...pRows.map((p) => p.influencer_id)]));
 
-      // 2) nomes (public_profiles)
       if (ids.length > 0) {
         const { data: profData, error: profErr } = await supabase
           .from("public_profiles")
@@ -332,21 +450,22 @@ const CampaignView = () => {
         setCreatorProfiles({});
       }
 
-      // 3) status de deliverables (tabela nova) — se ainda não existir, não quebra
+      // ✅ Agora buscamos tudo (*) para resgatar confirmações que você já criou
       try {
         const { data: deliv, error: delivErr } = await supabase
           .from("campaign_creator_deliverables")
-          .select("creator_id,status,updated_at,submitted_at")
+          .select("*")
           .eq("campaign_id", id);
 
         if (delivErr) {
           const msg = (delivErr.message || "").toLowerCase();
-          const looksMissing = msg.includes("does not exist") || msg.includes("schema cache") || msg.includes("permission denied");
-          if (!looksMissing) console.error("FETCH_DELIVERABLES_STATUS_ERROR", delivErr);
+          const looksMissing =
+            msg.includes("does not exist") || msg.includes("schema cache") || msg.includes("permission denied");
+          if (!looksMissing) console.error("FETCH_DELIVERABLES_ERROR", delivErr);
           setDeliverablesMap({});
         } else {
           const dmap: Record<string, DeliverablesRowLite> = {};
-          for (const r of (deliv || []) as any[]) dmap[String(r.creator_id)] = r;
+          for (const r of (deliv || []) as any[]) dmap[String(r.creator_id)] = r as DeliverablesRowLite;
           setDeliverablesMap(dmap);
         }
       } catch (e) {
@@ -359,11 +478,26 @@ const CampaignView = () => {
 
   const approveCreator = async (creatorId: string) => {
     if (!id) return;
-    if (!window.confirm("Aprovar este creator? Use apenas quando todas as entregas foram conferidas e estão corretas.")) return;
+
+    const dRow = deliverablesMap[creatorId];
+    const confirmations = extractConfirmations(dRow);
+    const hasAllChecks = confirmations.length > 0 ? confirmations.every((x) => x.done) : true; // se não existir checklist, não bloqueia
+    const links = extractLinks(dRow);
+
+    const warning =
+      confirmations.length > 0 && !hasAllChecks
+        ? "\n\n⚠️ Atenção: o creator ainda não marcou todas as confirmações."
+        : "";
+
+    if (
+      !window.confirm(
+        `Aprovar este creator?\nUse apenas quando as entregas foram conferidas (arquivos e links) e estiver tudo correto.${warning}`
+      )
+    )
+      return;
 
     setApprovingCreatorId(creatorId);
     try {
-      // 1) marca deliverables como approved (se existir tabela)
       const { error: dErr } = await supabase
         .from("campaign_creator_deliverables")
         .upsert(
@@ -376,14 +510,12 @@ const CampaignView = () => {
           { onConflict: "campaign_id,creator_id" }
         );
 
-      // se tabela não existir, não impede o fluxo de participação (mas avisa no console)
       if (dErr) {
         const msg = (dErr.message || "").toLowerCase();
         const looksMissing = msg.includes("does not exist") || msg.includes("schema cache");
         if (!looksMissing) throw dErr;
       }
 
-      // 2) marca participação como approved (individual)
       const { error: pErr } = await supabase
         .from("campaign_participants")
         .update({ status: "approved" })
@@ -394,17 +526,19 @@ const CampaignView = () => {
 
       toast.success("Creator aprovado com sucesso.");
 
-      // refresh rápido local
       setParticipants((prev) => prev.map((p) => (p.influencer_id === creatorId ? { ...p, status: "approved" } : p)));
       setDeliverablesMap((prev) => ({
         ...prev,
         [creatorId]: {
+          ...(prev[creatorId] || {}),
           creator_id: creatorId,
           status: "approved",
           updated_at: new Date().toISOString(),
-          submitted_at: prev[creatorId]?.submitted_at ?? null,
         },
       }));
+
+      // opcional: se já tem links, dá um feedback
+      if (links.length) toast.message("Links registrados nas entregas.", { description: links[0] });
     } catch (e: any) {
       console.error("APPROVE_CREATOR_ERROR", e);
       toast.error(e?.message || "Erro ao aprovar creator.");
@@ -458,7 +592,6 @@ const CampaignView = () => {
   const quoteSubtotal = typeof req?.quote_subtotal === "number" ? req.quote_subtotal : req?.quote_subtotal ? Number(req.quote_subtotal) : null;
   const quoteDiscount = typeof req?.quote_discount === "number" ? req.quote_discount : req?.quote_discount ? Number(req.quote_discount) : null;
 
-  // lista de creators selecionados (pelo requirements)
   const selectedCreatorIds: string[] = Array.isArray(req?.selected_creator_ids)
     ? req.selected_creator_ids.filter((x: any) => typeof x === "string" && x.trim().length > 0)
     : [];
@@ -466,11 +599,12 @@ const CampaignView = () => {
   const creatorsCount =
     typeof req?.creators_needed === "number" ? req.creators_needed : req?.creators_needed ? Number(req.creators_needed) : null;
 
-  // requirements “para exibir” no contractor, mas sem IDs
   const contractorRequirementsEntries = Object.entries(req || {}).filter(([k]) => k !== "selected_creator_ids");
-
-  const valueEntries = contractorRequirementsEntries.filter(([k]) => VALUE_KEYS.has(k));
   const otherEntries = contractorRequirementsEntries.filter(([k]) => !VALUE_KEYS.has(k));
+
+  const creatorsToRender = Array.from(
+    new Set([...(selectedCreatorIds || []), ...(participants.map((p) => p.influencer_id) || [])])
+  );
 
   return (
     <MobileLayout title={campaign.title} showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
@@ -522,7 +656,6 @@ const CampaignView = () => {
           )}
         </motion.div>
 
-        {/* Tabs só contractor */}
         {isContractor && (
           <div className="glass-card p-2 flex items-center gap-2">
             <button
@@ -546,7 +679,6 @@ const CampaignView = () => {
           </div>
         )}
 
-        {/* Arquivos (contractor read-only) */}
         {isContractor && tab === "files" && (
           <CampaignFilesTab campaignId={String(id)} role="contractor" influencerAccepted={false} readOnly />
         )}
@@ -624,7 +756,6 @@ const CampaignView = () => {
               </div>
             )}
 
-            {/* Descrição pública */}
             {!!briefPublic && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -637,7 +768,7 @@ const CampaignView = () => {
               </div>
             )}
 
-            {/* Contractor: valores em bloco separado */}
+            {/* Valores (contractor) */}
             {isContractor && (
               <div className="glass-card p-4 border border-primary/15">
                 <div className="flex items-center justify-between">
@@ -667,7 +798,7 @@ const CampaignView = () => {
               </div>
             )}
 
-            {/* Contractor: Creators (aprovação individual) */}
+            {/* Creators selecionados + confirmações */}
             {isContractor && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -681,10 +812,10 @@ const CampaignView = () => {
                   </p>
 
                   <div className="mt-3 space-y-2">
-                    {(selectedCreatorIds.length ? selectedCreatorIds : participants.map((p) => p.influencer_id)).length === 0 ? (
+                    {creatorsToRender.length === 0 ? (
                       <div className="text-sm text-muted-foreground">Nenhum creator encontrado.</div>
                     ) : (
-                      Array.from(new Set([...(selectedCreatorIds || []), ...(participants.map((p) => p.influencer_id) || [])])).map((creatorId) => {
+                      creatorsToRender.map((creatorId) => {
                         const prof = creatorProfiles[creatorId];
                         const name = (prof?.display_name || prof?.name || "Creator").trim();
                         const ig = normalizeAt(prof?.instagram) || null;
@@ -692,15 +823,20 @@ const CampaignView = () => {
                         const p = participants.find((x) => x.influencer_id === creatorId);
                         const pStatus = p?.status || null;
 
-                        const d = deliverablesMap[creatorId];
-                        const dBadge = deliverableStatusLabel(d?.status || null);
+                        const d = deliverablesMap[creatorId] || null;
+                        const dBadge = deliverableStatusLabel((d?.status as any) || null);
+
+                        const confirmations = extractConfirmations(d);
+                        const links = extractLinks(d);
 
                         const canApprove = d?.status === "submitted" || d?.status === "changes_requested";
-
                         const isBusy = approvingCreatorId === creatorId;
 
+                        const checkedCount = confirmations.filter((c) => c.done).length;
+                        const totalCount = confirmations.length;
+
                         return (
-                          <div key={creatorId} className="rounded-2xl border border-border/50 bg-white/5 p-3">
+                          <div key={creatorId} className="rounded-2xl border border-border/50 bg-white/5 p-3 space-y-3">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="text-sm font-semibold text-foreground truncate">{name}</div>
@@ -715,6 +851,11 @@ const CampaignView = () => {
                                     <span className="text-[10px] px-2 py-1 rounded-full border border-accent/30 bg-accent/10 text-accent inline-flex items-center gap-1">
                                       <BadgeCheck className="w-3 h-3" />
                                       Aprovado
+                                    </span>
+                                  )}
+                                  {totalCount > 0 && (
+                                    <span className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
+                                      Confirmações: <b className="text-foreground">{checkedCount}</b>/{totalCount}
                                     </span>
                                   )}
                                 </div>
@@ -738,8 +879,52 @@ const CampaignView = () => {
                               </button>
                             </div>
 
+                            {/* Confirmações (o bloco que “sumiu”) */}
+                            {confirmations.length > 0 ? (
+                              <div className="rounded-2xl border border-border/50 bg-card/60 p-3">
+                                <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Confirmações do creator</div>
+                                <div className="space-y-1.5">
+                                  {confirmations.map((c) => (
+                                    <div key={c.key} className="flex items-center gap-2 text-sm">
+                                      {c.done ? (
+                                        <CheckSquare className="w-4 h-4 text-accent" />
+                                      ) : (
+                                        <Square className="w-4 h-4 text-muted-foreground" />
+                                      )}
+                                      <span className={c.done ? "text-foreground/85" : "text-muted-foreground"}>{c.label}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="rounded-2xl border border-border/40 bg-card/40 p-3 text-xs text-muted-foreground">
+                                Nenhuma confirmação foi registrada ainda (ou a tabela não possui esse campo).
+                              </div>
+                            )}
+
+                            {/* Links (se existirem) */}
+                            {links.length > 0 && (
+                              <div className="rounded-2xl border border-border/50 bg-card/60 p-3">
+                                <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Links de comprovação</div>
+                                <div className="space-y-1.5">
+                                  {links.slice(0, 5).map((url, idx) => (
+                                    <a
+                                      key={idx}
+                                      href={url}
+                                      target="_blank"
+                                      rel="noreferrer noopener"
+                                      className="text-xs text-primary underline inline-flex items-center gap-2 break-all"
+                                    >
+                                      <LinkIcon className="w-3.5 h-3.5" />
+                                      {url}
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
                             {d?.status === "changes_requested" && (
-                              <div className="mt-2 flex items-center gap-2 text-xs text-warning">
+                              <div className="flex items-center gap-2 text-xs text-warning">
                                 <XCircle className="w-4 h-4" />
                                 Ajustes solicitados — aguarde novo envio do creator.
                               </div>
@@ -756,7 +941,6 @@ const CampaignView = () => {
             {/* Conteúdo sensível bloqueado para invited */}
             {!isInvitedInfluencer && (
               <>
-                {/* Briefing completo */}
                 {isContractor && !!briefPrivate && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
@@ -769,7 +953,6 @@ const CampaignView = () => {
                   </div>
                 )}
 
-                {/* Requisitos (contractor) com labels traduzidos e sem IDs */}
                 {isContractor && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
@@ -778,31 +961,35 @@ const CampaignView = () => {
                     </div>
 
                     <div className="glass-card p-4">
-                      <div className="text-xs text-muted-foreground">
-                        Campos técnicos organizados (IDs ocultos no front). Para valores, veja o bloco “Valores”.
-                      </div>
+                      <div className="text-xs text-muted-foreground">Campos organizados (IDs ocultos). Para valores, veja o bloco “Valores”.</div>
 
                       <div className="mt-3 grid grid-cols-1 gap-2">
-                        {otherEntries
-                          .filter(([k]) => k && !VALUE_KEYS.has(k))
-                          .map(([k, v]) => {
-                            // não mostrar listas vazias/ruído
-                            if (Array.isArray(v) && v.filter(Boolean).length === 0) return null;
+                        {otherEntries.map(([k, v]) => {
+                          if (k === "selected_creator_ids") return null;
+                          if (VALUE_KEYS.has(k)) return null;
 
-                            const label = REQUIREMENTS_LABELS[k] || humanizeKey(k);
-                            const value =
-                              k === "format" ? formatLabel(String(v)) :
-                              k === "hashtags" ? (Array.isArray(v) ? v.filter(Boolean).join(", ") : String(v)) :
-                              k === "mentions" ? (Array.isArray(v) ? v.filter(Boolean).join(", ") : String(v)) :
-                              v;
+                          if (Array.isArray(v) && v.filter(Boolean).length === 0) return null;
 
-                            return (
-                              <div key={k} className="rounded-xl border border-border/50 bg-card/60 p-3">
-                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-                                <div className="mt-1 text-sm text-foreground/80 leading-relaxed">{typeof value === "string" ? value || "—" : (renderAny(value))}</div>
+                          const label = REQUIREMENTS_LABELS[k] || humanizeKey(k);
+
+                          const value =
+                            k === "format"
+                              ? formatLabel(String(v))
+                              : k === "hashtags"
+                                ? (Array.isArray(v) ? v.filter(Boolean).join(", ") : String(v))
+                                : k === "mentions"
+                                  ? (Array.isArray(v) ? v.filter(Boolean).join(", ") : String(v))
+                                  : v;
+
+                          return (
+                            <div key={k} className="rounded-xl border border-border/50 bg-card/60 p-3">
+                              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+                              <div className="mt-1 text-sm text-foreground/80 leading-relaxed">
+                                {typeof value === "string" ? value || "—" : renderAny(value)}
                               </div>
-                            );
-                          })}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -815,43 +1002,5 @@ const CampaignView = () => {
     </MobileLayout>
   );
 };
-
-// helper para renderizar qualquer coisa sem travar JSX
-function renderAny(v: any) {
-  if (v === null || v === undefined || v === "") return "—";
-  if (typeof v === "boolean") return v ? "Sim" : "Não";
-  if (typeof v === "number") return String(v);
-  if (typeof v === "string") return v;
-
-  if (Array.isArray(v)) {
-    if (v.length === 0) return "—";
-    return (
-      <ul className="mt-1 space-y-1">
-        {v.map((item: any, idx: number) => (
-          <li key={idx} className="text-sm text-foreground/75 leading-relaxed">
-            • {typeof item === "string" || typeof item === "number" ? String(item) : JSON.stringify(item)}
-          </li>
-        ))}
-      </ul>
-    );
-  }
-
-  if (typeof v === "object") {
-    const entries = Object.entries(v);
-    if (entries.length === 0) return "—";
-    return (
-      <div className="mt-2 grid grid-cols-1 gap-2">
-        {entries.map(([k, val]) => (
-          <div key={k} className="rounded-xl border border-border/50 bg-card/60 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</div>
-            <div className="mt-1 text-sm text-foreground/80 leading-relaxed">{renderAny(val)}</div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return String(v);
-}
 
 export default CampaignView;
