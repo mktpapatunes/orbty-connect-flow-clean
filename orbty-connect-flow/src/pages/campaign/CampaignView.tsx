@@ -90,15 +90,6 @@ const statusLabel = (s?: string | null) => {
   return s;
 };
 
-const participantStatusLabel = (s?: ParticipantStatus | null) => {
-  if (!s) return "—";
-  if (s === "invited") return "Convidado";
-  if (s === "confirmed") return "Confirmada";
-  if (s === "delivered") return "Entrega marcada";
-  if (s === "approved") return "Aprovada";
-  return s;
-};
-
 const getInitials = (name?: string | null) => {
   const n = (name || "").trim();
   if (!n) return "•";
@@ -161,7 +152,6 @@ const CampaignView = () => {
   const [creatorProfiles, setCreatorProfiles] = useState<Record<string, PublicProfileLite>>({});
   const [participants, setParticipants] = useState<Array<{ influencer_id: string; status: ParticipantStatus | null }>>([]);
 
-  // guardamos o mínimo e depois buscamos o detalhe ao abrir modal
   const [deliverablesMap, setDeliverablesMap] = useState<Record<string, DeliverablesRow>>({});
   const [approvingCreatorId, setApprovingCreatorId] = useState<string | null>(null);
 
@@ -301,7 +291,7 @@ const CampaignView = () => {
     fetchData();
   }, [authReady, userRole, id, user, isContractor, isInfluencer, navigate]);
 
-  // contractor: fetch creators + basic deliverables presence
+  // contractor: fetch creators + deliverables minimal
   useEffect(() => {
     const run = async () => {
       if (!isContractor || !id || !user || !campaign) return;
@@ -341,7 +331,6 @@ const CampaignView = () => {
         setCreatorProfiles({});
       }
 
-      // carregamos um "mapa" mínimo (tem row ou não)
       try {
         const { data: deliv, error: delivErr } = await supabase
           .from("campaign_creator_deliverables")
@@ -375,7 +364,7 @@ const CampaignView = () => {
     try {
       const { data, error } = await supabase
         .from("campaign_creator_deliverables")
-        .select("creator_id,status,checklist,links,notes,submitted_at,approved_at,updated_at")
+        .select("creator_id,checklist,links,notes,submitted_at,updated_at")
         .eq("campaign_id", id)
         .eq("creator_id", creatorId)
         .maybeSingle();
@@ -388,7 +377,7 @@ const CampaignView = () => {
       }
 
       if (!data) {
-        toast.message("Ainda não há entregas enviadas por este creator.");
+        toast.message("Este creator ainda não enviou entregas.");
         setDeliverableModalRow(null);
         return;
       }
@@ -409,7 +398,7 @@ const CampaignView = () => {
   const approveCreator = async (creatorId: string) => {
     if (!id) return;
 
-    if (!window.confirm("Confirmar revisão?\n\nUse apenas quando estiver tudo correto (entregas e comprovação).")) return;
+    if (!window.confirm("Confirmar entregas deste creator?\n\nUse apenas quando estiver tudo correto.")) return;
 
     setApprovingCreatorId(creatorId);
     try {
@@ -435,7 +424,7 @@ const CampaignView = () => {
 
       if (pErr) throw pErr;
 
-      toast.success("Revisão confirmada.");
+      toast.success("Entregas confirmadas.");
 
       setParticipants((prev) => prev.map((p) => (p.influencer_id === creatorId ? { ...p, status: "approved" } : p)));
       setDeliverablesMap((prev) => ({
@@ -448,19 +437,9 @@ const CampaignView = () => {
           updated_at: new Date().toISOString(),
         },
       }));
-
-      // Atualiza modal (se estiver aberto)
-      setDeliverableModalRow((prev) =>
-        prev && prev.creator_id === creatorId
-          ? { ...prev, status: "approved", approved_at: new Date().toISOString(), updated_at: new Date().toISOString() }
-          : prev
-      );
-
-      // fecha mantendo o scroll intacto
-      closeDeliverablesModal();
     } catch (e: any) {
       console.error("APPROVE_CREATOR_ERROR", e);
-      toast.error(e?.message || "Erro ao confirmar revisão.");
+      toast.error(e?.message || "Erro ao confirmar entregas.");
     } finally {
       setApprovingCreatorId(null);
     }
@@ -526,7 +505,7 @@ const CampaignView = () => {
 
   const creatorsToRender = Array.from(new Set([...(selectedCreatorIds || []), ...(participants.map((p) => p.influencer_id) || [])]));
 
-  // helpers modal
+  // modal helpers
   const modalCreatorProfile = deliverableModalCreatorId ? creatorProfiles[deliverableModalCreatorId] : null;
   const modalCreatorName = (modalCreatorProfile?.name || "Creator").trim();
   const modalCreatorIg = normalizeAt(modalCreatorProfile?.instagram) || null;
@@ -549,6 +528,15 @@ const CampaignView = () => {
       value: !!v,
     }));
   })();
+
+  // ✅ Agora: “Creators confirmados” = status confirmed/approved
+  // Fallback seguro: se não houver participant, mostramos mesmo assim (já que foi selecionado na criação),
+  // mas a expectativa é que confirmed/approved sejam os que aparecem.
+  const confirmedCreatorIds = creatorsToRender.filter((cid) => {
+    const p = participants.find((x) => x.influencer_id === cid);
+    if (!p) return true; // fallback (não quebra lista)
+    return p.status === "confirmed" || p.status === "approved";
+  });
 
   return (
     <MobileLayout title={campaign.title} showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
@@ -671,65 +659,54 @@ const CampaignView = () => {
               </div>
             )}
 
+            {/* ✅ Creators confirmados (compacto) */}
             {isContractor && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <ClipboardCheck className="w-4 h-4 text-primary" />
-                  <h4 className="font-semibold text-foreground text-sm">Creators selecionados</h4>
+                  <h4 className="font-semibold text-foreground text-sm">Creators confirmados</h4>
                 </div>
 
                 <div className="glass-card p-4">
-                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                    <ShieldCheck className="w-4 h-4" />
-                    A aprovação aqui é individual. Concluir a campanha (global) será outra etapa.
+                  <div className="text-xs text-muted-foreground flex items-start gap-2">
+                    <ShieldCheck className="w-4 h-4 mt-0.5" />
+                    Valide entregas por creator. O botão <b className="text-foreground">Confirmar</b> marca a revisão como concluída.
                   </div>
 
                   <div className="mt-4 space-y-2">
-                    {creatorsToRender.length === 0 ? (
-                      <div className="text-sm text-muted-foreground">Nenhum creator encontrado.</div>
+                    {confirmedCreatorIds.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">Nenhum creator confirmado ainda.</div>
                     ) : (
-                      creatorsToRender.map((creatorId) => {
+                      confirmedCreatorIds.map((creatorId) => {
                         const prof = creatorProfiles[creatorId] || null;
                         const name = (prof?.name || "—").trim();
                         const ig = normalizeAt(prof?.instagram) || null;
 
                         const p = participants.find((x) => x.influencer_id === creatorId);
-                        const pStatus = p?.status || null;
+                        const isApproved = p?.status === "approved";
 
-                        const isApproved = pStatus === "approved";
-                        const hasDeliverables = !!deliverablesMap[creatorId]; // row existe
+                        const hasDeliverables = !!deliverablesMap[creatorId];
                         const isBusy = approvingCreatorId === creatorId;
 
                         return (
                           <div key={creatorId} className="rounded-2xl border border-border/50 bg-white/5 p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-start gap-3 min-w-0">
-                                <div className="w-12 h-12 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center shrink-0">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center shrink-0">
                                   {prof?.avatar_url ? (
                                     <img src={prof.avatar_url} alt={name} className="w-full h-full object-cover" loading="lazy" />
                                   ) : (
-                                    <span className="text-xs font-bold text-primary">{getInitials(name)}</span>
+                                    <span className="text-[11px] font-bold text-primary">{getInitials(name)}</span>
                                   )}
                                 </div>
 
                                 <div className="min-w-0">
                                   <div className="text-sm font-semibold text-foreground truncate">{name}</div>
-                                  <div className="text-xs text-muted-foreground mt-0.5">
-                                    {ig ? `${ig} · ` : ""}
-                                    Participação: <span className="text-foreground/85">{participantStatusLabel(pStatus)}</span>
-                                  </div>
-
-                                  {isApproved && (
-                                    <div className="mt-2 inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-accent/30 bg-accent/10 text-accent">
-                                      <BadgeCheck className="w-3 h-3" />
-                                      Confirmado
-                                    </div>
-                                  )}
+                                  <div className="text-xs text-muted-foreground truncate">{ig || "—"}</div>
                                 </div>
                               </div>
 
-                              <div className="flex flex-col gap-2 shrink-0">
-                                {/* Entregas (abre modal) */}
+                              <div className="flex items-center gap-2 shrink-0">
                                 <button
                                   onClick={() => {
                                     if (!hasDeliverables) {
@@ -738,29 +715,25 @@ const CampaignView = () => {
                                     }
                                     openDeliverablesModal(creatorId);
                                   }}
-                                  className={`px-3 py-2 rounded-xl text-xs font-semibold border transition flex items-center justify-center gap-2 ${
+                                  className={`px-3 py-2 rounded-xl text-xs font-semibold border transition ${
                                     hasDeliverables
                                       ? "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground hover:bg-card/80"
                                       : "border-border/40 bg-card/50 text-muted-foreground/60 cursor-not-allowed"
                                   }`}
-                                  title={hasDeliverables ? "Ver entregas e confirmações" : "Ainda não há entregas"}
                                   disabled={!hasDeliverables}
+                                  title={hasDeliverables ? "Ver checklist/links/notas" : "Ainda sem entregas"}
                                 >
-                                  <ClipboardCheck className="w-4 h-4" />
                                   Entregas
                                 </button>
 
-                                {/* Arquivos (vai pro geral da campanha) */}
                                 <button
                                   onClick={() => setTabWithUrl("files")}
-                                  className="px-3 py-2 rounded-xl text-xs font-semibold border border-border/50 bg-card/60 text-muted-foreground hover:text-foreground hover:bg-card/80 transition flex items-center justify-center gap-2"
-                                  title="Ver arquivos e entregas (campanha)"
+                                  className="px-3 py-2 rounded-xl text-xs font-semibold border border-border/50 bg-card/60 text-muted-foreground hover:text-foreground hover:bg-card/80 transition"
+                                  title="Ver arquivos da campanha"
                                 >
-                                  <Eye className="w-4 h-4" />
-                                  Arquivos
+                                  Ver arquivos
                                 </button>
 
-                                {/* Confirmado (sem status) */}
                                 <button
                                   onClick={() => approveCreator(creatorId)}
                                   disabled={isApproved || isBusy}
@@ -769,20 +742,12 @@ const CampaignView = () => {
                                       ? "border-accent/30 bg-accent/10 text-accent"
                                       : "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
                                   } disabled:opacity-60`}
-                                  title={isApproved ? "Revisão já confirmada" : "Confirmar revisão (após conferir tudo)"}
+                                  title={isApproved ? "Revisão já confirmada" : "Confirmar entregas"}
                                 >
-                                  {isBusy ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : isApproved ? "Confirmado" : "Confirmar"}
+                                  {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : isApproved ? "Confirmado" : "Confirmar"}
                                 </button>
                               </div>
                             </div>
-
-                            {/* hint discreto */}
-                            {!hasDeliverables && (
-                              <div className="mt-2 text-[11px] text-muted-foreground flex items-start gap-2">
-                                <Info className="w-4 h-4 mt-0.5" />
-                                <span>A janela de entregas aparece quando o creator enviar confirmações/links/arquivos.</span>
-                              </div>
-                            )}
                           </div>
                         );
                       })
@@ -885,7 +850,7 @@ const CampaignView = () => {
         )}
       </div>
 
-      {/* ✅ MODAL ENTREGAS */}
+      {/* ✅ MODAL ENTREGAS (RESPONSIVO, SEM BOTÃO CONFIRMAR) */}
       <AnimatePresence>
         {deliverableModalOpen && isContractor && (
           <motion.div
@@ -894,156 +859,132 @@ const CampaignView = () => {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
             onMouseDown={(e) => {
-              // clique fora fecha (premium)
               if (e.target === e.currentTarget) closeDeliverablesModal();
             }}
           >
-            <motion.div
-              initial={{ opacity: 0, y: 18, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 18, scale: 0.98 }}
-              transition={{ type: "spring", stiffness: 260, damping: 22 }}
-              className="absolute left-1/2 top-1/2 w-[92%] max-w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-border/50 bg-background/95 shadow-2xl overflow-hidden"
-            >
-              {/* header */}
-              <div className="px-5 pt-5 pb-4 border-b border-border/40">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-xs text-muted-foreground uppercase tracking-widest">Entregas</div>
-                    <div className="mt-1 text-lg font-bold text-foreground truncate">{modalCreatorName}</div>
-                    {modalCreatorIg && <div className="text-xs text-muted-foreground mt-0.5">{modalCreatorIg}</div>}
-                  </div>
-
-                  <button
-                    onClick={closeDeliverablesModal}
-                    className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 transition flex items-center justify-center text-muted-foreground hover:text-foreground"
-                    title="Fechar"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* body */}
-              <div className="px-5 py-5 max-h-[70vh] overflow-auto space-y-4">
-                {deliverableModalLoading ? (
-                  <div className="flex justify-center py-10">
-                    <Loader2 className="w-6 h-6 text-primary animate-spin" />
-                  </div>
-                ) : !deliverableModalRow ? (
-                  <div className="text-center py-10">
-                    <FileText className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                    <div className="text-sm text-muted-foreground">Nenhuma entrega encontrada para este creator.</div>
-                  </div>
-                ) : (
-                  <>
-                    {/* checklist */}
-                    <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <ClipboardCheck className="w-4 h-4 text-primary" />
-                        <div className="text-sm font-semibold text-foreground">Confirmações</div>
-                      </div>
-
-                      {checklistEntries.length === 0 ? (
-                        <div className="text-sm text-muted-foreground">Nenhuma confirmação marcada.</div>
-                      ) : (
-                        <div className="space-y-2">
-                          {checklistEntries.map((it) => (
-                            <div
-                              key={it.key}
-                              className="flex items-center gap-2 rounded-xl border border-border/40 bg-white/5 px-3 py-2"
-                            >
-                              {it.value ? <CheckSquare className="w-4 h-4 text-accent" /> : <Square className="w-4 h-4 text-muted-foreground" />}
-                              <div className={`text-sm ${it.value ? "text-foreground/85" : "text-muted-foreground"}`}>{it.label}</div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+            <div className="fixed inset-0 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                className="w-full max-w-[560px] rounded-3xl border border-border/50 bg-background/95 shadow-2xl overflow-hidden"
+                style={{ maxHeight: "85vh" }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                {/* header */}
+                <div className="px-5 pt-5 pb-4 border-b border-border/40">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs text-muted-foreground uppercase tracking-widest">Entregas</div>
+                      <div className="mt-1 text-lg font-bold text-foreground truncate">{modalCreatorName}</div>
+                      {modalCreatorIg && <div className="text-xs text-muted-foreground mt-0.5">{modalCreatorIg}</div>}
                     </div>
 
-                    {/* links */}
-                    <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <LinkIcon className="w-4 h-4 text-accent" />
-                        <div className="text-sm font-semibold text-foreground">Links de comprovação</div>
-                      </div>
-
-                      {normalizedLinks.length === 0 ? (
-                        <div className="text-sm text-muted-foreground">Nenhum link enviado.</div>
-                      ) : (
-                        <div className="space-y-2">
-                          {normalizedLinks.map((url, idx) => (
-                            <button
-                              key={`${url}-${idx}`}
-                              onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
-                              className="w-full text-left rounded-xl border border-border/40 bg-white/5 px-3 py-2 hover:bg-white/10 transition"
-                              title="Abrir link"
-                            >
-                              <div className="text-sm text-foreground truncate">{url}</div>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* notes */}
-                    <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <FileText className="w-4 h-4 text-primary" />
-                        <div className="text-sm font-semibold text-foreground">Notas</div>
-                      </div>
-
-                      {deliverableModalRow.notes ? (
-                        <div className="text-sm text-foreground/80 whitespace-pre-line leading-relaxed">{deliverableModalRow.notes}</div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">Sem notas.</div>
-                      )}
-                    </div>
-
-                    {/* meta */}
-                    <div className="text-[11px] text-muted-foreground flex items-start gap-2">
-                      <Info className="w-4 h-4 mt-0.5" />
-                      <div>
-                        <div>Enviado: <span className="text-foreground/80">{formatDateTimeBR(deliverableModalRow.submitted_at)}</span></div>
-                        <div>Atualizado: <span className="text-foreground/80">{formatDateTimeBR(deliverableModalRow.updated_at)}</span></div>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* footer */}
-              <div className="px-5 py-4 border-t border-border/40 bg-background/80">
-                <div className="flex gap-2">
-                  <button
-                    onClick={closeDeliverablesModal}
-                    className="flex-1 py-3 rounded-2xl border border-border/50 bg-card/60 text-muted-foreground font-semibold text-sm hover:text-foreground hover:bg-card/80 transition"
-                  >
-                    Voltar
-                  </button>
-
-                  {deliverableModalCreatorId && (
                     <button
-                      onClick={() => approveCreator(deliverableModalCreatorId)}
-                      disabled={approvingCreatorId === deliverableModalCreatorId || participants.find((p) => p.influencer_id === deliverableModalCreatorId)?.status === "approved"}
-                      className="flex-1 py-3 rounded-2xl border border-primary/30 bg-primary/10 text-primary font-semibold text-sm hover:bg-primary/15 transition disabled:opacity-60"
-                      title="Confirmar revisão"
+                      onClick={closeDeliverablesModal}
+                      className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 transition flex items-center justify-center text-muted-foreground hover:text-foreground"
+                      title="Fechar"
                     >
-                      {approvingCreatorId === deliverableModalCreatorId ? (
-                        <span className="inline-flex items-center justify-center gap-2">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Confirmando...
-                        </span>
-                      ) : participants.find((p) => p.influencer_id === deliverableModalCreatorId)?.status === "approved" ? (
-                        "Confirmado"
-                      ) : (
-                        "Confirmar revisão"
-                      )}
+                      <X className="w-5 h-5" />
                     </button>
+                  </div>
+                </div>
+
+                {/* body (scroll interno) */}
+                <div className="px-5 py-5 overflow-auto" style={{ maxHeight: "calc(85vh - 84px)" }}>
+                  {deliverableModalLoading ? (
+                    <div className="flex justify-center py-10">
+                      <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                    </div>
+                  ) : !deliverableModalRow ? (
+                    <div className="text-center py-10">
+                      <FileText className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                      <div className="text-sm text-muted-foreground">Nenhuma entrega encontrada para este creator.</div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* checklist */}
+                      <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <ClipboardCheck className="w-4 h-4 text-primary" />
+                          <div className="text-sm font-semibold text-foreground">Confirmações</div>
+                        </div>
+
+                        {checklistEntries.length === 0 ? (
+                          <div className="text-sm text-muted-foreground">Nenhuma confirmação marcada.</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {checklistEntries.map((it) => (
+                              <div key={it.key} className="flex items-center gap-2 rounded-xl border border-border/40 bg-white/5 px-3 py-2">
+                                {it.value ? (
+                                  <CheckSquare className="w-4 h-4 text-accent" />
+                                ) : (
+                                  <Square className="w-4 h-4 text-muted-foreground" />
+                                )}
+                                <div className={`text-sm ${it.value ? "text-foreground/85" : "text-muted-foreground"}`}>{it.label}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* links */}
+                      <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <LinkIcon className="w-4 h-4 text-accent" />
+                          <div className="text-sm font-semibold text-foreground">Links de comprovação</div>
+                        </div>
+
+                        {normalizedLinks.length === 0 ? (
+                          <div className="text-sm text-muted-foreground">Nenhum link enviado.</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {normalizedLinks.map((url, idx) => (
+                              <button
+                                key={`${url}-${idx}`}
+                                onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+                                className="w-full text-left rounded-xl border border-border/40 bg-white/5 px-3 py-2 hover:bg-white/10 transition"
+                                title="Abrir link"
+                              >
+                                <div className="text-sm text-foreground truncate">{url}</div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* notes */}
+                      <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <FileText className="w-4 h-4 text-primary" />
+                          <div className="text-sm font-semibold text-foreground">Notas</div>
+                        </div>
+
+                        {deliverableModalRow.notes ? (
+                          <div className="text-sm text-foreground/80 whitespace-pre-line leading-relaxed">{deliverableModalRow.notes}</div>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">Sem notas.</div>
+                        )}
+                      </div>
+
+                      {/* meta discreto */}
+                      <div className="text-[11px] text-muted-foreground flex items-start gap-2">
+                        <Info className="w-4 h-4 mt-0.5" />
+                        <div>
+                          <div>
+                            Enviado: <span className="text-foreground/80">{formatDateTimeBR(deliverableModalRow.submitted_at)}</span>
+                          </div>
+                          <div>
+                            Atualizado: <span className="text-foreground/80">{formatDateTimeBR(deliverableModalRow.updated_at)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
-            </motion.div>
+              </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
