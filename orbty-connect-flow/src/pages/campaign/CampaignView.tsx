@@ -405,8 +405,7 @@ const CampaignView = () => {
 
     const items: TimelineItem[] = [];
 
-    const isClusterable = (t: CampaignTimelineRow) =>
-      t.event_type === "application.submitted" || t.event_type === "application.accepted" || t.event_type === "application.rejected";
+    const isClusterable = (t: CampaignTimelineRow) => t.event_type === "application.submitted" || t.event_type === "application.accepted" || t.event_type === "application.rejected";
 
     let i = 0;
     while (i < events.length) {
@@ -532,6 +531,7 @@ const CampaignView = () => {
     }
   }, [id, user]);
 
+  // ✅ FIX 2: fetch role-aware (contractor e influencer)
   useEffect(() => {
     const fetchData = async () => {
       if (!id || !user) {
@@ -539,26 +539,57 @@ const CampaignView = () => {
         return;
       }
 
-      // Campanha fechada:
-      // - contractor vê aqui
-      // - creator selecionado vê em /campanha-detalhe/:id
-      if (!isContractor) {
-        navigate(`/campanha-detalhe/${id}`, { replace: true });
-        return;
-      }
-
       setIsLoading(true);
 
       try {
+        // ===== CONTRACTOR =====
+        if (isContractor) {
+          const { data: campaignData, error: campaignError } = await supabase
+            .from("campaigns")
+            .select("*")
+            .eq("id", id)
+            .eq("created_by", user.id)
+            .neq("status", "deleted")
+            .maybeSingle();
+
+          if (campaignError) console.error("CAMPAIGNVIEW_CONTRACTOR_FETCH_ERROR", campaignError);
+
+          setCampaign((campaignData ?? null) as unknown as PublicCampaignFeed);
+          return;
+        }
+
+        // ===== INFLUENCER =====
+        // 1) valida se existe convite/participação
+        const { data: cp, error: cpErr } = await supabase
+          .from("campaign_participants")
+          .select("status")
+          .eq("campaign_id", id)
+          .eq("influencer_id", user.id)
+          .maybeSingle();
+
+        if (cpErr) console.error("CAMPAIGNVIEW_INFLUENCER_CP_ERROR", cpErr);
+
+        // sem participação -> sem acesso
+        if (!cp) {
+          setCampaign(null);
+          return;
+        }
+
+        // se já confirmou/entregou/aprovou, manda pro detalhe
+        if (cp.status && cp.status !== "invited") {
+          navigate(`/campanha-detalhe/${id}`, { replace: true });
+          return;
+        }
+
+        // 2) invited -> carrega a campanha para confirmar
         const { data: campaignData, error: campaignError } = await supabase
           .from("campaigns")
           .select("*")
           .eq("id", id)
-          .eq("created_by", user.id)
           .neq("status", "deleted")
           .maybeSingle();
 
-        if (campaignError) console.error("CAMPAIGNVIEW_CONTRACTOR_FETCH_ERROR", campaignError);
+        if (campaignError) console.error("CAMPAIGNVIEW_INFLUENCER_FETCH_ERROR", campaignError);
 
         setCampaign((campaignData ?? null) as unknown as PublicCampaignFeed);
       } catch (e) {
@@ -677,7 +708,12 @@ const CampaignView = () => {
               </div>
             </div>
 
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 gap-3">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="grid grid-cols-2 gap-3"
+            >
               <div className="rounded-xl border border-border/50 bg-card/60 p-4 col-span-2">
                 <div className="flex items-center gap-2 mb-2">
                   <Calendar className="w-4 h-4 text-accent" />
@@ -925,10 +961,14 @@ const CampaignView = () => {
                                 <span className="truncate">
                                   {isSearchMode
                                     ? highlight(
-                                        `${ev.influencer_name || "Creator"}${normalizeAt(ev.influencer_instagram) ? ` · ${normalizeAt(ev.influencer_instagram)}` : ""}`,
+                                        `${ev.influencer_name || "Creator"}${
+                                          normalizeAt(ev.influencer_instagram) ? ` · ${normalizeAt(ev.influencer_instagram)}` : ""
+                                        }`,
                                         searchTerm
                                       )
-                                    : `${ev.influencer_name || "Creator"}${normalizeAt(ev.influencer_instagram) ? ` · ${normalizeAt(ev.influencer_instagram)}` : ""}`}
+                                    : `${ev.influencer_name || "Creator"}${
+                                        normalizeAt(ev.influencer_instagram) ? ` · ${normalizeAt(ev.influencer_instagram)}` : ""
+                                      }`}
                                 </span>
                               </button>
                             )}
