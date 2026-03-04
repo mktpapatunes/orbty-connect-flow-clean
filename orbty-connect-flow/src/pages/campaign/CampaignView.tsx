@@ -71,7 +71,7 @@ const CampaignView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { id } = useParams();
-  const { user, userRole } = useAuth();
+  const { user, userRole, authReady } = useAuth();
 
   const [campaign, setCampaign] = useState<PublicCampaignFeed | null>(null);
 
@@ -534,6 +534,9 @@ const CampaignView = () => {
   // ✅ FIX 2: fetch role-aware (contractor e influencer)
   useEffect(() => {
     const fetchData = async () => {
+
+      if (!authReady || userRole === undefined) return;
+      
       if (!id || !user) {
         setIsLoading(false);
         return;
