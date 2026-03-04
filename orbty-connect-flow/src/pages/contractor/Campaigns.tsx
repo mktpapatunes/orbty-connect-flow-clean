@@ -10,6 +10,11 @@ import {
   Loader2,
   Calendar,
   BadgeCheck,
+  Ban,
+  AlertTriangle,
+  Trash2,
+  Zap,
+  TrendingUp,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -32,6 +37,7 @@ const ContractorCampaigns = () => {
   const [campaigns, setCampaigns] = useState<MyCampaignRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [bucket, setBucket] = useState<Bucket>("active");
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const formatDateBR = (value?: string | null) => {
     if (!value) return "-";
@@ -52,7 +58,7 @@ const ContractorCampaigns = () => {
     });
 
     if (!error && data) {
-      // Remover completamente do front tudo que estiver marcado como deleted
+      // Excluídas não devem aparecer em nenhum lugar do front
       const rows = (data as unknown as MyCampaignRow[]).filter(
         (c) => c.bucket !== "deleted"
       );
@@ -69,17 +75,69 @@ const ContractorCampaigns = () => {
     fetchCampaigns();
   }, [fetchCampaigns]);
 
+  const runAction = async (campaignId: string, action: "complete" | "delete") => {
+    const confirmText =
+      action === "delete"
+        ? "Tem certeza que deseja excluir esta campanha? Ela será removida da sua lista."
+        : "Marcar como CONCLUÍDA? Use quando tudo foi entregue corretamente.";
+
+    if (!window.confirm(confirmText)) return;
+
+    setUpdatingId(campaignId);
+
+    try {
+      const fn =
+        action === "complete"
+          ? "contractor_mark_campaign_completed"
+          : "contractor_delete_campaign";
+
+      const { error } = await supabase.rpc(fn as any, { p_campaign_id: campaignId });
+
+      if (error) {
+        const msg = (error.message || "").toLowerCase();
+        const looksLikeCache =
+          msg.includes("schema cache") ||
+          msg.includes("could not find the function") ||
+          msg.includes("does not exist");
+
+        if (looksLikeCache) {
+          toast.error(
+            "Função ainda não apareceu no cache do Supabase. Supabase → Settings → API → Reload schema cache, ou hard refresh (Ctrl+Shift+R)."
+          );
+          console.error("RPC_SCHEMA_CACHE_ERROR", error);
+          return;
+        }
+        throw error;
+      }
+
+      if (action === "complete") toast.success("Campanha marcada como concluída.");
+      if (action === "delete") toast.success("Campanha excluída.");
+
+      await fetchCampaigns();
+    } catch (e: any) {
+      console.error("CAMPAIGN_ACTION_ERROR", e);
+      toast.error(e?.message || "Erro ao atualizar campanha.");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const groups = useMemo(() => {
     const active = campaigns.filter((c) => c.bucket === "active");
     const completed = campaigns.filter((c) => c.bucket === "completed");
-    return { active, completed };
+
+    // As demais (closed_manual / closed_expired / draft / etc.) continuam existindo,
+    // mas sem abas dedicadas (vão aparecer em "Todas")
+    const total = campaigns.length;
+
+    return { active, completed, total };
   }, [campaigns]);
 
   const list = useMemo(() => {
-    if (bucket === "active") return groups.active;
-    if (bucket === "completed") return groups.completed;
-    return campaigns;
-  }, [bucket, campaigns, groups]);
+    if (bucket === "active") return campaigns.filter((c) => c.bucket === "active");
+    if (bucket === "completed") return campaigns.filter((c) => c.bucket === "completed");
+    return campaigns; // todas, exceto deleted (já filtrado no fetch)
+  }, [bucket, campaigns]);
 
   const sortedList = useMemo(() => {
     const copy = [...list];
@@ -91,10 +149,34 @@ const ContractorCampaigns = () => {
     return copy;
   }, [list]);
 
+  const stats = [
+    {
+      label: "Ativas",
+      value: String(groups.active.length),
+      icon: Zap,
+      tone: "text-primary",
+      ring: "border-primary/25 bg-primary/10",
+    },
+    {
+      label: "Concluídas",
+      value: String(groups.completed.length),
+      icon: BadgeCheck,
+      tone: "text-accent",
+      ring: "border-accent/25 bg-accent/10",
+    },
+    {
+      label: "Total",
+      value: String(groups.total),
+      icon: TrendingUp,
+      tone: "text-foreground",
+      ring: "border-border/50 bg-card/60",
+    },
+  ];
+
   const tabs = [
     { key: "active" as const, label: `Ativas (${groups.active.length})` },
     { key: "completed" as const, label: `Concluídas (${groups.completed.length})` },
-    { key: "all" as const, label: `Todas (${campaigns.length})` },
+    { key: "all" as const, label: `Todas (${groups.total})` },
   ];
 
   const bucketTitle =
@@ -104,42 +186,114 @@ const ContractorCampaigns = () => {
         ? "Campanhas concluídas"
         : "Todas as campanhas";
 
+  const getStatusPill = (c: MyCampaignRow) => {
+    if (c.bucket === "completed") {
+      return (
+        <span className="text-[10px] px-2 py-0.5 rounded-full border border-accent/50 bg-accent/15 text-accent font-medium flex items-center gap-1">
+          <BadgeCheck className="w-3 h-3" />
+          Concluída
+        </span>
+      );
+    }
+
+    if (c.bucket === "closed_manual") {
+      return (
+        <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground font-medium flex items-center gap-1">
+          <Ban className="w-3 h-3" />
+          Encerrada
+        </span>
+      );
+    }
+
+    if (c.bucket === "closed_expired") {
+      return (
+        <span className="text-[10px] px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning font-medium flex items-center gap-1">
+          <AlertTriangle className="w-3 h-3" />
+          Vencida
+        </span>
+      );
+    }
+
+    if (c.bucket === "draft") {
+      return (
+        <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground font-medium">
+          Rascunho
+        </span>
+      );
+    }
+
+    return null;
+  };
+
+  const menuItems = [
+    {
+      icon: Users,
+      label: "Histórico",
+      description: "Campanhas finalizadas e informações anteriores",
+      route: "/historico",
+    },
+  ];
+
   return (
     <MobileLayout title="Minhas campanhas" navType="contractor">
       <div className="px-6 py-6 space-y-6">
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <p className="text-muted-foreground text-xs uppercase tracking-widest mb-1">
-            Painel do contratante
-          </p>
-          <h2 className="font-display text-2xl font-bold text-foreground">
-            Minhas <span className="text-gradient-neon">campanhas</span>
-          </h2>
+        {/* Header premium */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-end justify-between gap-3"
+        >
+          <div>
+            <p className="text-muted-foreground text-xs uppercase tracking-widest mb-1">
+              Painel do contratante
+            </p>
+            <h2 className="font-display text-2xl font-bold text-foreground">
+              Minhas <span className="text-gradient-neon">campanhas</span>
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Gerencie suas campanhas com controle e clareza.
+            </p>
+          </div>
+
+          <button
+            onClick={() => navigate("/criar-campanha")}
+            className="shrink-0 h-10 px-4 rounded-xl bg-gradient-neon text-primary-foreground text-xs font-semibold glow-blue flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Nova
+          </button>
         </motion.div>
 
         {isLoading ? (
-          <div className="flex justify-center py-8">
+          <div className="flex justify-center py-10">
             <Loader2 className="w-6 h-6 text-primary animate-spin" />
           </div>
         ) : (
           <>
-            {/* CTA criar */}
-            <motion.button
+            {/* Stats principais (mantido, mas alinhado às novas abas) */}
+            <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => navigate("/criar-campanha")}
-              className="w-full py-4 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue transition-all flex items-center justify-center gap-2.5"
+              transition={{ delay: 0.08 }}
+              className="grid grid-cols-3 gap-3"
             >
-              <Plus className="w-5 h-5" />
-              Nova campanha
-            </motion.button>
+              {stats.map((stat) => (
+                <div
+                  key={stat.label}
+                  className={`glass-card p-4 flex flex-col items-center text-center gap-2 border ${stat.ring}`}
+                >
+                  <stat.icon className={`w-5 h-5 ${stat.tone}`} />
+                  <span className="font-display font-bold text-xl text-foreground">{stat.value}</span>
+                  <span className="text-[10px] text-muted-foreground leading-tight">{stat.label}</span>
+                </div>
+              ))}
+            </motion.div>
 
+            {/* Dica (mantido) */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.18 }}
+              transition={{ delay: 0.14 }}
               className="glass-card p-4 flex items-start gap-3"
             >
               <Sparkles className="w-4 h-4 text-accent shrink-0 mt-0.5" />
@@ -149,16 +303,16 @@ const ContractorCampaigns = () => {
               </p>
             </motion.div>
 
-            {/* Tabs */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            {/* Tabs premium (somente 3) */}
+            <div className="glass-card p-2 flex items-center gap-2">
               {tabs.map((t) => (
                 <button
                   key={t.key}
                   onClick={() => setBucket(t.key)}
-                  className={`px-4 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
                     bucket === t.key
-                      ? "bg-primary/10 text-primary border border-primary/30"
-                      : "bg-card text-muted-foreground border border-border/50"
+                      ? "bg-primary/12 text-primary border border-primary/25"
+                      : "bg-transparent text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {t.label}
@@ -168,28 +322,43 @@ const ContractorCampaigns = () => {
 
             {/* Lista */}
             <div className="space-y-2">
-              <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
-                {bucketTitle}
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
+                  {bucketTitle}
+                </p>
+
+                <button
+                  onClick={fetchCampaigns}
+                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  title="Atualizar lista"
+                >
+                  Atualizar
+                </button>
+              </div>
 
               {sortedList.length === 0 ? (
-                <div className="py-10 text-center">
+                <div className="py-12 text-center glass-card">
                   <Users className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground">
-                    Nenhuma campanha nessa aba.
-                  </p>
+                  <p className="text-sm text-muted-foreground">Nenhuma campanha nessa aba.</p>
+                  <button
+                    onClick={() => navigate("/criar-campanha")}
+                    className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-card border border-border/50 text-xs text-foreground hover:border-primary/30 transition-colors"
+                  >
+                    <Plus className="w-4 h-4 text-primary" />
+                    Criar campanha
+                  </button>
                 </div>
               ) : (
                 sortedList.map((campaign, i) => {
+                  const isBusy = updatingId === campaign.id;
                   const eventDate = campaign.campaign_date ?? null;
-                  const isCompleted = campaign.bucket === "completed";
 
                   return (
                     <motion.div
                       key={campaign.id}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.06 + i * 0.05 }}
+                      transition={{ delay: 0.08 + i * 0.05 }}
                       className="glass-card-hover p-4"
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -199,12 +368,7 @@ const ContractorCampaigns = () => {
                               {campaign.title}
                             </h4>
 
-                            {isCompleted && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full border border-accent/50 bg-accent/15 text-accent font-medium flex items-center gap-1">
-                                <BadgeCheck className="w-3 h-3" />
-                                Concluída
-                              </span>
-                            )}
+                            {getStatusPill(campaign)}
                           </div>
 
                           <p className="text-[10px] text-muted-foreground mt-1">
@@ -237,15 +401,60 @@ const ContractorCampaigns = () => {
                       <div className="mt-3 pt-3 border-t border-border/30 flex gap-2">
                         <button
                           onClick={() => navigate(`/campanha/${campaign.id}`)}
-                          className="w-full py-2.5 rounded-xl border border-border/50 text-muted-foreground font-medium text-xs hover:text-foreground transition-colors"
+                          className="flex-1 py-2.5 rounded-xl border border-border/50 text-muted-foreground font-medium text-xs hover:text-foreground transition-colors"
                         >
                           Ver
+                        </button>
+
+                        {(campaign.bucket === "active" ||
+                          campaign.bucket === "closed_manual" ||
+                          campaign.bucket === "closed_expired") && (
+                          <button
+                            onClick={() => runAction(campaign.id, "complete")}
+                            disabled={isBusy}
+                            className="flex-1 py-2.5 rounded-xl border border-accent/30 bg-accent/10 text-accent font-semibold text-xs disabled:opacity-60"
+                          >
+                            Concluir
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => runAction(campaign.id, "delete")}
+                          disabled={isBusy}
+                          className="w-11 py-2.5 rounded-xl border border-destructive/30 bg-destructive/5 text-destructive font-semibold text-xs flex items-center justify-center disabled:opacity-60"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </motion.div>
                   );
                 })
               )}
+            </div>
+
+            {/* Menu inferior (mantém o que não foi pedido pra remover; removeu Meu perfil) */}
+            <div className="space-y-3">
+              {menuItems.map((item, i) => (
+                <motion.button
+                  key={item.label}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.22 + i * 0.08 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => navigate(item.route)}
+                  className="w-full glass-card-hover p-5 flex items-center gap-4 text-left group"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-gradient-neon-subtle flex items-center justify-center shrink-0">
+                    <item.icon className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-foreground text-sm">{item.label}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                </motion.button>
+              ))}
             </div>
           </>
         )}
