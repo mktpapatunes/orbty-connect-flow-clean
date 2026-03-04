@@ -1,4 +1,3 @@
-// src/pages/campaign/CampaignView.tsx
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
@@ -61,16 +60,13 @@ type TimelineItem =
       key: string;
     };
 
-type RenderItem =
-  | { kind: "day"; key: string; label: string; isSearchMode?: boolean }
-  | TimelineItem;
+type RenderItem = { kind: "day"; key: string; label: string; isSearchMode?: boolean } | TimelineItem;
 
 type SearchSuggestion = { key: string; label: string; value: string };
 
 type TabKey = "details" | "history" | "files";
 
-// status do participante (lado influencer)
-type ParticipantStatus = "invited" | "confirmed" | "delivered" | "approved" | string;
+type ParticipantStatus = "invited" | "confirmed" | "delivered" | "approved";
 
 const CampaignView = () => {
   const navigate = useNavigate();
@@ -95,8 +91,8 @@ const CampaignView = () => {
 
   const [onlyTop, setOnlyTop] = useState(false);
 
-  // ✅ estado do convite/participação (influencer)
-  const [participantStatus, setParticipantStatus] = useState<ParticipantStatus | null>(null);
+  // ✅ status do convite/participação do usuário atual
+  const [myParticipationStatus, setMyParticipationStatus] = useState<ParticipantStatus | null>(null);
   const [confirming, setConfirming] = useState(false);
 
   const isContractor = userRole === "contractor";
@@ -541,40 +537,42 @@ const CampaignView = () => {
     }
   }, [id, user]);
 
-  // ✅ confirmar participação (front)
+  // ✅ confirmação REAL: muda campaign_participants.status -> confirmed
   const confirmParticipation = useCallback(async () => {
     if (!id || !user) return;
-    if (confirming) return;
+    if (!isInfluencer) return;
 
     setConfirming(true);
     try {
-      const { data, error } = await supabase.rpc("influencer_confirm_participation" as any, {
-        p_campaign_id: id,
-      });
+      const { error } = await supabase
+        .from("campaign_participants")
+        .update({
+          status: "confirmed",
+          confirmed_at: new Date().toISOString(),
+        })
+        .eq("campaign_id", id)
+        .eq("influencer_id", user.id);
 
       if (error) {
-        console.error("INFLUENCER_CONFIRM_RPC_ERROR", error);
-        toast.error(error.message || "Não foi possível confirmar.");
-        return;
-      }
-
-      if (!data?.ok) {
-        toast.error(data?.message || "Não foi possível confirmar.");
+        console.error("CONFIRM_PARTICIPATION_ERROR", error);
+        toast.error(error.message || "Não foi possível confirmar sua participação.");
         return;
       }
 
       toast.success("Participação confirmada!");
-      setParticipantStatus("confirmed");
+      setMyParticipationStatus("confirmed");
+
+      // vai pro detalhe (onde não tem mais CTA de confirmar)
       navigate(`/campanha-detalhe/${id}`, { replace: true });
     } catch (e: any) {
-      console.error("INFLUENCER_CONFIRM_EXCEPTION", e);
-      toast.error(e?.message || "Erro ao confirmar.");
+      console.error("CONFIRM_PARTICIPATION_EXCEPTION", e);
+      toast.error(e?.message || "Erro ao confirmar participação.");
     } finally {
       setConfirming(false);
     }
-  }, [id, user, confirming, navigate]);
+  }, [id, user, isInfluencer, navigate]);
 
-  // ✅ FIX 2 + mantém status do participante
+  // ✅ FIX 2 (role-aware): contractor vê a própria; influencer vê se tiver participação
   useEffect(() => {
     const fetchData = async () => {
       if (!authReady || userRole === undefined) return;
@@ -589,8 +587,6 @@ const CampaignView = () => {
       try {
         // ===== CONTRACTOR =====
         if (isContractor) {
-          setParticipantStatus(null);
-
           const { data: campaignData, error: campaignError } = await supabase
             .from("campaigns")
             .select("*")
@@ -602,10 +598,12 @@ const CampaignView = () => {
           if (campaignError) console.error("CAMPAIGNVIEW_CONTRACTOR_FETCH_ERROR", campaignError);
 
           setCampaign((campaignData ?? null) as unknown as PublicCampaignFeed);
+          setMyParticipationStatus(null);
           return;
         }
 
         // ===== INFLUENCER =====
+        // 1) valida convite/participação
         const { data: cp, error: cpErr } = await supabase
           .from("campaign_participants")
           .select("status")
@@ -616,21 +614,21 @@ const CampaignView = () => {
         if (cpErr) console.error("CAMPAIGNVIEW_INFLUENCER_CP_ERROR", cpErr);
 
         if (!cp) {
-          setParticipantStatus(null);
           setCampaign(null);
+          setMyParticipationStatus(null);
           return;
         }
 
-        const st = (cp as any)?.status as ParticipantStatus | null;
-        setParticipantStatus(st ?? null);
+        const pStatus = (cp.status as ParticipantStatus) || null;
+        setMyParticipationStatus(pStatus);
 
         // se já confirmou/entregou/aprovou -> manda pro detalhe
-        if (st && st !== "invited") {
+        if (pStatus && pStatus !== "invited") {
           navigate(`/campanha-detalhe/${id}`, { replace: true });
           return;
         }
 
-        // invited -> carrega campanha pra confirmar
+        // 2) invited -> carrega campanha
         const { data: campaignData, error: campaignError } = await supabase
           .from("campaigns")
           .select("*")
@@ -643,15 +641,15 @@ const CampaignView = () => {
         setCampaign((campaignData ?? null) as unknown as PublicCampaignFeed);
       } catch (e) {
         console.error("CAMPAIGNVIEW_UNEXPECTED_ERROR", e);
-        setParticipantStatus(null);
         setCampaign(null);
+        setMyParticipationStatus(null);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchData();
-  }, [authReady, userRole, id, user, isContractor, navigate]);
+  }, [authReady, userRole, id, user, isContractor, isInfluencer, navigate]);
 
   useEffect(() => {
     if (tab === "history") fetchTimeline();
@@ -668,8 +666,6 @@ const CampaignView = () => {
 
   const backTo = isContractor ? "/dashboard-contratante" : "/dashboard-influenciadora";
   const navType = isContractor ? "contractor" : "influencer";
-
-  const influencerCanConfirm = isInfluencer && participantStatus === "invited";
 
   if (isLoading) {
     return (
@@ -698,35 +694,36 @@ const CampaignView = () => {
     { key: "status" as const, label: "Status" },
   ];
 
+  const shouldShowInfluencerConfirmCta = isInfluencer && myParticipationStatus === "invited";
+
   return (
     <MobileLayout title={campaign.title} showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
       <div className="px-6 py-6 space-y-4">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium capitalize">
-              {(campaign as any)?.type}
-            </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium">
-              {(campaign as any)?.status || "—"}
-            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium capitalize">{campaign.type}</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium">{(campaign as any)?.status || "—"}</span>
           </div>
 
           <h2 className="font-display text-2xl font-bold text-foreground">{campaign.title}</h2>
 
-          {/* ✅ CTA influencer confirmar */}
-          {influencerCanConfirm && (
+          {/* ✅ CTA do influencer para confirmar DE VERDADE */}
+          {shouldShowInfluencerConfirmCta && (
             <div className="mt-4">
               <button
                 type="button"
                 onClick={confirmParticipation}
                 disabled={confirming}
-                className="w-full py-3.5 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue flex items-center justify-center gap-2 disabled:opacity-70"
+                className={`w-full py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
+                  confirming ? "bg-secondary text-muted-foreground" : "bg-gradient-neon text-primary-foreground glow-blue"
+                }`}
               >
                 {confirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                 {confirming ? "Confirmando..." : "Confirmar participação"}
               </button>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Após confirmar, a campanha aparece como <b className="text-foreground">Confirmada</b> em “Minhas campanhas”.
+              <p className="text-[11px] text-muted-foreground mt-2">
+                Ao confirmar, a campanha sai de <span className="text-foreground font-medium">Convite</span> e vai para{" "}
+                <span className="text-foreground font-medium">Confirmada</span>.
               </p>
             </div>
           )}
@@ -775,26 +772,19 @@ const CampaignView = () => {
                 <div>
                   <p className="text-xs text-muted-foreground">Região</p>
                   <p className="text-sm font-medium text-foreground">
-                    {(campaign as any)?.city}, {(campaign as any)?.state}
+                    {campaign.city}, {campaign.state}
                   </p>
                 </div>
               </div>
             </div>
 
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="grid grid-cols-2 gap-3"
-            >
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-border/50 bg-card/60 p-4 col-span-2">
                 <div className="flex items-center gap-2 mb-2">
                   <Calendar className="w-4 h-4 text-accent" />
                   <p className="text-xs text-muted-foreground uppercase tracking-wider">Data do evento</p>
                 </div>
-                <p className="text-sm font-semibold text-foreground">
-                  {(campaign as any)?.campaign_date ? formatDateBR((campaign as any)?.campaign_date) : "A definir"}
-                </p>
+                <p className="text-sm font-semibold text-foreground">{campaign.campaign_date ? formatDateBR(campaign.campaign_date) : "A definir"}</p>
               </div>
             </motion.div>
 
@@ -803,7 +793,7 @@ const CampaignView = () => {
                 <FileText className="w-4 h-4 text-primary" />
                 <h4 className="font-semibold text-foreground text-sm">Descrição</h4>
               </div>
-              <p className="text-sm text-foreground/70 leading-relaxed glass-card p-4">{(campaign as any)?.brief_public}</p>
+              <p className="text-sm text-foreground/70 leading-relaxed glass-card p-4">{campaign.brief_public}</p>
             </div>
           </>
         )}
@@ -924,53 +914,9 @@ const CampaignView = () => {
               </div>
             </div>
 
-            {isSearchMode && topMatches.length > 0 && (
-              <div className="glass-card p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className="w-4 h-4 text-accent" />
-                  <p className="text-xs text-muted-foreground uppercase tracking-widest">Top matches</p>
-                </div>
-
-                <div className="space-y-2">
-                  {topMatches.map((ev) => {
-                    const Icon = timelineIconFor(ev);
-                    const title = timelineTitleFor(ev);
-                    const sub = timelineSubFor(ev);
-
-                    return (
-                      <div key={`top-${ev.event_id}`} className="rounded-xl border border-border/50 bg-card/60 px-3 py-2 flex items-start gap-2">
-                        <Icon className="w-4 h-4 text-primary mt-0.5" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-foreground">{highlight(title, searchTerm)}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
-
-                          {ev.influencer_id && (
-                            <button
-                              type="button"
-                              onClick={() => goToPublicProfile(ev.influencer_id)}
-                              className="mt-2 inline-flex items-center gap-2 text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground hover:text-foreground transition"
-                              title="Ver perfil público"
-                            >
-                              <UserIcon className="w-3 h-3" />
-                              Ver perfil
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
             {timelineLoading ? (
               <div className="flex justify-center py-10">
                 <Loader2 className="w-6 h-6 text-primary animate-spin" />
-              </div>
-            ) : timelineRenderItems.length === 0 ? (
-              <div className="py-10 text-center">
-                <History className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground">Nenhum evento encontrado.</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -991,13 +937,11 @@ const CampaignView = () => {
                     const Icon = timelineIconFor(ev);
 
                     const isPositive = ev.event_type === "application.accepted" || (ev.event_type === "campaign.status_changed" && ev.to_status === "completed");
-
                     const isNegative =
                       ev.event_type === "application.rejected" ||
                       (ev.event_type === "campaign.status_changed" && (ev.to_status === "deleted" || ev.to_status === "closed_expired"));
 
                     const avatarName = ev.event_type === "application.submitted" ? ev.influencer_name : ev.actor_name;
-
                     const titleRaw = timelineTitleFor(ev);
 
                     return (
@@ -1005,11 +949,7 @@ const CampaignView = () => {
                         <div className="flex items-start gap-3">
                           <div
                             className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
-                              isPositive
-                                ? "bg-accent/10 border-accent/25"
-                                : isNegative
-                                  ? "bg-destructive/10 border-destructive/25"
-                                  : "bg-primary/10 border-primary/25"
+                              isPositive ? "bg-accent/10 border-accent/25" : isNegative ? "bg-destructive/10 border-destructive/25" : "bg-primary/10 border-primary/25"
                             }`}
                             title={avatarName || ""}
                           >
@@ -1038,12 +978,7 @@ const CampaignView = () => {
                               >
                                 <UserIcon className="w-3 h-3" />
                                 <span className="truncate">
-                                  {isSearchMode
-                                    ? highlight(
-                                        `${ev.influencer_name || "Creator"}${normalizeAt(ev.influencer_instagram) ? ` · ${normalizeAt(ev.influencer_instagram)}` : ""}`,
-                                        searchTerm
-                                      )
-                                    : `${ev.influencer_name || "Creator"}${normalizeAt(ev.influencer_instagram) ? ` · ${normalizeAt(ev.influencer_instagram)}` : ""}`}
+                                  {`${ev.influencer_name || "Creator"}${normalizeAt(ev.influencer_instagram) ? ` · ${normalizeAt(ev.influencer_instagram)}` : ""}`}
                                 </span>
                               </button>
                             )}
