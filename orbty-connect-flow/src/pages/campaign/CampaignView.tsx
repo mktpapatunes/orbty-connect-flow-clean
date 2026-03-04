@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
 import {
@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   Paperclip,
   Sparkles,
-  Users,
   ClipboardCheck,
   ShieldCheck,
   BadgeCheck,
@@ -19,6 +18,11 @@ import {
   TicketPercent,
   Wallet,
   Eye,
+  X,
+  Link as LinkIcon,
+  FileText,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -36,11 +40,15 @@ type PublicProfileLite = {
   avatar_url?: string | null;
 };
 
-type DeliverablesRowLite = {
+type DeliverablesRow = {
   creator_id: string;
   status?: "draft" | "submitted" | "approved" | "changes_requested";
-  updated_at?: string;
+  checklist?: Record<string, any> | null;
+  links?: any;
+  notes?: string | null;
   submitted_at?: string | null;
+  approved_at?: string | null;
+  updated_at?: string | null;
 };
 
 const formatDateBR = (value?: string | null) => {
@@ -49,6 +57,13 @@ const formatDateBR = (value?: string | null) => {
   const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
   if (Number.isNaN(d.getTime())) return "-";
   return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
+};
+
+const formatDateTimeBR = (value?: string | null) => {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("pt-BR");
 };
 
 const formatMoneyBRL = (v?: number | null) => {
@@ -62,16 +77,6 @@ const normalizeAt = (handle?: string | null) => {
   const h = handle.trim();
   if (!h) return null;
   return h.startsWith("@") ? h : `@${h}`;
-};
-
-const formatLabel = (format?: string | null) => {
-  const f = (format || "").toLowerCase().trim();
-  if (!f) return "—";
-  if (f === "stories") return "Stories";
-  if (f === "reels") return "Reels";
-  if (f === "feed") return "Feed";
-  if (f === "misto") return "Misto";
-  return format || "—";
 };
 
 const statusLabel = (s?: string | null) => {
@@ -94,14 +99,6 @@ const participantStatusLabel = (s?: ParticipantStatus | null) => {
   return s;
 };
 
-const deliverableStatusLabel = (s?: string | null) => {
-  if (s === "draft") return { text: "Rascunho", cls: "border-border/50 bg-card/60 text-muted-foreground" };
-  if (s === "submitted") return { text: "Em revisão", cls: "border-primary/30 bg-primary/10 text-primary" };
-  if (s === "approved") return { text: "Aprovado", cls: "border-accent/30 bg-accent/10 text-accent" };
-  if (s === "changes_requested") return { text: "Ajustes", cls: "border-warning/30 bg-warning/10 text-warning" };
-  return { text: "—", cls: "border-border/50 bg-card/60 text-muted-foreground" };
-};
-
 const getInitials = (name?: string | null) => {
   const n = (name || "").trim();
   if (!n) return "•";
@@ -110,6 +107,23 @@ const getInitials = (name?: string | null) => {
   const first = parts[0].slice(0, 1);
   const last = parts[parts.length - 1].slice(0, 1);
   return `${first}${last}`.toUpperCase();
+};
+
+const prettifyKey = (k: string) =>
+  (k || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase())
+    .trim();
+
+const CHECKLIST_LABELS: Record<string, string> = {
+  posts_done: "Realizei os posts combinados",
+  format_done: "Entreguei no formato combinado",
+  mentions_done: "Fiz as menções solicitadas",
+  hashtags_done: "Usei as hashtags solicitadas",
+  caption_done: "Usei a legenda solicitada",
+  collab_done: "Publicação em collab realizada",
+  proof_files: "Anexei prints/arquivos de comprovação",
+  proof_links: "Adicionei link(s) da(s) publicação(ões)",
 };
 
 const REQUIREMENTS_LABELS: Record<string, string> = {
@@ -130,7 +144,6 @@ const REQUIREMENTS_LABELS: Record<string, string> = {
 };
 
 const VALUE_KEYS = new Set(["quote_total", "quote_subtotal", "quote_discount"]);
-const SENSITIVE_KEYS_INVITED = new Set(["hashtags", "mentions", "caption", "coupon_code", "collab_mentions", "selected_creator_ids"]);
 
 const CampaignView = () => {
   const navigate = useNavigate();
@@ -147,8 +160,16 @@ const CampaignView = () => {
 
   const [creatorProfiles, setCreatorProfiles] = useState<Record<string, PublicProfileLite>>({});
   const [participants, setParticipants] = useState<Array<{ influencer_id: string; status: ParticipantStatus | null }>>([]);
-  const [deliverablesMap, setDeliverablesMap] = useState<Record<string, DeliverablesRowLite>>({});
+
+  // guardamos o mínimo e depois buscamos o detalhe ao abrir modal
+  const [deliverablesMap, setDeliverablesMap] = useState<Record<string, DeliverablesRow>>({});
   const [approvingCreatorId, setApprovingCreatorId] = useState<string | null>(null);
+
+  // modal entregas
+  const [deliverableModalOpen, setDeliverableModalOpen] = useState(false);
+  const [deliverableModalCreatorId, setDeliverableModalCreatorId] = useState<string | null>(null);
+  const [deliverableModalLoading, setDeliverableModalLoading] = useState(false);
+  const [deliverableModalRow, setDeliverableModalRow] = useState<DeliverablesRow | null>(null);
 
   const isContractor = userRole === "contractor";
   const isInfluencer = userRole === "influencer";
@@ -206,6 +227,7 @@ const CampaignView = () => {
     }
   }, [id, user, isInfluencer, navigate]);
 
+  // fetch base
   useEffect(() => {
     const fetchData = async () => {
       if (!authReady || userRole === undefined) return;
@@ -279,7 +301,7 @@ const CampaignView = () => {
     fetchData();
   }, [authReady, userRole, id, user, isContractor, isInfluencer, navigate]);
 
-  // Contractor: carregar creators + entregas (status)
+  // contractor: fetch creators + basic deliverables presence
   useEffect(() => {
     const run = async () => {
       if (!isContractor || !id || !user || !campaign) return;
@@ -305,7 +327,6 @@ const CampaignView = () => {
       const ids = Array.from(new Set([...selectedIds, ...pRows.map((p) => p.influencer_id)]));
 
       if (ids.length > 0) {
-        // ✅ agora com avatar_url (confirmado por você no schema)
         const { data: profData, error: profErr } = await supabase
           .from("public_profiles")
           .select("id,name,instagram,avatar_url")
@@ -320,20 +341,19 @@ const CampaignView = () => {
         setCreatorProfiles({});
       }
 
+      // carregamos um "mapa" mínimo (tem row ou não)
       try {
         const { data: deliv, error: delivErr } = await supabase
           .from("campaign_creator_deliverables")
-          .select("creator_id,status,updated_at,submitted_at")
+          .select("creator_id,status,updated_at,submitted_at,approved_at")
           .eq("campaign_id", id);
 
         if (delivErr) {
-          const msg = (delivErr.message || "").toLowerCase();
-          const looksMissing = msg.includes("does not exist") || msg.includes("schema cache") || msg.includes("permission denied");
-          if (!looksMissing) console.error("FETCH_DELIVERABLES_ERROR", delivErr);
+          console.error("FETCH_DELIVERABLES_MIN_ERROR", delivErr);
           setDeliverablesMap({});
         } else {
-          const dmap: Record<string, DeliverablesRowLite> = {};
-          for (const r of (deliv || []) as any[]) dmap[String(r.creator_id)] = r as DeliverablesRowLite;
+          const dmap: Record<string, DeliverablesRow> = {};
+          for (const r of (deliv || []) as any[]) dmap[String(r.creator_id)] = r as DeliverablesRow;
           setDeliverablesMap(dmap);
         }
       } catch {
@@ -344,10 +364,52 @@ const CampaignView = () => {
     run();
   }, [isContractor, id, user, campaign]);
 
+  const openDeliverablesModal = async (creatorId: string) => {
+    if (!id) return;
+
+    setDeliverableModalOpen(true);
+    setDeliverableModalCreatorId(creatorId);
+    setDeliverableModalLoading(true);
+    setDeliverableModalRow(null);
+
+    try {
+      const { data, error } = await supabase
+        .from("campaign_creator_deliverables")
+        .select("creator_id,status,checklist,links,notes,submitted_at,approved_at,updated_at")
+        .eq("campaign_id", id)
+        .eq("creator_id", creatorId)
+        .maybeSingle();
+
+      if (error) {
+        console.error("FETCH_DELIVERABLES_DETAIL_ERROR", error);
+        toast.error("Não foi possível carregar as entregas.");
+        setDeliverableModalRow(null);
+        return;
+      }
+
+      if (!data) {
+        toast.message("Ainda não há entregas enviadas por este creator.");
+        setDeliverableModalRow(null);
+        return;
+      }
+
+      setDeliverableModalRow(data as any);
+    } finally {
+      setDeliverableModalLoading(false);
+    }
+  };
+
+  const closeDeliverablesModal = () => {
+    setDeliverableModalOpen(false);
+    setDeliverableModalCreatorId(null);
+    setDeliverableModalRow(null);
+    setDeliverableModalLoading(false);
+  };
+
   const approveCreator = async (creatorId: string) => {
     if (!id) return;
 
-    if (!window.confirm("Aprovar este creator? Use apenas quando todas as entregas foram conferidas e estão corretas.")) return;
+    if (!window.confirm("Confirmar revisão?\n\nUse apenas quando estiver tudo correto (entregas e comprovação).")) return;
 
     setApprovingCreatorId(creatorId);
     try {
@@ -373,15 +435,32 @@ const CampaignView = () => {
 
       if (pErr) throw pErr;
 
-      toast.success("Participação aprovada.");
+      toast.success("Revisão confirmada.");
+
       setParticipants((prev) => prev.map((p) => (p.influencer_id === creatorId ? { ...p, status: "approved" } : p)));
       setDeliverablesMap((prev) => ({
         ...prev,
-        [creatorId]: { ...(prev[creatorId] || {}), creator_id: creatorId, status: "approved", updated_at: new Date().toISOString() },
+        [creatorId]: {
+          ...(prev[creatorId] || ({} as any)),
+          creator_id: creatorId,
+          status: "approved",
+          approved_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
       }));
+
+      // Atualiza modal (se estiver aberto)
+      setDeliverableModalRow((prev) =>
+        prev && prev.creator_id === creatorId
+          ? { ...prev, status: "approved", approved_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+          : prev
+      );
+
+      // fecha mantendo o scroll intacto
+      closeDeliverablesModal();
     } catch (e: any) {
       console.error("APPROVE_CREATOR_ERROR", e);
-      toast.error(e?.message || "Erro ao aprovar creator.");
+      toast.error(e?.message || "Erro ao confirmar revisão.");
     } finally {
       setApprovingCreatorId(null);
     }
@@ -446,6 +525,30 @@ const CampaignView = () => {
   const otherEntries = contractorRequirementsEntries.filter(([k]) => !VALUE_KEYS.has(k));
 
   const creatorsToRender = Array.from(new Set([...(selectedCreatorIds || []), ...(participants.map((p) => p.influencer_id) || [])]));
+
+  // helpers modal
+  const modalCreatorProfile = deliverableModalCreatorId ? creatorProfiles[deliverableModalCreatorId] : null;
+  const modalCreatorName = (modalCreatorProfile?.name || "Creator").trim();
+  const modalCreatorIg = normalizeAt(modalCreatorProfile?.instagram) || null;
+
+  const normalizedLinks: string[] = (() => {
+    const raw = deliverableModalRow?.links;
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.map((x) => String(x ?? "")).map((s) => s.trim()).filter(Boolean);
+    if (typeof raw === "string") return [raw.trim()].filter(Boolean);
+    if (raw && typeof raw === "object") return Object.values(raw).map((x) => String(x ?? "")).map((s) => s.trim()).filter(Boolean);
+    return [];
+  })();
+
+  const checklistEntries = (() => {
+    const ck = deliverableModalRow?.checklist;
+    if (!ck || typeof ck !== "object") return [];
+    return Object.entries(ck).map(([k, v]) => ({
+      key: k,
+      label: CHECKLIST_LABELS[k] || prettifyKey(k),
+      value: !!v,
+    }));
+  })();
 
   return (
     <MobileLayout title={campaign.title} showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
@@ -593,10 +696,8 @@ const CampaignView = () => {
                         const p = participants.find((x) => x.influencer_id === creatorId);
                         const pStatus = p?.status || null;
 
-                        const d = deliverablesMap[creatorId] || null;
-                        const dBadge = deliverableStatusLabel((d?.status as any) || null);
-
-                        const canApprove = d?.status === "submitted" || d?.status === "changes_requested";
+                        const isApproved = pStatus === "approved";
+                        const hasDeliverables = !!deliverablesMap[creatorId]; // row existe
                         const isBusy = approvingCreatorId === creatorId;
 
                         return (
@@ -618,44 +719,68 @@ const CampaignView = () => {
                                     Participação: <span className="text-foreground/85">{participantStatusLabel(pStatus)}</span>
                                   </div>
 
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    <span className={`text-[10px] px-2 py-1 rounded-full border ${dBadge.cls}`}>Entregas: {dBadge.text}</span>
-                                    {pStatus === "approved" && (
-                                      <span className="text-[10px] px-2 py-1 rounded-full border border-accent/30 bg-accent/10 text-accent inline-flex items-center gap-1">
-                                        <BadgeCheck className="w-3 h-3" />
-                                        Aprovada
-                                      </span>
-                                    )}
-                                  </div>
+                                  {isApproved && (
+                                    <div className="mt-2 inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-accent/30 bg-accent/10 text-accent">
+                                      <BadgeCheck className="w-3 h-3" />
+                                      Confirmado
+                                    </div>
+                                  )}
                                 </div>
                               </div>
 
                               <div className="flex flex-col gap-2 shrink-0">
+                                {/* Entregas (abre modal) */}
+                                <button
+                                  onClick={() => {
+                                    if (!hasDeliverables) {
+                                      toast.message("Este creator ainda não enviou entregas.");
+                                      return;
+                                    }
+                                    openDeliverablesModal(creatorId);
+                                  }}
+                                  className={`px-3 py-2 rounded-xl text-xs font-semibold border transition flex items-center justify-center gap-2 ${
+                                    hasDeliverables
+                                      ? "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground hover:bg-card/80"
+                                      : "border-border/40 bg-card/50 text-muted-foreground/60 cursor-not-allowed"
+                                  }`}
+                                  title={hasDeliverables ? "Ver entregas e confirmações" : "Ainda não há entregas"}
+                                  disabled={!hasDeliverables}
+                                >
+                                  <ClipboardCheck className="w-4 h-4" />
+                                  Entregas
+                                </button>
+
+                                {/* Arquivos (vai pro geral da campanha) */}
                                 <button
                                   onClick={() => setTabWithUrl("files")}
                                   className="px-3 py-2 rounded-xl text-xs font-semibold border border-border/50 bg-card/60 text-muted-foreground hover:text-foreground hover:bg-card/80 transition flex items-center justify-center gap-2"
-                                  title="Ver arquivos e entregas"
+                                  title="Ver arquivos e entregas (campanha)"
                                 >
                                   <Eye className="w-4 h-4" />
-                                  Ver arquivos
+                                  Arquivos
                                 </button>
 
+                                {/* Confirmado (sem status) */}
                                 <button
                                   onClick={() => approveCreator(creatorId)}
-                                  disabled={!canApprove || isBusy}
+                                  disabled={isApproved || isBusy}
                                   className={`px-3 py-2 rounded-xl text-xs font-semibold border transition ${
-                                    canApprove ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/15" : "border-border/50 bg-card/60 text-muted-foreground"
+                                    isApproved
+                                      ? "border-accent/30 bg-accent/10 text-accent"
+                                      : "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
                                   } disabled:opacity-60`}
+                                  title={isApproved ? "Revisão já confirmada" : "Confirmar revisão (após conferir tudo)"}
                                 >
-                                  {isBusy ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : canApprove ? "Aprovar" : "Aguardando"}
+                                  {isBusy ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : isApproved ? "Confirmado" : "Confirmar"}
                                 </button>
                               </div>
                             </div>
 
-                            {d?.status === "changes_requested" && (
-                              <div className="mt-2 flex items-center gap-2 text-xs text-warning">
-                                <XCircle className="w-4 h-4" />
-                                Ajustes solicitados — aguarde novo envio do creator.
+                            {/* hint discreto */}
+                            {!hasDeliverables && (
+                              <div className="mt-2 text-[11px] text-muted-foreground flex items-start gap-2">
+                                <Info className="w-4 h-4 mt-0.5" />
+                                <span>A janela de entregas aparece quando o creator enviar confirmações/links/arquivos.</span>
                               </div>
                             )}
                           </div>
@@ -691,17 +816,14 @@ const CampaignView = () => {
                         if (k === "selected_creator_ids") return null;
                         if (VALUE_KEYS.has(k)) return null;
                         if (k === "coupon_code") return null;
-                        if (isInvitedInfluencer && SENSITIVE_KEYS_INVITED.has(k)) return null;
                         if (Array.isArray(v) && v.filter(Boolean).length === 0) return null;
 
                         const label = REQUIREMENTS_LABELS[k] || k;
-                        const value = k === "format" ? formatLabel(String(v)) : v;
-
                         return (
                           <div key={k} className="rounded-xl border border-border/50 bg-card/60 p-3">
                             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
                             <div className="mt-1 text-sm text-foreground/80 leading-relaxed">
-                              {typeof value === "string" ? value || "—" : String(value ?? "—")}
+                              {typeof v === "string" ? v || "—" : String(v ?? "—")}
                             </div>
                           </div>
                         );
@@ -762,6 +884,169 @@ const CampaignView = () => {
           </>
         )}
       </div>
+
+      {/* ✅ MODAL ENTREGAS */}
+      <AnimatePresence>
+        {deliverableModalOpen && isContractor && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
+            onMouseDown={(e) => {
+              // clique fora fecha (premium)
+              if (e.target === e.currentTarget) closeDeliverablesModal();
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 18, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 18, scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 260, damping: 22 }}
+              className="absolute left-1/2 top-1/2 w-[92%] max-w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-border/50 bg-background/95 shadow-2xl overflow-hidden"
+            >
+              {/* header */}
+              <div className="px-5 pt-5 pb-4 border-b border-border/40">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs text-muted-foreground uppercase tracking-widest">Entregas</div>
+                    <div className="mt-1 text-lg font-bold text-foreground truncate">{modalCreatorName}</div>
+                    {modalCreatorIg && <div className="text-xs text-muted-foreground mt-0.5">{modalCreatorIg}</div>}
+                  </div>
+
+                  <button
+                    onClick={closeDeliverablesModal}
+                    className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 transition flex items-center justify-center text-muted-foreground hover:text-foreground"
+                    title="Fechar"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* body */}
+              <div className="px-5 py-5 max-h-[70vh] overflow-auto space-y-4">
+                {deliverableModalLoading ? (
+                  <div className="flex justify-center py-10">
+                    <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                  </div>
+                ) : !deliverableModalRow ? (
+                  <div className="text-center py-10">
+                    <FileText className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                    <div className="text-sm text-muted-foreground">Nenhuma entrega encontrada para este creator.</div>
+                  </div>
+                ) : (
+                  <>
+                    {/* checklist */}
+                    <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <ClipboardCheck className="w-4 h-4 text-primary" />
+                        <div className="text-sm font-semibold text-foreground">Confirmações</div>
+                      </div>
+
+                      {checklistEntries.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">Nenhuma confirmação marcada.</div>
+                      ) : (
+                        <div className="space-y-2">
+                          {checklistEntries.map((it) => (
+                            <div
+                              key={it.key}
+                              className="flex items-center gap-2 rounded-xl border border-border/40 bg-white/5 px-3 py-2"
+                            >
+                              {it.value ? <CheckSquare className="w-4 h-4 text-accent" /> : <Square className="w-4 h-4 text-muted-foreground" />}
+                              <div className={`text-sm ${it.value ? "text-foreground/85" : "text-muted-foreground"}`}>{it.label}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* links */}
+                    <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <LinkIcon className="w-4 h-4 text-accent" />
+                        <div className="text-sm font-semibold text-foreground">Links de comprovação</div>
+                      </div>
+
+                      {normalizedLinks.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">Nenhum link enviado.</div>
+                      ) : (
+                        <div className="space-y-2">
+                          {normalizedLinks.map((url, idx) => (
+                            <button
+                              key={`${url}-${idx}`}
+                              onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+                              className="w-full text-left rounded-xl border border-border/40 bg-white/5 px-3 py-2 hover:bg-white/10 transition"
+                              title="Abrir link"
+                            >
+                              <div className="text-sm text-foreground truncate">{url}</div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* notes */}
+                    <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <FileText className="w-4 h-4 text-primary" />
+                        <div className="text-sm font-semibold text-foreground">Notas</div>
+                      </div>
+
+                      {deliverableModalRow.notes ? (
+                        <div className="text-sm text-foreground/80 whitespace-pre-line leading-relaxed">{deliverableModalRow.notes}</div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">Sem notas.</div>
+                      )}
+                    </div>
+
+                    {/* meta */}
+                    <div className="text-[11px] text-muted-foreground flex items-start gap-2">
+                      <Info className="w-4 h-4 mt-0.5" />
+                      <div>
+                        <div>Enviado: <span className="text-foreground/80">{formatDateTimeBR(deliverableModalRow.submitted_at)}</span></div>
+                        <div>Atualizado: <span className="text-foreground/80">{formatDateTimeBR(deliverableModalRow.updated_at)}</span></div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* footer */}
+              <div className="px-5 py-4 border-t border-border/40 bg-background/80">
+                <div className="flex gap-2">
+                  <button
+                    onClick={closeDeliverablesModal}
+                    className="flex-1 py-3 rounded-2xl border border-border/50 bg-card/60 text-muted-foreground font-semibold text-sm hover:text-foreground hover:bg-card/80 transition"
+                  >
+                    Voltar
+                  </button>
+
+                  {deliverableModalCreatorId && (
+                    <button
+                      onClick={() => approveCreator(deliverableModalCreatorId)}
+                      disabled={approvingCreatorId === deliverableModalCreatorId || participants.find((p) => p.influencer_id === deliverableModalCreatorId)?.status === "approved"}
+                      className="flex-1 py-3 rounded-2xl border border-primary/30 bg-primary/10 text-primary font-semibold text-sm hover:bg-primary/15 transition disabled:opacity-60"
+                      title="Confirmar revisão"
+                    >
+                      {approvingCreatorId === deliverableModalCreatorId ? (
+                        <span className="inline-flex items-center justify-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Confirmando...
+                        </span>
+                      ) : participants.find((p) => p.influencer_id === deliverableModalCreatorId)?.status === "approved" ? (
+                        "Confirmado"
+                      ) : (
+                        "Confirmar revisão"
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </MobileLayout>
   );
 };
