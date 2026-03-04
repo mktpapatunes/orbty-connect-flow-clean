@@ -9,10 +9,13 @@ import {
   Loader2,
   CheckCircle2,
   Paperclip,
-  ClipboardList,
-  Info,
   Sparkles,
   Users,
+  ClipboardCheck,
+  ShieldCheck,
+  BadgeCheck,
+  XCircle,
+  Info,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,6 +26,20 @@ import { toast } from "sonner";
 type TabKey = "details" | "files";
 type ParticipantStatus = "invited" | "confirmed" | "delivered" | "approved";
 
+type PublicProfileLite = {
+  id: string;
+  display_name?: string | null;
+  name?: string | null;
+  instagram?: string | null;
+};
+
+type DeliverablesRowLite = {
+  creator_id: string;
+  status: "draft" | "submitted" | "approved" | "changes_requested";
+  updated_at: string;
+  submitted_at: string | null;
+};
+
 const formatDateBR = (value?: string | null) => {
   if (!value) return "-";
   const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -31,61 +48,68 @@ const formatDateBR = (value?: string | null) => {
   return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
 };
 
-const humanizeKey = (key: string) => {
-  const spaced = key
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/_/g, " ")
-    .trim();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+const formatMoneyBRL = (v?: number | null) => {
+  const n = typeof v === "number" ? v : v ? Number(v) : null;
+  if (!n || Number.isNaN(n)) return "—";
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
-const renderValue = (v: any): any => {
-  if (v === null || v === undefined || v === "") return "—";
-  if (typeof v === "boolean") return v ? "Sim" : "Não";
-  if (typeof v === "number") return String(v);
-  if (typeof v === "string") return v;
+const normalizeAt = (handle?: string | null) => {
+  if (!handle) return null;
+  const h = handle.trim();
+  if (!h) return null;
+  return h.startsWith("@") ? h : `@${h}`;
+};
 
-  if (Array.isArray(v)) {
-    if (v.length === 0) return "—";
-    return (
-      <ul className="mt-1 space-y-1">
-        {v.map((item, idx) => (
-          <li key={idx} className="text-sm text-foreground/75 leading-relaxed">
-            • {typeof item === "string" || typeof item === "number" ? String(item) : JSON.stringify(item)}
-          </li>
-        ))}
-      </ul>
-    );
-  }
-
-  if (typeof v === "object") {
-    const entries = Object.entries(v);
-    if (entries.length === 0) return "—";
-    return (
-      <div className="mt-2 grid grid-cols-1 gap-2">
-        {entries.map(([k, val]) => (
-          <div key={k} className="rounded-xl border border-border/50 bg-card/60 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{humanizeKey(k)}</div>
-            <div className="mt-1 text-sm text-foreground/80 leading-relaxed">{renderValue(val)}</div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return String(v);
+const formatLabel = (format?: string | null) => {
+  const f = (format || "").toLowerCase().trim();
+  if (!f) return "—";
+  if (f === "stories") return "Stories";
+  if (f === "reels") return "Reels";
+  if (f === "feed") return "Feed";
+  if (f === "misto") return "Misto";
+  return format;
 };
 
 const statusLabel = (s?: string | null) => {
   if (!s) return "—";
   if (s === "active") return "Ativa";
-  if (s === "closed_manual") return "Encerrada (manual)";
-  if (s === "closed_expired") return "Encerrada (prazo)";
+  if (s === "closed_manual") return "Encerrada";
+  if (s === "closed_expired") return "Vencida";
   if (s === "completed") return "Concluída";
   if (s === "deleted") return "Excluída";
   if (s === "draft") return "Rascunho";
   return s;
 };
+
+// Tradução/ordem amigável dos requirements (para contractor)
+const REQUIREMENTS_LABELS: Record<string, string> = {
+  posts: "Quantidade de posts",
+  format: "Formato",
+  caption: "Legenda",
+  hashtags: "Hashtags",
+  mentions: "Menções",
+  collab: "Post em collab",
+  collab_mentions: "Menções (collab)",
+  coupon_code: "Cupom",
+  quote_total: "Valor total",
+  quote_subtotal: "Subtotal",
+  quote_discount: "Desconto",
+  creators_needed: "Creators necessários",
+  content_segments: "Segmentos",
+  selected_creator_ids: "Creators selecionados",
+};
+
+const SENSITIVE_KEYS_INVITED = new Set([
+  "hashtags",
+  "mentions",
+  "caption",
+  "coupon_code",
+  "collab_mentions",
+  "selected_creator_ids",
+]);
+
+const VALUE_KEYS = new Set(["quote_total", "quote_subtotal", "quote_discount"]);
 
 const getInvitedSummary = (req?: Record<string, any> | null) => {
   const posts = typeof req?.posts === "number" ? req.posts : req?.posts ? Number(req.posts) : undefined;
@@ -105,6 +129,14 @@ const getInvitedSummary = (req?: Record<string, any> | null) => {
   return { posts, format, creatorsNeeded, segments };
 };
 
+const deliverableStatusLabel = (s?: string | null) => {
+  if (s === "draft") return { text: "Rascunho", cls: "border-border/50 bg-card/60 text-muted-foreground" };
+  if (s === "submitted") return { text: "Em revisão", cls: "border-primary/30 bg-primary/10 text-primary" };
+  if (s === "approved") return { text: "Aprovado", cls: "border-accent/30 bg-accent/10 text-accent" };
+  if (s === "changes_requested") return { text: "Ajustes", cls: "border-warning/30 bg-warning/10 text-warning" };
+  return { text: "—", cls: "border-border/50 bg-card/60 text-muted-foreground" };
+};
+
 const CampaignView = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -117,6 +149,12 @@ const CampaignView = () => {
 
   const [myParticipationStatus, setMyParticipationStatus] = useState<ParticipantStatus | null>(null);
   const [confirming, setConfirming] = useState(false);
+
+  // contractor - creators
+  const [creatorProfiles, setCreatorProfiles] = useState<Record<string, PublicProfileLite>>({});
+  const [participants, setParticipants] = useState<Array<{ influencer_id: string; status: ParticipantStatus | null }>>([]);
+  const [deliverablesMap, setDeliverablesMap] = useState<Record<string, DeliverablesRowLite>>({});
+  const [approvingCreatorId, setApprovingCreatorId] = useState<string | null>(null);
 
   const isContractor = userRole === "contractor";
   const isInfluencer = userRole === "influencer";
@@ -186,6 +224,7 @@ const CampaignView = () => {
       setIsLoading(true);
 
       try {
+        // ===== CONTRACTOR =====
         if (isContractor) {
           const { data: campaignData, error: campaignError } = await supabase
             .from("campaigns")
@@ -202,7 +241,7 @@ const CampaignView = () => {
           return;
         }
 
-        // influencer
+        // ===== INFLUENCER =====
         const { data: cp, error: cpErr } = await supabase
           .from("campaign_participants")
           .select("status")
@@ -221,6 +260,7 @@ const CampaignView = () => {
         const pStatus = (cp.status as ParticipantStatus) || null;
         setMyParticipationStatus(pStatus);
 
+        // se já confirmou/entregou/aprovou -> manda pro detalhe completo do creator
         if (pStatus && pStatus !== "invited") {
           navigate(`/campanha-detalhe/${id}`, { replace: true });
           return;
@@ -248,6 +288,131 @@ const CampaignView = () => {
     fetchData();
   }, [authReady, userRole, id, user, isContractor, isInfluencer, navigate]);
 
+  // Contractor: carregar creators e status individual (participação + deliverables)
+  useEffect(() => {
+    const run = async () => {
+      if (!isContractor || !id || !user || !campaign) return;
+
+      const req = ((campaign as any)?.requirements as Record<string, any> | null) ?? null;
+      const selectedIds: string[] = Array.isArray(req?.selected_creator_ids)
+        ? req!.selected_creator_ids.filter((x: any) => typeof x === "string" && x.trim().length > 0)
+        : [];
+
+      // 1) participantes (status confirmado/aprovado etc)
+      const { data: partData, error: partErr } = await supabase
+        .from("campaign_participants")
+        .select("influencer_id,status")
+        .eq("campaign_id", id);
+
+      if (partErr) console.error("FETCH_PARTICIPANTS_ERROR", partErr);
+
+      const pRows = (partData || []).map((r: any) => ({
+        influencer_id: String(r.influencer_id),
+        status: (r.status as ParticipantStatus) || null,
+      }));
+
+      setParticipants(pRows);
+
+      // IDs a consultar: selecionados + participantes (garante consistência)
+      const ids = Array.from(new Set([...selectedIds, ...pRows.map((p) => p.influencer_id)]));
+
+      // 2) nomes (public_profiles)
+      if (ids.length > 0) {
+        const { data: profData, error: profErr } = await supabase
+          .from("public_profiles")
+          .select("id,display_name,name,instagram")
+          .in("id", ids);
+
+        if (profErr) console.error("FETCH_PUBLIC_PROFILES_ERROR", profErr);
+
+        const map: Record<string, PublicProfileLite> = {};
+        for (const row of (profData || []) as any[]) map[String(row.id)] = row;
+        setCreatorProfiles(map);
+      } else {
+        setCreatorProfiles({});
+      }
+
+      // 3) status de deliverables (tabela nova) — se ainda não existir, não quebra
+      try {
+        const { data: deliv, error: delivErr } = await supabase
+          .from("campaign_creator_deliverables")
+          .select("creator_id,status,updated_at,submitted_at")
+          .eq("campaign_id", id);
+
+        if (delivErr) {
+          const msg = (delivErr.message || "").toLowerCase();
+          const looksMissing = msg.includes("does not exist") || msg.includes("schema cache") || msg.includes("permission denied");
+          if (!looksMissing) console.error("FETCH_DELIVERABLES_STATUS_ERROR", delivErr);
+          setDeliverablesMap({});
+        } else {
+          const dmap: Record<string, DeliverablesRowLite> = {};
+          for (const r of (deliv || []) as any[]) dmap[String(r.creator_id)] = r;
+          setDeliverablesMap(dmap);
+        }
+      } catch (e) {
+        setDeliverablesMap({});
+      }
+    };
+
+    run();
+  }, [isContractor, id, user, campaign]);
+
+  const approveCreator = async (creatorId: string) => {
+    if (!id) return;
+    if (!window.confirm("Aprovar este creator? Use apenas quando todas as entregas foram conferidas e estão corretas.")) return;
+
+    setApprovingCreatorId(creatorId);
+    try {
+      // 1) marca deliverables como approved (se existir tabela)
+      const { error: dErr } = await supabase
+        .from("campaign_creator_deliverables")
+        .upsert(
+          {
+            campaign_id: id,
+            creator_id: creatorId,
+            status: "approved",
+            approved_at: new Date().toISOString(),
+          } as any,
+          { onConflict: "campaign_id,creator_id" }
+        );
+
+      // se tabela não existir, não impede o fluxo de participação (mas avisa no console)
+      if (dErr) {
+        const msg = (dErr.message || "").toLowerCase();
+        const looksMissing = msg.includes("does not exist") || msg.includes("schema cache");
+        if (!looksMissing) throw dErr;
+      }
+
+      // 2) marca participação como approved (individual)
+      const { error: pErr } = await supabase
+        .from("campaign_participants")
+        .update({ status: "approved" })
+        .eq("campaign_id", id)
+        .eq("influencer_id", creatorId);
+
+      if (pErr) throw pErr;
+
+      toast.success("Creator aprovado com sucesso.");
+
+      // refresh rápido local
+      setParticipants((prev) => prev.map((p) => (p.influencer_id === creatorId ? { ...p, status: "approved" } : p)));
+      setDeliverablesMap((prev) => ({
+        ...prev,
+        [creatorId]: {
+          creator_id: creatorId,
+          status: "approved",
+          updated_at: new Date().toISOString(),
+          submitted_at: prev[creatorId]?.submitted_at ?? null,
+        },
+      }));
+    } catch (e: any) {
+      console.error("APPROVE_CREATOR_ERROR", e);
+      toast.error(e?.message || "Erro ao aprovar creator.");
+    } finally {
+      setApprovingCreatorId(null);
+    }
+  };
+
   const backTo = isContractor ? "/dashboard-contratante" : "/dashboard-influenciadora";
   const navType = isContractor ? "contractor" : "influencer";
 
@@ -271,22 +436,41 @@ const CampaignView = () => {
     );
   }
 
-  const shouldShowInfluencerConfirmCta = isInfluencer && myParticipationStatus === "invited";
   const isInvitedInfluencer = isInfluencer && myParticipationStatus === "invited";
+  const shouldShowInfluencerConfirmCta = isInvitedInfluencer;
 
   const status = (campaign as any)?.status as string | null;
+  const req = ((campaign as any)?.requirements as Record<string, any> | null) ?? null;
+
+  const city = ((campaign as any)?.city as string | null) ?? null;
+  const state = ((campaign as any)?.state as string | null) ?? null;
   const region = ((campaign as any)?.region as string | null) ?? null;
+  const locationLabel = [city, state].filter(Boolean).join(", ") || "—";
+
   const campaignDate = ((campaign as any)?.campaign_date as string | null) ?? null;
 
   const briefPublic = ((campaign as any)?.brief_public as string | null) ?? null;
   const briefPrivate = ((campaign as any)?.brief_private as string | null) ?? null;
-  const requirements = ((campaign as any)?.requirements as Record<string, any> | null) ?? null;
 
-  const invitedSummary = getInvitedSummary(requirements);
+  const invitedSummary = getInvitedSummary(req);
 
-  const city = ((campaign as any)?.city as string | null) ?? null;
-  const state = ((campaign as any)?.state as string | null) ?? null;
-  const locationLabel = [city, state].filter(Boolean).join(", ") || "—";
+  const quoteTotal = typeof req?.quote_total === "number" ? req.quote_total : req?.quote_total ? Number(req.quote_total) : null;
+  const quoteSubtotal = typeof req?.quote_subtotal === "number" ? req.quote_subtotal : req?.quote_subtotal ? Number(req.quote_subtotal) : null;
+  const quoteDiscount = typeof req?.quote_discount === "number" ? req.quote_discount : req?.quote_discount ? Number(req.quote_discount) : null;
+
+  // lista de creators selecionados (pelo requirements)
+  const selectedCreatorIds: string[] = Array.isArray(req?.selected_creator_ids)
+    ? req.selected_creator_ids.filter((x: any) => typeof x === "string" && x.trim().length > 0)
+    : [];
+
+  const creatorsCount =
+    typeof req?.creators_needed === "number" ? req.creators_needed : req?.creators_needed ? Number(req.creators_needed) : null;
+
+  // requirements “para exibir” no contractor, mas sem IDs
+  const contractorRequirementsEntries = Object.entries(req || {}).filter(([k]) => k !== "selected_creator_ids");
+
+  const valueEntries = contractorRequirementsEntries.filter(([k]) => VALUE_KEYS.has(k));
+  const otherEntries = contractorRequirementsEntries.filter(([k]) => !VALUE_KEYS.has(k));
 
   return (
     <MobileLayout title={campaign.title} showBack backTo={backTo} navType={navType} showNav={false} showHome homeRoute={backTo}>
@@ -296,12 +480,9 @@ const CampaignView = () => {
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium capitalize">
               {(campaign as any)?.type || "campanha"}
             </span>
-
-            {status && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground font-medium">
-                {statusLabel(status)}
-              </span>
-            )}
+            <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground font-medium">
+              {statusLabel(status)}
+            </span>
 
             {isInvitedInfluencer && (
               <span className="text-[10px] px-2 py-0.5 rounded-full border border-warning/40 bg-warning/10 text-warning font-medium">
@@ -314,10 +495,10 @@ const CampaignView = () => {
 
           {isInvitedInfluencer ? (
             <p className="text-xs text-muted-foreground mt-1">
-              Veja um resumo da campanha. Ao confirmar participação, você libera briefing completo, instruções e arquivos.
+              Você vê um resumo. Ao confirmar participação, você libera briefing completo, instruções e arquivos.
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground mt-1">Detalhes completos da campanha.</p>
+            <p className="text-xs text-muted-foreground mt-1">Detalhes da campanha.</p>
           )}
 
           {shouldShowInfluencerConfirmCta && (
@@ -335,21 +516,19 @@ const CampaignView = () => {
               </button>
 
               <p className="text-[11px] text-muted-foreground mt-2">
-                Ao confirmar, você libera instruções completas (legenda, hashtags, menções) e pode enviar suas entregas.
+                Após confirmar, você verá legenda/hashtags/menções e poderá enviar suas entregas.
               </p>
             </div>
           )}
         </motion.div>
 
-        {/* Tabs só para contractor; invited NÃO vê arquivos */}
+        {/* Tabs só contractor */}
         {isContractor && (
           <div className="glass-card p-2 flex items-center gap-2">
             <button
               onClick={() => setTabWithUrl("details")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                tab === "details"
-                  ? "bg-primary/12 text-primary border border-primary/25"
-                  : "bg-transparent text-muted-foreground hover:text-foreground"
+                tab === "details" ? "bg-primary/12 text-primary border border-primary/25" : "bg-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               Detalhes
@@ -358,9 +537,7 @@ const CampaignView = () => {
             <button
               onClick={() => setTabWithUrl("files")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                tab === "files"
-                  ? "bg-primary/12 text-primary border border-primary/25"
-                  : "bg-transparent text-muted-foreground hover:text-foreground"
+                tab === "files" ? "bg-primary/12 text-primary border border-primary/25" : "bg-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               <Paperclip className="w-3.5 h-3.5" />
@@ -369,38 +546,42 @@ const CampaignView = () => {
           </div>
         )}
 
+        {/* Arquivos (contractor read-only) */}
         {isContractor && tab === "files" && (
-          <CampaignFilesTab campaignId={String(id)} role="contractor" influencerAccepted={false} />
+          <CampaignFilesTab campaignId={String(id)} role="contractor" influencerAccepted={false} readOnly />
         )}
 
         {tab === "details" && (
           <>
-            <div className="glass-card p-4">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <MapPin className="w-4 h-4 text-primary" />
+            {/* Local & Data */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="glass-card p-4 col-span-2">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                    <MapPin className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Local</p>
+                    <p className="text-sm font-semibold text-foreground mt-1">{locationLabel}</p>
+                    {!!region && <p className="text-xs text-muted-foreground mt-1">Região: {region}</p>}
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Região</p>
-                  <p className="text-sm font-semibold text-foreground mt-1">{locationLabel}</p>
-                  {!!region && <p className="text-xs text-muted-foreground mt-1">Área: {region}</p>}
+              </div>
+
+              <div className="glass-card p-4 col-span-2 border border-accent/15">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center shrink-0">
+                    <Calendar className="w-4 h-4 text-accent" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Data do evento</p>
+                    <p className="text-sm font-semibold text-foreground mt-1">{campaignDate ? formatDateBR(campaignDate) : "A definir"}</p>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="glass-card p-4 border border-accent/15">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center shrink-0">
-                  <Calendar className="w-4 h-4 text-accent" />
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Data do evento</p>
-                  <p className="text-sm font-semibold text-foreground mt-1">{campaignDate ? formatDateBR(campaignDate) : "A definir"}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Resumo principal (invited) */}
+            {/* Resumo (invited) */}
             {isInvitedInfluencer && (
               <div className="glass-card p-4 border border-primary/15">
                 <div className="flex items-start gap-3">
@@ -417,13 +598,12 @@ const CampaignView = () => {
                       </span>
 
                       <span className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
-                        Formato: <b className="text-foreground">{invitedSummary.format || "—"}</b>
+                        Formato: <b className="text-foreground">{formatLabel(invitedSummary.format || null)}</b>
                       </span>
 
                       <span className="text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground inline-flex items-center gap-1">
                         <Users className="w-3 h-3" />
-                        Creators:{" "}
-                        <b className="text-foreground">{typeof invitedSummary.creatorsNeeded === "number" ? invitedSummary.creatorsNeeded : "—"}</b>
+                        Creators: <b className="text-foreground">{typeof invitedSummary.creatorsNeeded === "number" ? invitedSummary.creatorsNeeded : "—"}</b>
                       </span>
                     </div>
 
@@ -433,14 +613,18 @@ const CampaignView = () => {
                       </div>
                     )}
 
-                    <p className="text-xs text-muted-foreground mt-3">
-                      Após confirmar, você verá legenda, hashtags, menções, briefing completo e arquivos.
-                    </p>
+                    <div className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-warning flex items-start gap-2">
+                      <ShieldCheck className="w-4 h-4 mt-0.5" />
+                      <div>
+                        Para proteger o processo, detalhes como <b>legenda, hashtags, menções, briefing completo e arquivos</b> só aparecem após confirmar participação.
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
 
+            {/* Descrição pública */}
             {!!briefPublic && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -453,10 +637,127 @@ const CampaignView = () => {
               </div>
             )}
 
-            {/* Contractor vê completo (invited não vê o sensível aqui) */}
+            {/* Contractor: valores em bloco separado */}
+            {isContractor && (
+              <div className="glass-card p-4 border border-primary/15">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Valores</p>
+                    <p className="text-xs text-muted-foreground mt-1">Resumo financeiro da campanha</p>
+                  </div>
+                  <span className="text-[10px] px-2 py-1 rounded-full border border-primary/20 bg-primary/10 text-primary font-medium">
+                    {formatMoneyBRL(quoteTotal)}
+                  </span>
+                </div>
+
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <div className="rounded-xl border border-border/50 bg-card/60 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Subtotal</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">{formatMoneyBRL(quoteSubtotal)}</div>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-card/60 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Desconto</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">{formatMoneyBRL(quoteDiscount)}</div>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-card/60 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Creators</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">{creatorsCount ?? "—"}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Contractor: Creators (aprovação individual) */}
+            {isContractor && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <ClipboardCheck className="w-4 h-4 text-primary" />
+                  <h4 className="font-semibold text-foreground text-sm">Creators selecionados</h4>
+                </div>
+
+                <div className="glass-card p-4">
+                  <p className="text-xs text-muted-foreground">
+                    Aqui você valida as entregas de cada creator. Isso <b className="text-foreground">não conclui a campanha</b>, apenas a participação individual.
+                  </p>
+
+                  <div className="mt-3 space-y-2">
+                    {(selectedCreatorIds.length ? selectedCreatorIds : participants.map((p) => p.influencer_id)).length === 0 ? (
+                      <div className="text-sm text-muted-foreground">Nenhum creator encontrado.</div>
+                    ) : (
+                      Array.from(new Set([...(selectedCreatorIds || []), ...(participants.map((p) => p.influencer_id) || [])])).map((creatorId) => {
+                        const prof = creatorProfiles[creatorId];
+                        const name = (prof?.display_name || prof?.name || "Creator").trim();
+                        const ig = normalizeAt(prof?.instagram) || null;
+
+                        const p = participants.find((x) => x.influencer_id === creatorId);
+                        const pStatus = p?.status || null;
+
+                        const d = deliverablesMap[creatorId];
+                        const dBadge = deliverableStatusLabel(d?.status || null);
+
+                        const canApprove = d?.status === "submitted" || d?.status === "changes_requested";
+
+                        const isBusy = approvingCreatorId === creatorId;
+
+                        return (
+                          <div key={creatorId} className="rounded-2xl border border-border/50 bg-white/5 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-sm font-semibold text-foreground truncate">{name}</div>
+                                <div className="text-xs text-muted-foreground mt-0.5">
+                                  {ig ? `${ig} · ` : ""}
+                                  Participação: <span className="text-foreground/80">{pStatus || "—"}</span>
+                                </div>
+
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <span className={`text-[10px] px-2 py-1 rounded-full border ${dBadge.cls}`}>Entregas: {dBadge.text}</span>
+                                  {pStatus === "approved" && (
+                                    <span className="text-[10px] px-2 py-1 rounded-full border border-accent/30 bg-accent/10 text-accent inline-flex items-center gap-1">
+                                      <BadgeCheck className="w-3 h-3" />
+                                      Aprovado
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() => approveCreator(creatorId)}
+                                disabled={!canApprove || isBusy}
+                                className={`shrink-0 px-3 py-2 rounded-xl text-xs font-semibold border transition ${
+                                  canApprove
+                                    ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/15"
+                                    : "border-border/50 bg-card/60 text-muted-foreground"
+                                } disabled:opacity-60`}
+                                title={
+                                  canApprove
+                                    ? "Aprovar participação do creator"
+                                    : "O creator precisa enviar as entregas para revisão antes de aprovar"
+                                }
+                              >
+                                {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : canApprove ? "Aprovar" : "Aguardando"}
+                              </button>
+                            </div>
+
+                            {d?.status === "changes_requested" && (
+                              <div className="mt-2 flex items-center gap-2 text-xs text-warning">
+                                <XCircle className="w-4 h-4" />
+                                Ajustes solicitados — aguarde novo envio do creator.
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Conteúdo sensível bloqueado para invited */}
             {!isInvitedInfluencer && (
               <>
-                {!!briefPrivate && (
+                {/* Briefing completo */}
+                {isContractor && !!briefPrivate && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-accent" />
@@ -468,51 +769,44 @@ const CampaignView = () => {
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <ClipboardList className="w-4 h-4 text-primary" />
-                    <h4 className="font-semibold text-foreground text-sm">Requisitos e entregas</h4>
-                  </div>
+                {/* Requisitos (contractor) com labels traduzidos e sem IDs */}
+                {isContractor && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Info className="w-4 h-4 text-primary" />
+                      <h4 className="font-semibold text-foreground text-sm">Detalhes definidos na criação</h4>
+                    </div>
 
-                  {requirements ? (
                     <div className="glass-card p-4">
-                      <div className="text-xs text-muted-foreground">Tudo que foi definido na criação da campanha.</div>
-                      <div className="mt-3 space-y-3">
-                        {Object.entries(requirements).map(([k, v]) => (
-                          <div key={k} className="rounded-xl border border-border/50 bg-card/60 p-3">
-                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{humanizeKey(k)}</div>
-                            <div className="mt-1 text-sm text-foreground/80 leading-relaxed">{renderValue(v)}</div>
-                          </div>
-                        ))}
+                      <div className="text-xs text-muted-foreground">
+                        Campos técnicos organizados (IDs ocultos no front). Para valores, veja o bloco “Valores”.
                       </div>
-                    </div>
-                  ) : (
-                    <div className="glass-card p-4">
-                      <p className="text-sm text-muted-foreground">Nenhum requisito definido.</p>
-                    </div>
-                  )}
-                </div>
 
-                <div className="glass-card p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Info className="w-4 h-4 text-muted-foreground" />
-                    <p className="text-xs text-muted-foreground uppercase tracking-widest">Informações</p>
-                  </div>
+                      <div className="mt-3 grid grid-cols-1 gap-2">
+                        {otherEntries
+                          .filter(([k]) => k && !VALUE_KEYS.has(k))
+                          .map(([k, v]) => {
+                            // não mostrar listas vazias/ruído
+                            if (Array.isArray(v) && v.filter(Boolean).length === 0) return null;
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="rounded-xl border border-border/50 bg-card/60 p-3">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</div>
-                      <div className="mt-1 text-sm text-foreground/80">{statusLabel(status)}</div>
-                    </div>
+                            const label = REQUIREMENTS_LABELS[k] || humanizeKey(k);
+                            const value =
+                              k === "format" ? formatLabel(String(v)) :
+                              k === "hashtags" ? (Array.isArray(v) ? v.filter(Boolean).join(", ") : String(v)) :
+                              k === "mentions" ? (Array.isArray(v) ? v.filter(Boolean).join(", ") : String(v)) :
+                              v;
 
-                    <div className="rounded-xl border border-border/50 bg-card/60 p-3">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">ID</div>
-                      <div className="mt-1 text-xs text-foreground/70 truncate" title={(campaign as any)?.id}>
-                        {(campaign as any)?.id || "—"}
+                            return (
+                              <div key={k} className="rounded-xl border border-border/50 bg-card/60 p-3">
+                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+                                <div className="mt-1 text-sm text-foreground/80 leading-relaxed">{typeof value === "string" ? value || "—" : (renderAny(value))}</div>
+                              </div>
+                            );
+                          })}
                       </div>
                     </div>
                   </div>
-                </div>
+                )}
               </>
             )}
           </>
@@ -521,5 +815,43 @@ const CampaignView = () => {
     </MobileLayout>
   );
 };
+
+// helper para renderizar qualquer coisa sem travar JSX
+function renderAny(v: any) {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v === "boolean") return v ? "Sim" : "Não";
+  if (typeof v === "number") return String(v);
+  if (typeof v === "string") return v;
+
+  if (Array.isArray(v)) {
+    if (v.length === 0) return "—";
+    return (
+      <ul className="mt-1 space-y-1">
+        {v.map((item: any, idx: number) => (
+          <li key={idx} className="text-sm text-foreground/75 leading-relaxed">
+            • {typeof item === "string" || typeof item === "number" ? String(item) : JSON.stringify(item)}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  if (typeof v === "object") {
+    const entries = Object.entries(v);
+    if (entries.length === 0) return "—";
+    return (
+      <div className="mt-2 grid grid-cols-1 gap-2">
+        {entries.map(([k, val]) => (
+          <div key={k} className="rounded-xl border border-border/50 bg-card/60 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</div>
+            <div className="mt-1 text-sm text-foreground/80 leading-relaxed">{renderAny(val)}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return String(v);
+}
 
 export default CampaignView;
