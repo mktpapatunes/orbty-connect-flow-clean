@@ -28,6 +28,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { PublicCampaignFeed } from "@/types/database";
 import CampaignFilesTab from "@/components/campaign/CampaignFilesTab";
 import { toast } from "sonner";
+import type { CampaignFileKind } from "@/services/campaignFiles";
 
 type TabKey = "details" | "files";
 type ParticipantStatus = "invited" | "confirmed" | "delivered" | "approved";
@@ -135,6 +136,8 @@ const REQUIREMENTS_LABELS: Record<string, string> = {
 
 const VALUE_KEYS = new Set(["quote_total", "quote_subtotal", "quote_discount"]);
 
+const isValidKind = (k?: string | null): k is CampaignFileKind => k === "assets" || k === "deliverables";
+
 const IconActionButton = (props: {
   onClick: () => void;
   disabled?: boolean;
@@ -161,7 +164,6 @@ const IconActionButton = (props: {
       aria-label={props.title}
       className={`relative w-10 h-10 rounded-2xl border transition flex items-center justify-center ${toneClass} disabled:opacity-60`}
     >
-      {/* micro dot */}
       {props.showDot && !props.disabled && (
         <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-accent border border-background shadow" />
       )}
@@ -197,11 +199,40 @@ const CampaignView = () => {
   const isContractor = userRole === "contractor";
   const isInfluencer = userRole === "influencer";
 
+  // ✅ lê filtros de arquivos pela URL
+  const urlKind = (() => {
+    const sp = new URLSearchParams(location.search);
+    const k = sp.get("kind");
+    return isValidKind(k) ? (k as CampaignFileKind) : undefined;
+  })();
+
+  const urlCreator = (() => {
+    const sp = new URLSearchParams(location.search);
+    const c = (sp.get("creator") || "").trim();
+    return c ? c : undefined;
+  })();
+
   const setTabWithUrl = useCallback(
-    (next: TabKey) => {
+    (next: TabKey, opts?: { kind?: CampaignFileKind; creator?: string; clearFilters?: boolean }) => {
       setTab(next);
+
       const sp = new URLSearchParams(location.search);
       sp.set("tab", next);
+
+      const clear = !!opts?.clearFilters;
+
+      // ✅ filtros só fazem sentido na aba files
+      if (next !== "files" || clear) {
+        sp.delete("kind");
+        sp.delete("creator");
+      } else {
+        if (opts?.kind) sp.set("kind", opts.kind);
+        else sp.delete("kind");
+
+        if (opts?.creator) sp.set("creator", opts.creator);
+        else sp.delete("creator");
+      }
+
       navigate({ pathname: location.pathname, search: sp.toString() }, { replace: true });
     },
     [location.pathname, location.search, navigate]
@@ -604,16 +635,20 @@ const CampaignView = () => {
             <button
               onClick={() => setTabWithUrl("details")}
               className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                tab === "details" ? "bg-primary/12 text-primary border border-primary/25" : "bg-transparent text-muted-foreground hover:text-foreground"
+                tab === "details"
+                  ? "bg-primary/12 text-primary border border-primary/25"
+                  : "bg-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               Detalhes
             </button>
 
             <button
-              onClick={() => setTabWithUrl("files")}
+              onClick={() => setTabWithUrl("files", { clearFilters: true })}
               className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                tab === "files" ? "bg-primary/12 text-primary border border-primary/25" : "bg-transparent text-muted-foreground hover:text-foreground"
+                tab === "files"
+                  ? "bg-primary/12 text-primary border border-primary/25"
+                  : "bg-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               <Paperclip className="w-3.5 h-3.5" />
@@ -622,7 +657,17 @@ const CampaignView = () => {
           </div>
         )}
 
-        {isContractor && tab === "files" && <CampaignFilesTab campaignId={String(id)} role="contractor" influencerAccepted={false} readOnly />}
+        {/* ✅ ARQUIVOS: contractor sempre readOnly + suporta filtros por URL */}
+        {isContractor && tab === "files" && (
+          <CampaignFilesTab
+            campaignId={String(id)}
+            role="contractor"
+            influencerAccepted={false}
+            readOnly
+            kindFilter={urlKind}
+            ownerIdFilter={urlCreator}
+          />
+        )}
 
         {tab === "details" && (
           <>
@@ -652,8 +697,6 @@ const CampaignView = () => {
                 </div>
               </div>
             </div>
-
-            {/* ✅ removido Segmento (já existe em descrição/segmentos) */}
 
             {!!briefPublic && (
               <div className="glass-card p-4">
@@ -693,7 +736,6 @@ const CampaignView = () => {
                         const hasDeliverables = !!deliverablesMap[creatorId];
                         const isBusy = approvingCreatorId === creatorId;
 
-                        // ✅ micro-dot: só quando tem entregas e ainda não aprovou
                         const showDeliverablesDot = hasDeliverables && !isApproved;
 
                         return (
@@ -731,7 +773,18 @@ const CampaignView = () => {
                                   <ClipboardCheck className="w-4 h-4" />
                                 </IconActionButton>
 
-                                <IconActionButton onClick={() => setTabWithUrl("files")} title="Ver arquivos" tone="default">
+                                {/* ✅ AGORA abre aba Files já filtrada por creator + deliverables */}
+                                <IconActionButton
+                                  onClick={() =>
+                                    setTabWithUrl("files", {
+                                      kind: "deliverables",
+                                      creator: creatorId,
+                                    })
+                                  }
+                                  title="Ver arquivos"
+                                  tone="default"
+                                  showDot={showDeliverablesDot}
+                                >
                                   <Eye className="w-4 h-4" />
                                 </IconActionButton>
 
@@ -781,12 +834,14 @@ const CampaignView = () => {
                         if (Array.isArray(v) && v.filter(Boolean).length === 0) return null;
 
                         const label = REQUIREMENTS_LABELS[k] || k;
+
+                        const valueText =
+                          Array.isArray(v) ? v.filter(Boolean).join(", ") || "—" : typeof v === "string" ? v || "—" : String(v ?? "—");
+
                         return (
                           <div key={k} className="rounded-xl border border-border/50 bg-card/60 p-3">
                             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-                            <div className="mt-1 text-sm text-foreground/80 leading-relaxed">
-                              {typeof v === "string" ? v || "—" : String(v ?? "—")}
-                            </div>
+                            <div className="mt-1 text-sm text-foreground/80 leading-relaxed">{valueText}</div>
                           </div>
                         );
                       })}
@@ -847,7 +902,7 @@ const CampaignView = () => {
         )}
       </div>
 
-      {/* MODAL ENTREGAS (responsivo) */}
+      {/* MODAL ENTREGAS */}
       <AnimatePresence>
         {deliverableModalOpen && isContractor && (
           <motion.div

@@ -6,9 +6,9 @@ export type CampaignFileKind = "assets" | "deliverables";
 export type CampaignFileItem = {
   kind: CampaignFileKind;
   campaignId: string;
-  ownerId: string; // contractor_id ou influencer_id (folder owner)
-  path: string; // full path inside bucket (without bucket name)
-  name: string; // file name only
+  ownerId: string;
+  path: string;
+  name: string;
   size?: number | null;
   mimetype?: string | null;
   updated_at?: string | null;
@@ -17,7 +17,6 @@ export type CampaignFileItem = {
 const BUCKET = "campaign-files";
 
 function safeFileName(original: string) {
-  // evita nomes quebrados
   const cleaned = original
     .replace(/[^\w.\-() ]+/g, "_")
     .replace(/\s+/g, "_")
@@ -25,15 +24,9 @@ function safeFileName(original: string) {
   return cleaned || "file";
 }
 
-function buildPath(params: {
-  campaignId: string;
-  kind: CampaignFileKind;
-  ownerId: string;
-  filename: string;
-}) {
+function buildPath(params: { campaignId: string; kind: CampaignFileKind; ownerId: string; filename: string }) {
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const filename = `${ts}_${safeFileName(params.filename)}`;
-  // campaign-files/<campaignId>/<kind>/<ownerId>/<filename>
   return `${params.campaignId}/${params.kind}/${params.ownerId}/${filename}`;
 }
 
@@ -46,7 +39,6 @@ export async function uploadCampaignFile(params: {
 }): Promise<{ path: string }> {
   if (!params.file) throw new Error("Arquivo inválido.");
 
-  // hoje deixo imagem + pdf (briefing)
   if (!params.file.type?.startsWith("image/") && params.file.type !== "application/pdf") {
     throw new Error("Tipo de arquivo não permitido. Envie imagem ou PDF.");
   }
@@ -75,9 +67,13 @@ export async function uploadCampaignFile(params: {
 
 export async function listCampaignFiles(params: {
   campaignId: string;
-  kind?: CampaignFileKind; // se não passar, lista tudo
+  kind?: CampaignFileKind;
+  ownerId?: string;
 }): Promise<CampaignFileItem[]> {
-  const prefix = params.kind ? `${params.campaignId}/${params.kind}` : `${params.campaignId}`;
+  // ✅ caminho mais específico possível (evita varrer tudo)
+  let prefix = `${params.campaignId}`;
+  if (params.kind) prefix = `${prefix}/${params.kind}`;
+  if (params.kind && params.ownerId) prefix = `${prefix}/${params.ownerId}`;
 
   async function listFolder(path: string) {
     const { data, error } = await supabase.storage.from(BUCKET).list(path, {
@@ -90,15 +86,37 @@ export async function listCampaignFiles(params: {
 
   const items: CampaignFileItem[] = [];
 
-  const level1 = await listFolder(prefix); // ex: ["assets", "deliverables"] ou owners/arquivos
+  // Se temos campaignId/kind/ownerId -> lista só arquivos dentro desse folder
+  if (params.kind && params.ownerId) {
+    const files = await listFolder(prefix);
+    for (const f of files) {
+      if (!f.id) continue;
+      items.push({
+        campaignId: params.campaignId,
+        kind: params.kind,
+        ownerId: params.ownerId,
+        path: `${prefix}/${f.name}`,
+        name: f.name,
+        size: (f as any).metadata?.size ?? null,
+        mimetype: (f as any).metadata?.mimetype ?? null,
+        updated_at: f.updated_at ?? null,
+      });
+    }
+    items.sort((x, y) => (y.updated_at || "").localeCompare(x.updated_at || ""));
+    return items;
+  }
+
+  // Caso geral: varre prefixo (campanha inteira ou campanha/kind)
+  const level1 = await listFolder(prefix);
+
   for (const a of level1) {
     const l1Name = a.name;
     const l1Path = `${prefix}/${l1Name}`;
 
     const level2 = await listFolder(l1Path);
 
+    // arquivo diretamente no prefixo (não esperado)
     if (level2.length === 0 && a.id) {
-      // arquivo diretamente no prefix (não esperado)
       const parts = l1Path.split("/");
       const campaignId = parts[0];
       const kind = (parts[1] as CampaignFileKind) || "assets";
@@ -122,8 +140,8 @@ export async function listCampaignFiles(params: {
 
       const level3 = await listFolder(l2Path);
 
+      // arquivo diretamente no owner folder (não esperado)
       if (level3.length === 0 && b.id) {
-        // arquivo diretamente no owner (não esperado)
         const parts = l2Path.split("/");
         const campaignId = parts[0];
         const kind = parts[1] as CampaignFileKind;
@@ -141,13 +159,15 @@ export async function listCampaignFiles(params: {
         continue;
       }
 
-      // nível dos arquivos (owner folder)
       for (const f of level3) {
-        if (!f.id) continue; // folder
+        if (!f.id) continue;
         const parts = l2Path.split("/");
         const campaignId = parts[0];
         const kind = parts[1] as CampaignFileKind;
         const ownerId = parts[2];
+
+        // se o caller pediu kind específico, respeita (mesmo no modo geral)
+        if (params.kind && kind !== params.kind) continue;
 
         items.push({
           campaignId,
@@ -167,10 +187,7 @@ export async function listCampaignFiles(params: {
   return items;
 }
 
-export async function getCampaignFileSignedUrl(params: {
-  path: string;
-  expiresInSeconds?: number;
-}): Promise<string> {
+export async function getCampaignFileSignedUrl(params: { path: string; expiresInSeconds?: number }): Promise<string> {
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(params.path, params.expiresInSeconds ?? 60 * 10);
   if (error) throw error;
   if (!data?.signedUrl) throw new Error("Não foi possível gerar link do arquivo.");

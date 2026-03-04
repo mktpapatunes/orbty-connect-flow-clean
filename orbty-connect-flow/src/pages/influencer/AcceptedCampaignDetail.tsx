@@ -12,11 +12,13 @@ import {
   Paperclip,
   ClipboardList,
   Info,
+  ClipboardCheck,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import CampaignFilesTab from "@/components/campaign/CampaignFilesTab";
+import CreatorDeliverablesPanel from "@/components/campaign/CreatorDeliverablesPanel";
 
 type CampaignDetailForCreator = {
   id: string;
@@ -29,11 +31,9 @@ type CampaignDetailForCreator = {
   brief_public: string | null;
   brief_private: string | null;
   requirements: Record<string, any> | null;
-  status: string | null; // active | completed | deleted | etc
+  status: string | null;
   created_at: string | null;
-
-  // importante para o fluxo:
-  creator_accepted: boolean | null; // <- RPC retorna isso
+  creator_accepted: boolean | null;
 };
 
 const formatDateBR = (value?: string | null) => {
@@ -45,7 +45,6 @@ const formatDateBR = (value?: string | null) => {
 };
 
 const humanizeKey = (key: string) => {
-  // transforma snake_case / camelCase em algo legível
   const spaced = key
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/_/g, " ")
@@ -99,8 +98,7 @@ export default function AcceptedCampaignDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
 
-  // aba simples (detalhes / arquivos)
-  const [tab, setTab] = useState<"details" | "files">("details");
+  const [tab, setTab] = useState<"details" | "deliverables" | "files">("details");
 
   const fetchDetail = async () => {
     if (!id || !user) return;
@@ -167,15 +165,7 @@ export default function AcceptedCampaignDetail() {
 
   if (isLoading) {
     return (
-      <MobileLayout
-        title="Campanha"
-        showBack
-        backTo="/dashboard-influenciadora"
-        navType="influencer"
-        showNav={false}
-        showHome
-        homeRoute="/dashboard-influenciadora"
-      >
+      <MobileLayout title="Campanha" showBack backTo="/dashboard-influenciadora" navType="influencer" showNav={false} showHome homeRoute="/dashboard-influenciadora">
         <div className="flex justify-center py-16">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
@@ -185,15 +175,7 @@ export default function AcceptedCampaignDetail() {
 
   if (!campaign) {
     return (
-      <MobileLayout
-        title="Campanha"
-        showBack
-        backTo="/dashboard-influenciadora"
-        navType="influencer"
-        showNav={false}
-        showHome
-        homeRoute="/dashboard-influenciadora"
-      >
+      <MobileLayout title="Campanha" showBack backTo="/dashboard-influenciadora" navType="influencer" showNav={false} showHome homeRoute="/dashboard-influenciadora">
         <div className="px-6 py-16 text-center">
           <p className="text-muted-foreground">Campanha não encontrada ou acesso não autorizado.</p>
         </div>
@@ -205,22 +187,11 @@ export default function AcceptedCampaignDetail() {
   const creatorAccepted = !!campaign.creator_accepted;
 
   return (
-    <MobileLayout
-      title={isCompleted ? "Campanha concluída" : "Campanha"}
-      showBack
-      backTo="/dashboard-influenciadora"
-      navType="influencer"
-      showNav={false}
-      showHome
-      homeRoute="/dashboard-influenciadora"
-    >
+    <MobileLayout title={isCompleted ? "Campanha concluída" : "Campanha"} showBack backTo="/dashboard-influenciadora" navType="influencer" showNav={false} showHome homeRoute="/dashboard-influenciadora">
       <div className="px-6 py-6 space-y-5">
-        {/* Header premium */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium capitalize">
-              {typeLabel}
-            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium capitalize">{typeLabel}</span>
 
             {isCompleted ? (
               <span className="text-[10px] px-2 py-0.5 rounded-full border border-accent/50 bg-accent/15 text-accent font-medium flex items-center gap-1">
@@ -240,30 +211,34 @@ export default function AcceptedCampaignDetail() {
           </div>
 
           <h2 className="font-display text-2xl font-bold text-foreground">{campaign.title}</h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            Veja os detalhes com atenção e envie seus arquivos quando estiver tudo pronto.
-          </p>
+          <p className="text-xs text-muted-foreground mt-1">Revise os detalhes, registre as entregas e envie seus arquivos quando estiver tudo pronto.</p>
         </motion.div>
 
-        {/* Tabs premium */}
+        {/* Tabs */}
         <div className="glass-card p-2 flex items-center gap-2">
           <button
             onClick={() => setTab("details")}
             className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-              tab === "details"
-                ? "bg-primary/12 text-primary border border-primary/25"
-                : "bg-transparent text-muted-foreground hover:text-foreground"
+              tab === "details" ? "bg-primary/12 text-primary border border-primary/25" : "bg-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             Detalhes
           </button>
 
           <button
+            onClick={() => setTab("deliverables")}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+              tab === "deliverables" ? "bg-primary/12 text-primary border border-primary/25" : "bg-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <ClipboardCheck className="w-3.5 h-3.5" />
+            Entregas
+          </button>
+
+          <button
             onClick={() => setTab("files")}
             className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-              tab === "files"
-                ? "bg-primary/12 text-primary border border-primary/25"
-                : "bg-transparent text-muted-foreground hover:text-foreground"
+              tab === "files" ? "bg-primary/12 text-primary border border-primary/25" : "bg-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             <Paperclip className="w-3.5 h-3.5" />
@@ -273,6 +248,8 @@ export default function AcceptedCampaignDetail() {
 
         {tab === "files" ? (
           <CampaignFilesTab campaignId={campaign.id} role="influencer" influencerAccepted={creatorAccepted} />
+        ) : tab === "deliverables" ? (
+          <CreatorDeliverablesPanel campaignId={campaign.id} creatorAccepted={creatorAccepted} />
         ) : (
           <>
             {/* Região */}
@@ -286,9 +263,7 @@ export default function AcceptedCampaignDetail() {
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Região</p>
                   <p className="text-sm font-semibold text-foreground mt-1">{locationLabel}</p>
 
-                  {!!campaign.region && (
-                    <p className="text-xs text-muted-foreground mt-1">Área: {campaign.region}</p>
-                  )}
+                  {!!campaign.region && <p className="text-xs text-muted-foreground mt-1">Área: {campaign.region}</p>}
                 </div>
               </div>
             </div>
@@ -302,9 +277,7 @@ export default function AcceptedCampaignDetail() {
 
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Data do evento</p>
-                  <p className="text-sm font-semibold text-foreground mt-1">
-                    {campaign.campaign_date ? formatDateBR(campaign.campaign_date) : "A definir"}
-                  </p>
+                  <p className="text-sm font-semibold text-foreground mt-1">{campaign.campaign_date ? formatDateBR(campaign.campaign_date) : "A definir"}</p>
                 </div>
               </div>
             </div>
@@ -317,9 +290,7 @@ export default function AcceptedCampaignDetail() {
                   <h4 className="font-semibold text-foreground text-sm">Descrição</h4>
                 </div>
                 <div className="glass-card p-4">
-                  <p className="text-sm text-foreground/75 leading-relaxed whitespace-pre-line">
-                    {campaign.brief_public}
-                  </p>
+                  <p className="text-sm text-foreground/75 leading-relaxed whitespace-pre-line">{campaign.brief_public}</p>
                 </div>
               </div>
             )}
@@ -332,14 +303,12 @@ export default function AcceptedCampaignDetail() {
                   <h4 className="font-semibold text-foreground text-sm">Briefing completo</h4>
                 </div>
                 <div className="glass-card p-4 border border-accent/15">
-                  <p className="text-sm text-foreground/75 leading-relaxed whitespace-pre-line">
-                    {campaign.brief_private}
-                  </p>
+                  <p className="text-sm text-foreground/75 leading-relaxed whitespace-pre-line">{campaign.brief_private}</p>
                 </div>
               </div>
             )}
 
-            {/* Requirements / Requisitos */}
+            {/* Requirements */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <ClipboardList className="w-4 h-4 text-primary" />
@@ -348,18 +317,12 @@ export default function AcceptedCampaignDetail() {
 
               {campaign.requirements ? (
                 <div className="glass-card p-4">
-                  <div className="text-xs text-muted-foreground">
-                    Confira abaixo o que foi definido na criação da campanha.
-                  </div>
+                  <div className="text-xs text-muted-foreground">Confira abaixo o que foi definido na criação da campanha.</div>
                   <div className="mt-3 space-y-3">
                     {Object.entries(campaign.requirements).map(([k, v]) => (
                       <div key={k} className="rounded-xl border border-border/50 bg-card/60 p-3">
-                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                          {humanizeKey(k)}
-                        </div>
-                        <div className="mt-1 text-sm text-foreground/80 leading-relaxed">
-                          {renderValue(v)}
-                        </div>
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{humanizeKey(k)}</div>
+                        <div className="mt-1 text-sm text-foreground/80 leading-relaxed">{renderValue(v)}</div>
                       </div>
                     ))}
                   </div>
@@ -371,7 +334,7 @@ export default function AcceptedCampaignDetail() {
               )}
             </div>
 
-            {/* Infos de suporte/auditoria */}
+            {/* Informações */}
             <div className="glass-card p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Info className="w-4 h-4 text-muted-foreground" />
@@ -381,9 +344,7 @@ export default function AcceptedCampaignDetail() {
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-xl border border-border/50 bg-card/60 p-3">
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Criada em</div>
-                  <div className="mt-1 text-sm text-foreground/80">
-                    {campaign.created_at ? formatDateBR(campaign.created_at) : "—"}
-                  </div>
+                  <div className="mt-1 text-sm text-foreground/80">{campaign.created_at ? formatDateBR(campaign.created_at) : "—"}</div>
                 </div>
 
                 <div className="rounded-xl border border-border/50 bg-card/60 p-3">
@@ -398,7 +359,7 @@ export default function AcceptedCampaignDetail() {
         )}
       </div>
 
-      {/* CTA: Aceitar participar (só se ativa e ainda não aceitou) */}
+      {/* CTA Aceitar */}
       {!isCompleted && tab === "details" && !creatorAccepted && (
         <div className="sticky bottom-0 px-6 py-4 bg-background/80 backdrop-blur-xl border-t border-border/30">
           <button
