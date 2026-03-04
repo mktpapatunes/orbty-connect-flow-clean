@@ -15,6 +15,11 @@ import {
   Trash2,
   Zap,
   TrendingUp,
+  MapPin,
+  Tag,
+  User2,
+  RefreshCw,
+  CheckCircle2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,6 +33,27 @@ type MyCampaignRow = MyCampaign & {
   created_at?: string | null;
   applicant_count?: number;
   bucket?: string;
+  type?: string | null;
+};
+
+const pickDisplayName = (row: any): string | null => {
+  if (!row) return null;
+
+  // Campos comuns de "nome no perfil"
+  const candidates = [
+    row.display_name,
+    row.full_name,
+    row.name,
+    row.username,
+    row.nome,
+    row.nome_publico,
+    row.public_name,
+    row.company_name,
+    row.business_name,
+  ];
+
+  const found = candidates.find((v) => typeof v === "string" && v.trim().length > 0);
+  return found ? String(found).trim() : null;
 };
 
 const ContractorCampaigns = () => {
@@ -39,6 +65,8 @@ const ContractorCampaigns = () => {
   const [bucket, setBucket] = useState<Bucket>("active");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
+  const [contractorName, setContractorName] = useState<string | null>(null);
+
   const formatDateBR = (value?: string | null) => {
     if (!value) return "-";
     const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -48,6 +76,43 @@ const ContractorCampaigns = () => {
       ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" })
       : d.toLocaleDateString("pt-BR");
   };
+
+  const fetchContractorName = useCallback(async () => {
+    if (!user) return;
+
+    // Tenta buscar de algumas tabelas conhecidas sem assumir colunas.
+    // Como é o próprio usuário, normalmente RLS permite.
+    const tries: Array<{
+      table: "profiles" | "public_profiles" | "contractor_personal_data";
+      // chaves comuns: profiles geralmente usa id, contractor_personal_data costuma usar user_id
+      col: "id" | "user_id";
+    }> = [
+      { table: "profiles", col: "id" },
+      { table: "public_profiles", col: "id" },
+      { table: "contractor_personal_data", col: "user_id" },
+    ];
+
+    for (const t of tries) {
+      const { data, error } = await supabase
+        .from(t.table)
+        .select("*")
+        .eq(t.col, user.id)
+        .maybeSingle();
+
+      if (error) {
+        // não interrompe, apenas tenta a próxima
+        continue;
+      }
+
+      const name = pickDisplayName(data);
+      if (name) {
+        setContractorName(name);
+        return;
+      }
+    }
+
+    setContractorName(null);
+  }, [user]);
 
   const fetchCampaigns = useCallback(async () => {
     if (!user) return;
@@ -59,9 +124,7 @@ const ContractorCampaigns = () => {
 
     if (!error && data) {
       // Excluídas não devem aparecer em nenhum lugar do front
-      const rows = (data as unknown as MyCampaignRow[]).filter(
-        (c) => c.bucket !== "deleted"
-      );
+      const rows = (data as unknown as MyCampaignRow[]).filter((c) => c.bucket !== "deleted");
       setCampaigns(rows);
     } else if (error) {
       console.error("GET_MY_CAMPAIGNS_ERROR", error);
@@ -73,15 +136,24 @@ const ContractorCampaigns = () => {
 
   useEffect(() => {
     fetchCampaigns();
-  }, [fetchCampaigns]);
+    fetchContractorName();
+  }, [fetchCampaigns, fetchContractorName]);
 
   const runAction = async (campaignId: string, action: "complete" | "delete") => {
-    const confirmText =
-      action === "delete"
-        ? "Tem certeza que deseja excluir esta campanha? Ela será removida da sua lista."
-        : "Marcar como CONCLUÍDA? Use quando tudo foi entregue corretamente.";
+    if (action === "complete") {
+      const typed = window.prompt(
+        "Concluir campanha é uma ação importante.\n\nConfirme APENAS se todas as entregas dos creators selecionados foram cumpridas.\n\nDigite CONCLUIR para confirmar:"
+      );
+      if ((typed || "").trim().toUpperCase() !== "CONCLUIR") {
+        toast.message("Conclusão cancelada.");
+        return;
+      }
+    }
 
-    if (!window.confirm(confirmText)) return;
+    if (action === "delete") {
+      const ok = window.confirm("Tem certeza que deseja excluir esta campanha? Ela será removida da sua lista.");
+      if (!ok) return;
+    }
 
     setUpdatingId(campaignId);
 
@@ -96,9 +168,7 @@ const ContractorCampaigns = () => {
       if (error) {
         const msg = (error.message || "").toLowerCase();
         const looksLikeCache =
-          msg.includes("schema cache") ||
-          msg.includes("could not find the function") ||
-          msg.includes("does not exist");
+          msg.includes("schema cache") || msg.includes("could not find the function") || msg.includes("does not exist");
 
         if (looksLikeCache) {
           toast.error(
@@ -125,18 +195,14 @@ const ContractorCampaigns = () => {
   const groups = useMemo(() => {
     const active = campaigns.filter((c) => c.bucket === "active");
     const completed = campaigns.filter((c) => c.bucket === "completed");
-
-    // As demais (closed_manual / closed_expired / draft / etc.) continuam existindo,
-    // mas sem abas dedicadas (vão aparecer em "Todas")
     const total = campaigns.length;
-
     return { active, completed, total };
   }, [campaigns]);
 
   const list = useMemo(() => {
     if (bucket === "active") return campaigns.filter((c) => c.bucket === "active");
     if (bucket === "completed") return campaigns.filter((c) => c.bucket === "completed");
-    return campaigns; // todas, exceto deleted (já filtrado no fetch)
+    return campaigns;
   }, [bucket, campaigns]);
 
   const sortedList = useMemo(() => {
@@ -234,6 +300,21 @@ const ContractorCampaigns = () => {
     },
   ];
 
+  const niceType = (t?: string | null) => {
+    if (!t) return null;
+    const map: Record<string, string> = {
+      music: "Música",
+      food: "Gastronomia",
+      beauty: "Beleza",
+      fashion: "Moda",
+      fitness: "Fitness",
+      tech: "Tech",
+      travel: "Viagem",
+      other: "Outro",
+    };
+    return map[t] ?? t;
+  };
+
   return (
     <MobileLayout title="Minhas campanhas" navType="contractor">
       <div className="px-6 py-6 space-y-6">
@@ -270,7 +351,7 @@ const ContractorCampaigns = () => {
           </div>
         ) : (
           <>
-            {/* Stats principais (mantido, mas alinhado às novas abas) */}
+            {/* Stats */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -289,7 +370,7 @@ const ContractorCampaigns = () => {
               ))}
             </motion.div>
 
-            {/* Dica (mantido) */}
+            {/* Dica */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -303,7 +384,7 @@ const ContractorCampaigns = () => {
               </p>
             </motion.div>
 
-            {/* Tabs premium (somente 3) */}
+            {/* Tabs */}
             <div className="glass-card p-2 flex items-center gap-2">
               {tabs.map((t) => (
                 <button
@@ -329,9 +410,10 @@ const ContractorCampaigns = () => {
 
                 <button
                   onClick={fetchCampaigns}
-                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  className="inline-flex items-center gap-2 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                   title="Atualizar lista"
                 >
+                  <RefreshCw className="w-3 h-3" />
                   Atualizar
                 </button>
               </div>
@@ -353,6 +435,10 @@ const ContractorCampaigns = () => {
                   const isBusy = updatingId === campaign.id;
                   const eventDate = campaign.campaign_date ?? null;
 
+                  const typeLabel = niceType(campaign.type);
+                  const locationLabel =
+                    campaign.city && campaign.state ? `${campaign.city} · ${campaign.state}` : `${campaign.city || ""}${campaign.state ? ` · ${campaign.state}` : ""}`.trim();
+
                   return (
                     <motion.div
                       key={campaign.id}
@@ -361,6 +447,7 @@ const ContractorCampaigns = () => {
                       transition={{ delay: 0.08 + i * 0.05 }}
                       className="glass-card-hover p-4"
                     >
+                      {/* Top row */}
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -371,22 +458,48 @@ const ContractorCampaigns = () => {
                             {getStatusPill(campaign)}
                           </div>
 
-                          <p className="text-[10px] text-muted-foreground mt-1">
-                            {campaign.city}, {campaign.state} ·{" "}
-                            {campaign.applicant_count ?? 0} candidatura(s)
-                          </p>
+                          {/* Subtítulo premium: nome do perfil do contratante */}
+                          {contractorName && (
+                            <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
+                              <User2 className="w-3.5 h-3.5" />
+                              Perfil: <span className="text-foreground/90 font-medium">{contractorName}</span>
+                            </p>
+                          )}
+
+                          {/* Meta chips */}
+                          <div className="mt-2 flex items-center gap-2 flex-wrap">
+                            {typeLabel && (
+                              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
+                                <Tag className="w-3 h-3" />
+                                {typeLabel}
+                              </span>
+                            )}
+
+                            {locationLabel && (
+                              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
+                                <MapPin className="w-3 h-3" />
+                                {locationLabel}
+                              </span>
+                            )}
+
+                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
+                              <Users className="w-3 h-3" />
+                              {campaign.applicant_count ?? 0} candidatura(s)
+                            </span>
+                          </div>
                         </div>
 
                         <button
                           onClick={() => navigate(`/campanha/${campaign.id}`)}
                           className="text-muted-foreground hover:text-primary transition-colors"
-                          title="Ver detalhes"
+                          title="Abrir campanha"
                         >
                           <ArrowRight className="w-4 h-4" />
                         </button>
                       </div>
 
-                      <div className="mt-3">
+                      {/* Info blocks */}
+                      <div className="mt-3 grid grid-cols-2 gap-2">
                         <div className="rounded-xl border border-border/50 bg-card/60 px-3 py-2">
                           <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                             <Calendar className="w-3 h-3" />
@@ -396,14 +509,35 @@ const ContractorCampaigns = () => {
                             {eventDate ? formatDateBR(eventDate) : "A definir"}
                           </div>
                         </div>
+
+                        <div className="rounded-xl border border-border/50 bg-card/60 px-3 py-2">
+                          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Status
+                          </div>
+                          <div className="text-sm font-semibold text-foreground mt-0.5">
+                            {campaign.bucket === "active"
+                              ? "Em andamento"
+                              : campaign.bucket === "completed"
+                                ? "Concluída"
+                                : campaign.bucket === "closed_manual"
+                                  ? "Encerrada"
+                                  : campaign.bucket === "closed_expired"
+                                    ? "Vencida"
+                                    : campaign.bucket === "draft"
+                                      ? "Rascunho"
+                                      : "—"}
+                          </div>
+                        </div>
                       </div>
 
+                      {/* CTAs */}
                       <div className="mt-3 pt-3 border-t border-border/30 flex gap-2">
                         <button
                           onClick={() => navigate(`/campanha/${campaign.id}`)}
-                          className="flex-1 py-2.5 rounded-xl border border-border/50 text-muted-foreground font-medium text-xs hover:text-foreground transition-colors"
+                          className="flex-1 py-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-semibold text-xs hover:bg-primary/12 transition-colors"
                         >
-                          Ver
+                          Abrir campanha
                         </button>
 
                         {(campaign.bucket === "active" ||
@@ -413,6 +547,7 @@ const ContractorCampaigns = () => {
                             onClick={() => runAction(campaign.id, "complete")}
                             disabled={isBusy}
                             className="flex-1 py-2.5 rounded-xl border border-accent/30 bg-accent/10 text-accent font-semibold text-xs disabled:opacity-60"
+                            title="Concluir (exige confirmação)"
                           >
                             Concluir
                           </button>
@@ -433,7 +568,7 @@ const ContractorCampaigns = () => {
               )}
             </div>
 
-            {/* Menu inferior (mantém o que não foi pedido pra remover; removeu Meu perfil) */}
+            {/* Menu inferior */}
             <div className="space-y-3">
               {menuItems.map((item, i) => (
                 <motion.button
