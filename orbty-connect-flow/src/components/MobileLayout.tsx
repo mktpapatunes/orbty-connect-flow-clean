@@ -146,7 +146,7 @@ const MobileLayout = ({
       {/* =========================
           HEADER
       ========================= */}
-      <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border/50 px-6 py-4">
+      <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border/50 px-6 py-2">
         <div className="flex items-center gap-3">
           {shouldShowBack && (
             <button

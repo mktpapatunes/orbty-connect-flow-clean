@@ -155,7 +155,7 @@ const ContractorDashboard = () => {
           src={orbtyLogo}
           alt="ORBTY"
           threshold={50}
-          className="h-20 w-auto relative z-10 drop-shadow-[0_0_18px_hsl(200,100%,50%,0.35)]"
+          className="h-24 w-auto relative z-10 drop-shadow-[0_0_18px_hsl(200,100%,50%,0.35)]"
         />
       }
       navType="contractor"
