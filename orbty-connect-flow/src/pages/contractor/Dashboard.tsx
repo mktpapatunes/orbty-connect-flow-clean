@@ -151,12 +151,16 @@ const ContractorDashboard = () => {
   return (
     <MobileLayout
       title={
-        <TransparentLogo
-          src={orbtyLogo}
-          alt="ORBTY"
-          threshold={50}
-          className="h-20 w-auto relative z-10 drop-shadow-[0_0_18px_hsl(200,100%,50%,0.35)]"
-        />
+        // ✅ Slot do título com altura FIXA (não deixa o header crescer)
+        <div className="relative h-10 w-[170px] overflow-visible">
+          <TransparentLogo
+            src={orbtyLogo}
+            alt="ORBTY"
+            threshold={50}
+            // ✅ Logo maior, mas ABSOLUTA (não influencia a altura do header)
+            className="absolute left-0 top-1/2 -translate-y-1/2 h-20 w-auto drop-shadow-[0_0_18px_hsl(200,100%,50%,0.35)]"
+          />
+        </div>
       }
       navType="contractor"
     >
