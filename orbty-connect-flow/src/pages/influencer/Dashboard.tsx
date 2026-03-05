@@ -15,6 +15,11 @@ import {
   CircleHelp,
 } from "lucide-react";
 
+// ✅ NOVO: banners globais (admin edita via código + arquivos em /public/banners)
+import HeroBanner from "@/components/dashboard/HeroBanner";
+import BannersCarousel from "@/components/dashboard/BannersCarousel";
+import { dashboardHeroBanner, dashboardNewsBanners } from "@/config/globalBanners";
+
 const InfluencerDashboard = () => {
   const navigate = useNavigate();
   const { user, profile, approvalStatus, loading } = useAuth();
@@ -163,11 +168,30 @@ const InfluencerDashboard = () => {
           </p>
         </motion.div>
 
+        {/* ✅ NOVO: HERO BANNER GLOBAL (admin edita via /public + config) */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="px-0"
+        >
+          <HeroBanner banner={dashboardHeroBanner} />
+        </motion.div>
+
+        {/* ✅ NOVO: CARROSSEL GLOBAL “Novidades para você” */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.09 }}
+        >
+          <BannersCarousel title="Novidades para você" banners={dashboardNewsBanners} />
+        </motion.div>
+
         {/* STATUS + CTAs */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08 }}
+          transition={{ delay: 0.12 }}
           className="glass-card p-4"
         >
           <div className="flex items-start justify-between gap-3">
@@ -225,7 +249,7 @@ const InfluencerDashboard = () => {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12 }}
+          transition={{ delay: 0.16 }}
           className="space-y-3"
         >
           <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
@@ -251,7 +275,7 @@ const InfluencerDashboard = () => {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
+          transition={{ delay: 0.22 }}
           className="space-y-3"
         >
           <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
@@ -265,7 +289,7 @@ const InfluencerDashboard = () => {
                 key={s.n}
                 initial={{ opacity: 0, x: -12 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.22 + i * 0.06 }}
+                transition={{ delay: 0.24 + i * 0.06 }}
                 onClick={s.action}
                 disabled={loading}
                 className="w-full glass-card-hover p-4 flex items-center gap-3 text-left"
@@ -292,7 +316,7 @@ const InfluencerDashboard = () => {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.26 }}
+          transition={{ delay: 0.28 }}
           className="space-y-3"
         >
           <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
