@@ -160,7 +160,7 @@ const ContractorDashboard = () => {
       }
       navType="contractor"
     >
-      <div className="px-6 py-10 space-y-4">
+      <div className="px-6 py-6 space-y-4">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <p className="text-muted-foreground text-xs uppercase tracking-widest mb-1">
             Painel de Marca/Negócios
