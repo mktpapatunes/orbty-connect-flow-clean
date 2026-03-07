@@ -9,13 +9,14 @@ import orbtyLogo from "@/assets/orbty-logo.png";
 import {
   ArrowRight,
   BadgeCheck,
-  BadgeDollarSign,
   CalendarCheck,
   ShieldCheck,
   Sparkles,
   TrendingUp,
   Zap,
 } from "lucide-react";
+
+import { FaInstagram } from "react-icons/fa";
 
 import HeroCarousel from "@/components/dashboard/HeroCarousel";
 import BannersCarousel from "@/components/dashboard/BannersCarousel";
@@ -79,17 +80,20 @@ const InfluencerDashboard = () => {
     {
       title: "Fature com seu Instagram",
       desc: "Ganhe dinheiro divulgando com seu perfil.",
-      icon: BadgeDollarSign,
+      icon: FaInstagram,
+      color: "text-[#E4405F]",
     },
     {
       title: "Presença digital",
       desc: "Eleve sua influência participando de campanhas reais.",
       icon: TrendingUp,
+      color: "text-primary",
     },
     {
       title: "Garantia e segurança",
       desc: "Produção e entregas com acompanhamento da Orbty.",
       icon: ShieldCheck,
+      color: "text-primary",
     },
   ];
 
@@ -108,6 +112,7 @@ const InfluencerDashboard = () => {
       navType="influencer"
     >
       <div className="space-y-6 overflow-x-hidden px-6 py-6">
+        
         {/* HEADER */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <p className="mb-1 text-xs uppercase tracking-widest text-muted-foreground">
@@ -201,23 +206,25 @@ const InfluencerDashboard = () => {
             Benefícios
           </p>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-3">
             {benefits.map((b) => (
               <div
                 key={b.title}
-                className="glass-card-hover rounded-3xl px-3 py-4 text-center"
+                className="glass-card-hover flex items-start gap-4 rounded-3xl p-4"
               >
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-neon-subtle shadow-[0_0_24px_hsl(var(--primary)/0.15)]">
-                  <b.icon className="h-6 w-6 text-primary" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-neon-subtle shadow-[0_0_24px_hsl(var(--primary)/0.15)]">
+                  <b.icon className={`text-[22px] ${b.color}`} />
                 </div>
 
-                <h3 className="mt-3 text-sm font-semibold text-foreground">
-                  {b.title}
-                </h3>
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {b.title}
+                  </h3>
 
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  {b.desc}
-                </p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    {b.desc}
+                  </p>
+                </div>
               </div>
             ))}
           </div>
