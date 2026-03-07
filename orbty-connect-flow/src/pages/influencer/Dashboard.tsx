@@ -80,19 +80,19 @@ const InfluencerDashboard = () => {
     {
       step: "01",
       title: "Fature com seu Instagram",
-      desc: "Ganhe dinheiro divulgando com seu perfil.",
+      desc: "Ganhe dinheiro divulgando produtos, eventos e campanhas com seu perfil.",
       icon: FaInstagram,
     },
     {
       step: "02",
       title: "Presença digital",
-      desc: "Eleve sua influência participando de campanhas reais.",
+      desc: "Eleve sua influência participando de publis reais. E expanda seu network com as marcas da sua região.",
       icon: TrendingUp,
     },
     {
       step: "03",
       title: "Garantia e segurança",
-      desc: "Produção e entregas com acompanhamento da Orbty.",
+      desc: "Produção, pagamentos e entregas com acompanhamento da plataforma Orbty.",
       icon: ShieldCheck,
     },
   ];
