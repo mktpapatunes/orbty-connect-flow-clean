@@ -78,13 +78,13 @@ const ContractorDashboard = () => {
   const ctas = useMemo(() => {
     const primary =
       approvalStatus === "approved"
-        ? { label: "Minhas campanhas", route: "/campanha" }
-        : { label: "Ver campanhas", route: "/campanha" };
+        ? { label: "Criar campanha", route: "/criar-campanha" }
+        : { label: "Criar campanha", route: "/criar-campanha" };
 
     const secondary =
       approvalStatus === "rejected"
-        ? { label: "Ajustar perfil", route: "/perfil" }
-        : { label: "Meu perfil", route: "/perfil" };
+        ? { label: "Minhas campanhas", route: "/campanha" }
+        : { label: "Minhas campanhas", route: "/campanha" };
 
     return { primary, secondary };
   }, [approvalStatus]);

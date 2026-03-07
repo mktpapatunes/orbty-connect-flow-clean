@@ -186,11 +186,11 @@ const InfluencerDashboard = () => {
             </button>
 
             <button
-              onClick={() => navigate("/minhas-candidaturas")}
+              onClick={() => navigate("/perfil-influenciadora")}
               disabled={loading}
               className="rounded-xl border border-border/50 bg-card/60 py-3 text-xs font-semibold text-foreground hover:bg-card"
             >
-              Ver histórico
+              Conectar perfil
             </button>
           </div>
         </motion.div>
