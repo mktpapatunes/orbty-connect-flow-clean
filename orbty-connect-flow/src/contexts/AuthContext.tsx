@@ -20,11 +20,10 @@ import { toast } from "sonner";
 function sanitizeRole(v: any): AppRole | null {
   const sRaw = String(v ?? "").trim().toLowerCase();
 
-  // ✅ compat: alguns lugares usam "contract" ao invés de "contractor"
   const s = sRaw === "contract" ? "contractor" : sRaw;
 
   if (s === "contractor" || s === "influencer" || s === "admin") return s as AppRole;
-  if (s === "creator") return "influencer"; // legado
+  if (s === "creator") return "influencer";
   return null;
 }
 
@@ -59,16 +58,8 @@ interface AuthContextType {
   session: Session | null;
   user: User | null;
 
-  // undefined = carregando
-  // null = não existe
-  // Profile = existe
   profile: Profile | null | undefined;
-
-  // undefined = carregando
-  // null = não tem role
   userRole: AppRole | null | undefined;
-
-  // undefined = carregando
   approvalStatus: ApprovalStatus | undefined;
 
   isAdmin: boolean;
@@ -81,6 +72,8 @@ interface AuthContextType {
     role: "contractor" | "influencer",
     profileData: {
       name: string;
+      companyName?: string;
+      jobTitle?: string;
       email: string;
       phone: string;
       city: string;
@@ -109,8 +102,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const sessionRef = useRef<Session | null>(null);
 
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
-
-  // role/status separados, mas sempre sanitizados
   const [userRole, setUserRole] = useState<AppRole | null | undefined>(undefined);
   const [rpcApprovalStatus, setRpcApprovalStatus] = useState<ApprovalStatus | null | undefined>(
     undefined
@@ -123,13 +114,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const registeringRef = useRef(false);
   const authReadyRef = useRef(false);
 
-  // ✅ role defensivo (evita “piscar” UI errada)
   const roleFromSession = inferRoleFromSession(session);
   const roleToUse: AppRole | null | undefined = userRole !== undefined ? userRole : roleFromSession;
 
   const isAdmin = roleToUse === "admin";
 
-  // ✅ approval: admin bypass, depois RPC, depois profile
   const approvalStatus: ApprovalStatus | undefined = isAdmin
     ? "approved"
     : rpcApprovalStatus ?? inferApprovalFromProfile(profile) ?? undefined;
@@ -148,22 +137,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     authReadyRef.current = true;
   }, []);
 
-  /**
-   * ✅ IMPORTANTE:
-   * fetchUserData NÃO depende de `session` no array de deps,
-   * senão vira loop infinito. Usamos `sessionRef`.
-   */
   const fetchUserData = useCallback(async (userId: string, currentSession?: Session | null) => {
     if (!userId) return;
     if (!mountedRef.current) return;
 
     try {
       const sess = currentSession ?? sessionRef.current;
-
-      // 0) role rápido pela sessão (metadata)
       const roleFromSess = inferRoleFromSession(sess);
 
-      // 1) tenta RPC (se falhar, segue)
       let roleFromRpc: AppRole | null = null;
       let approvalFromRpc: ApprovalStatus | null = null;
 
@@ -185,7 +166,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.error("get_my_context exception:", e);
       }
 
-      // 2) busca profile SEMPRE
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select("*")
@@ -202,24 +182,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const p = profileData as unknown as Profile;
         setProfile(p);
 
-        // ✅ desired_role é "role desejada" do cadastro.
-        // ✅ role oficial para painel deve vir da RPC (user_roles).
         const roleFromProfile = inferRoleFromProfile(p);
-
-        // ✅ AJUSTE PRINCIPAL: prioridade correta
         const finalRole = roleFromRpc ?? roleFromSess ?? roleFromProfile ?? null;
         setUserRole(finalRole);
 
-        // approval fallback
         setRpcApprovalStatus((prev) => prev ?? approvalFromRpc ?? inferApprovalFromProfile(p));
-
         return;
       }
 
-      // Sem profile
       setProfile(null);
-
-      // ✅ Consistência: mantém mesma prioridade
       setUserRole(roleFromRpc ?? roleFromSess ?? null);
       setRpcApprovalStatus((prev) => prev ?? approvalFromRpc ?? null);
     } catch (e) {
@@ -231,14 +202,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  // Mantém sessionRef sincronizado
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
-
-  // ------------------------------------------------------------
-  // Auth lifecycle
-  // ------------------------------------------------------------
 
   useEffect(() => {
     mountedRef.current = true;
@@ -249,14 +215,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!mountedRef.current) return;
       if (event === "INITIAL_SESSION") return;
 
-      // ✅ sempre atualiza session/ref
       setSession(newSession);
       sessionRef.current = newSession;
 
-      // ✅ evitar tempestade em refresh do token
-      // (não precisa refazer queries toda vez)
       if (event === "TOKEN_REFRESHED") {
-        // Se ainda não carregou profile/role, tenta uma vez
         if (newSession?.user && (profile === undefined || userRole === undefined)) {
           fetchUserData(newSession.user.id, newSession).catch(() => {});
         }
@@ -298,7 +260,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         sessionRef.current = data.session;
 
         if (data.session?.user) {
-          // role rápido
           setUserRole(inferRoleFromSession(data.session));
           await fetchUserData(data.session.user.id, data.session);
         } else {
@@ -319,14 +280,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       mountedRef.current = false;
       subscription.unsubscribe();
     };
-    // ✅ NÃO coloque fetchUserData nas deps com session capturada.
-    // fetchUserData é estável (useCallback([])).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finalizeLoading, clearUserState]);
-
-  // ------------------------------------------------------------
-  // Actions
-  // ------------------------------------------------------------
 
   const register: AuthContextType["register"] = async (email, password, role, profileData) => {
     registeringRef.current = true;
@@ -339,6 +293,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           emailRedirectTo: window.location.origin + "/login",
           data: {
             name: profileData.name,
+            company_name: profileData.companyName,
+            job_title: profileData.jobTitle,
             email: profileData.email,
             phone: profileData.phone,
             city: profileData.city,
@@ -346,7 +302,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             instagram: profileData.instagram,
             followers: profileData.followers,
             invite_code: profileData.inviteCode,
-            role, // ✅ isso alimenta seu trigger no auth.users
+            role,
           },
         },
       });
@@ -356,7 +312,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       localStorage.removeItem("orbty_desired_role");
 
-      // Sem session = precisa confirmar e-mail
       if (!authData.session) {
         localStorage.setItem(
           "orbty_pending_registration",
@@ -365,7 +320,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return { needsEmailConfirmation: true };
       }
 
-      // ✅ garante role correto imediatamente
       setSession(authData.session);
       sessionRef.current = authData.session;
       setUserRole(sanitizeRole(role));
@@ -403,7 +357,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await fetchUserData(sess.user.id, sess);
   };
 
-  // Debug útil
   useEffect(() => {
     console.log("AUTH_STATE", {
       authReady,
@@ -424,7 +377,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         session,
         user: session?.user ?? null,
         profile,
-        userRole: roleToUse, // ✅ expõe o role já “defensivo”
+        userRole: roleToUse,
         approvalStatus,
         isAdmin,
         loading,
