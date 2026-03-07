@@ -195,38 +195,38 @@ const InfluencerDashboard = () => {
           </div>
         </motion.div>
 
-        {/* COMO FUNCIONA A ORBTY */}
+        {/* BENEFÍCIOS DA ORBTY */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.12 }}
         >
           <p className="mb-3 text-xs uppercase tracking-widest text-muted-foreground">
-            Como funciona a Orbty
+            Benefícios da Orbty
           </p>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {benefits.map((b, i) => (
               <motion.div
                 key={b.title}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.14 + i * 0.05 }}
-                className="glass-card-hover rounded-3xl px-3 py-4 text-center"
+                className="glass-card-hover w-[78%] shrink-0 rounded-3xl px-4 py-5"
               >
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-neon-subtle shadow-[0_0_24px_hsl(var(--primary)/0.15)]">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-neon-subtle shadow-[0_0_24px_hsl(var(--primary)/0.15)]">
                   <b.icon className="h-6 w-6 text-primary" />
                 </div>
 
-                <p className="mt-3 text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                <p className="mt-4 text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
                   Passo {b.step}
                 </p>
 
-                <h3 className="mt-1 text-sm font-semibold leading-tight text-foreground">
+                <h3 className="mt-2 text-sm font-semibold leading-tight text-foreground">
                   {b.title}
                 </h3>
 
-                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                   {b.desc}
                 </p>
               </motion.div>
