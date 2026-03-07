@@ -43,7 +43,7 @@ const ContractorDashboard = () => {
     if (approvalStatus === "approved") {
       return {
         label: "Aprovado(a)",
-        desc: "Você já pode criar campanhas, acompanhar candidaturas e gerenciar entregas por aqui.",
+        desc: "Você já pode criar campanhas, e acompanhar as entregas por aqui.",
         icon: BadgeCheck,
         className: "border-accent/30 bg-accent/10 text-accent",
       };
@@ -91,18 +91,18 @@ const ContractorDashboard = () => {
 
   const benefits = [
     {
-      title: "Creators regionais",
-      desc: "Encontre perfis da sua região para divulgar sua marca com mais conexão local.",
+      title: "Visibilidade e posicionamento",
+      desc: "Encontre influenciadores da sua região para divulgar sua marca, evento ou produto com mais conexão local.",
       icon: Users,
     },
     {
-      title: "Tudo centralizado",
-      desc: "Briefing, candidaturas, aprovações e entregas em um só lugar.",
+      title: "Estratégia e resultados",
+      desc: "Criação de campanha, aprovações, entregas e resultados em um só lugar.",
       icon: CalendarCheck,
     },
     {
-      title: "Mais controle",
-      desc: "Acompanhe campanhas com mais clareza, organização e segurança.",
+      title: "Segurança e controle",
+      desc: "Divulgue com influenciadores verificados e tenha total controle sobre suas campanhas.",
       icon: ShieldCheck,
     },
   ];
