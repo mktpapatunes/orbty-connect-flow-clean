@@ -22,6 +22,7 @@ import {
   CheckSquare,
   Square,
   Target,
+  ClipboardList,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -760,6 +761,47 @@ const CampaignView = () => {
                 </div>
                 <p className="text-sm text-foreground/75 leading-relaxed whitespace-pre-line">{briefPublic}</p>
               </div>
+            )}
+
+            {isInvitedInfluencer && (
+              <>
+                <div className="glass-card p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ClipboardList className="w-4 h-4 text-primary" />
+                    <h4 className="font-semibold text-foreground text-sm">Requisitos</h4>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-2">
+                    <DetailRow label="Segmentos de conteúdo" value={renderSimpleValue(contentSegments)} />
+                    <DetailRow label="Creators necessários" value={renderSimpleValue(creatorsCount)} />
+                  </div>
+                </div>
+
+                <div className="glass-card p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ClipboardCheck className="w-4 h-4 text-accent" />
+                    <h4 className="font-semibold text-foreground text-sm">Entregas principais</h4>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-2">
+                    <DetailRow label="Quantidade de posts" value={renderSimpleValue(deliverables?.posts)} />
+                    <DetailRow label="Formato do conteúdo" value={renderSimpleValue(deliverables?.format)} />
+                  </div>
+                </div>
+
+                <div className="glass-card p-4 border border-primary/15">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Wallet className="w-4 h-4 text-primary" />
+                    <h4 className="font-semibold text-foreground text-sm">Valores da sua participação</h4>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-2">
+                    <DetailRow label="Valor total a receber" value={formatMoneyBRL(pricing?.creator_fee ?? null)} />
+                    <DetailRow label="Quantidade de posts" value={renderSimpleValue(pricing?.posts_count)} />
+                    <DetailRow label="Valor por post" value={formatMoneyBRL(pricing?.price_per_post ?? null)} />
+                  </div>
+                </div>
+              </>
             )}
 
             {isContractor && (
