@@ -71,6 +71,17 @@ export default function BannersCarousel({
     });
   };
 
+  const goTo = (index: number, behavior: ScrollBehavior = "smooth") => {
+    if (count === 0) return;
+
+    const next = clamp(index, 0, count - 1);
+    setActive(next);
+
+    window.requestAnimationFrame(() => {
+      scrollToIndex(next, behavior);
+    });
+  };
+
   const updateActiveByScroll = () => {
     const el = scrollerRef.current;
     if (!el || count === 0) return;
@@ -109,7 +120,11 @@ export default function BannersCarousel({
     autoPlayRef.current = window.setInterval(() => {
       setActive((prev) => {
         const next = prev + 1 >= count ? 0 : prev + 1;
-        scrollToIndex(next);
+
+        window.requestAnimationFrame(() => {
+          scrollToIndex(next, "smooth");
+        });
+
         return next;
       });
     }, autoPlayInterval);
@@ -284,8 +299,7 @@ export default function BannersCarousel({
               type="button"
               onClick={() => {
                 stopAutoPlay();
-                scrollToIndex(i);
-                setActive(i);
+                goTo(i, "smooth");
                 resumeAutoPlayLater();
               }}
               aria-label={`Ir para banner ${i + 1}`}
