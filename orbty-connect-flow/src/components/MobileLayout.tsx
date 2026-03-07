@@ -11,10 +11,10 @@ import {
   Trophy,
   Settings,
   Orbit,
+  Star,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Orbit } from "lucide-react";
-import { Star } from "lucide-react"
+
 
 <Sparkles className="h-4 w-4" />
 
