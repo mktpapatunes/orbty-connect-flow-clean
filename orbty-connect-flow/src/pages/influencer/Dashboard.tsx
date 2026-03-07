@@ -39,8 +39,8 @@ const InfluencerDashboard = () => {
   const statusBadge = useMemo(() => {
     if (approvalStatus === "approved") {
       return {
-        label: "Aprovada",
-        desc: "Você já pode acompanhar suas campanhas e entregas por aqui.",
+        label: "Aprovado(a)",
+        desc: "Você já pode acessar suas campanhas e entregas por aqui.",
         icon: BadgeCheck,
         className: "border-accent/30 bg-accent/10 text-accent",
       };
@@ -117,8 +117,8 @@ const InfluencerDashboard = () => {
           </h2>
 
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            O Orbty conecta creators a campanhas regionais. Aqui você acompanha
-            briefing, entregas e status — tudo dentro de cada campanha.
+            A Orbty conecta creators a marcas e negócios regionais. Aqui você encontra
+            produtos, eventos e músicas para divulgar no seu Instagram — tudo dentro da plataforma.
           </p>
         </motion.div>
 
