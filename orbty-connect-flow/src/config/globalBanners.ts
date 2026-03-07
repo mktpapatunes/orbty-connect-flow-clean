@@ -6,42 +6,55 @@ export type GlobalBanner = {
   enabled?: boolean
 }
 
-/* HERO SLIDER */
+/*
+  HERO BANNERS (topo do dashboard)
+
+  tamanho recomendado:
+  1200x700
+*/
 
 export const dashboardHeroBanners: GlobalBanner[] = [
   {
     id: "hero1",
     imageUrl: "/banners/hero1.png",
-    alt: "Campanha destaque",
+    alt: "Campanhas abertas na sua região",
     href: "/minhas-campanhas",
     enabled: true,
   },
+
   {
     id: "hero2",
     imageUrl: "/banners/hero2.png",
-    alt: "Novidades Orbty",
+    alt: "Complete seu perfil",
     href: "/perfil",
     enabled: true,
   },
+
   {
     id: "hero3",
     imageUrl: "/banners/hero3.png",
-    alt: "Promoção creators",
-    href: "/ajuda",
+    alt: "Conheça novas oportunidades",
+    href: "/minhas-campanhas",
     enabled: true,
   },
 ]
 
-/* CARROSSEL DE NOVIDADES */
+/*
+  BANNERS DE NOVIDADES
+
+  tamanho recomendado:
+  1200x650
+*/
 
 export const dashboardNewsBanners: GlobalBanner[] = [
   {
     id: "news1",
     imageUrl: "/banners/news1.png",
-    alt: "Campanhas abertas",
+    alt: "Novas campanhas disponíveis",
     href: "/minhas-campanhas",
     enabled: true,
   },
+
   {
     id: "news2",
     imageUrl: "/banners/news2.png",
@@ -49,10 +62,11 @@ export const dashboardNewsBanners: GlobalBanner[] = [
     href: "/perfil",
     enabled: true,
   },
+
   {
     id: "news3",
     imageUrl: "/banners/news3.png",
-    alt: "Ajuda Orbty",
+    alt: "Dúvidas sobre campanhas",
     href: "/ajuda",
     enabled: true,
   },

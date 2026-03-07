@@ -172,7 +172,7 @@ const InfluencerDashboard = () => {
           </p>
         </motion.div>
 
-        {/* HERO CAROUSEL GLOBAL */}
+        {/* HERO CAROUSEL */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -185,7 +185,7 @@ const InfluencerDashboard = () => {
           />
         </motion.div>
 
-        {/* CARROSSEL GLOBAL */}
+        {/* NOVIDADES */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}

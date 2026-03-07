@@ -7,6 +7,10 @@ function isExternal(url?: string) {
   return !!url && /^https?:\/\//i.test(url);
 }
 
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
 export default function HeroCarousel({
   banners,
   autoPlay = true,
@@ -24,27 +28,79 @@ export default function HeroCarousel({
     [banners]
   );
 
-  const [active, setActive] = useState(0);
   const count = enabled.length;
+  const [active, setActive] = useState(0);
 
   const autoPlayRef = useRef<number | null>(null);
+  const resumeTimeoutRef = useRef<number | null>(null);
 
-  const scrollToIndex = (index: number) => {
+  const isPointerDownRef = useRef(false);
+  const dragMovedRef = useRef(false);
+  const startXRef = useRef(0);
+  const startScrollLeftRef = useRef(0);
+
+  const getChildren = () => {
+    const el = scrollerRef.current;
+    if (!el) return [];
+    return Array.from(el.children) as HTMLElement[];
+  };
+
+  const getTargetLeft = (index: number) => {
+    const el = scrollerRef.current;
+    const children = getChildren();
+    const target = children[index];
+
+    if (!el || !target) return 0;
+
+    const left = target.offsetLeft - (el.clientWidth - target.clientWidth) / 2;
+    const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+
+    return clamp(left, 0, maxLeft);
+  };
+
+  const scrollToIndex = (index: number, behavior: ScrollBehavior = "smooth") => {
     const el = scrollerRef.current;
     if (!el) return;
 
-    const children = Array.from(el.children) as HTMLElement[];
-    const target = children[index];
-
-    if (!target) return;
-
-    target.scrollIntoView({
-      behavior: "smooth",
-      inline: "center",
+    el.scrollTo({
+      left: getTargetLeft(index),
+      behavior,
     });
   };
 
-  const startAuto = () => {
+  const updateActiveByScroll = () => {
+    const el = scrollerRef.current;
+    if (!el || count === 0) return;
+
+    const center = el.scrollLeft + el.clientWidth / 2;
+    const children = getChildren();
+
+    let bestIdx = 0;
+    let bestDist = Infinity;
+
+    children.forEach((child, idx) => {
+      const childCenter = child.offsetLeft + child.clientWidth / 2;
+      const dist = Math.abs(childCenter - center);
+
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = idx;
+      }
+    });
+
+    setActive(clamp(bestIdx, 0, count - 1));
+  };
+
+  const stopAutoPlay = () => {
+    if (autoPlayRef.current) {
+      window.clearInterval(autoPlayRef.current);
+      autoPlayRef.current = null;
+    }
+  };
+
+  const startAutoPlay = () => {
+    stopAutoPlay();
+
     if (!autoPlay || count <= 1) return;
 
     autoPlayRef.current = window.setInterval(() => {
@@ -56,96 +112,181 @@ export default function HeroCarousel({
     }, autoPlayInterval);
   };
 
-  const stopAuto = () => {
-    if (autoPlayRef.current) {
-      clearInterval(autoPlayRef.current);
-      autoPlayRef.current = null;
+  const resumeAutoPlayLater = () => {
+    if (!autoPlay) return;
+
+    if (resumeTimeoutRef.current) {
+      window.clearTimeout(resumeTimeoutRef.current);
     }
+
+    resumeTimeoutRef.current = window.setTimeout(() => {
+      startAutoPlay();
+    }, 5000);
   };
 
   useEffect(() => {
-    startAuto();
-    return stopAuto;
+    const el = scrollerRef.current;
+    if (!el || count === 0) return;
+
+    const onScroll = () => updateActiveByScroll();
+
+    onScroll();
+    el.addEventListener("scroll", onScroll, { passive: true });
+
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+    };
   }, [count]);
 
-  if (!enabled.length) return null;
+  useEffect(() => {
+    startAutoPlay();
+
+    return () => {
+      stopAutoPlay();
+      if (resumeTimeoutRef.current) {
+        window.clearTimeout(resumeTimeoutRef.current);
+      }
+    };
+  }, [count, autoPlay, autoPlayInterval]);
+
+  if (count === 0) return null;
 
   return (
     <section className="w-full">
       <div className="relative">
-
-        {/* ARROWS */}
-        {count > 1 && (
-          <>
-            <button
-              onClick={() => {
-                const next = active - 1 < 0 ? count - 1 : active - 1;
-                setActive(next);
-                scrollToIndex(next);
-              }}
-              className="absolute left-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm hover:bg-black/50"
-            >
-              <ChevronLeft size={16} />
-            </button>
-
-            <button
-              onClick={() => {
-                const next = active + 1 >= count ? 0 : active + 1;
-                setActive(next);
-                scrollToIndex(next);
-              }}
-              className="absolute right-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm hover:bg-black/50"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </>
-        )}
-
-        {/* SLIDER */}
         <div
           ref={scrollerRef}
-          className="flex gap-3 overflow-x-auto scroll-smooth cursor-grab active:cursor-grabbing select-none [&::-webkit-scrollbar]:hidden"
+          className="flex gap-3 overflow-x-auto scroll-smooth select-none cursor-grab active:cursor-grabbing touch-pan-y [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           style={{ scrollSnapType: "x mandatory" as any }}
+          onPointerDown={(e) => {
+            const el = scrollerRef.current;
+            if (!el) return;
+
+            isPointerDownRef.current = true;
+            dragMovedRef.current = false;
+            startXRef.current = e.clientX;
+            startScrollLeftRef.current = el.scrollLeft;
+
+            stopAutoPlay();
+            el.setPointerCapture?.(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            const el = scrollerRef.current;
+            if (!el || !isPointerDownRef.current) return;
+
+            const delta = e.clientX - startXRef.current;
+
+            if (Math.abs(delta) > 6) {
+              dragMovedRef.current = true;
+            }
+
+            el.scrollLeft = startScrollLeftRef.current - delta;
+          }}
+          onPointerUp={() => {
+            if (!isPointerDownRef.current) return;
+
+            isPointerDownRef.current = false;
+            updateActiveByScroll();
+            resumeAutoPlayLater();
+          }}
+          onPointerCancel={() => {
+            if (!isPointerDownRef.current) return;
+
+            isPointerDownRef.current = false;
+            updateActiveByScroll();
+            resumeAutoPlayLater();
+          }}
         >
           {enabled.map((b) => (
             <button
               key={b.id}
-              onClick={() => {
+              type="button"
+              onClick={(e) => {
+                if (dragMovedRef.current) {
+                  e.preventDefault();
+                  return;
+                }
+
                 if (!b.href) return;
 
+                stopAutoPlay();
+
                 if (isExternal(b.href)) {
-                  window.open(b.href, "_blank");
+                  window.open(b.href, "_blank", "noopener,noreferrer");
                 } else {
                   navigate(b.href);
                 }
+
+                resumeAutoPlayLater();
               }}
-              className="relative w-full shrink-0 overflow-hidden rounded-[28px]"
+              className="relative w-full shrink-0 overflow-hidden rounded-[28px] border border-white/10 bg-white/5 shadow-sm"
               style={{ scrollSnapAlign: "center" as any }}
             >
               <img
                 src={b.imageUrl}
                 alt={b.alt}
-                className="h-[220px] w-full object-cover"
+                className="pointer-events-none h-[220px] w-full object-cover"
+                loading="lazy"
                 draggable={false}
               />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/30" />
             </button>
           ))}
         </div>
+
+        {count > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                stopAutoPlay();
+                const next = active - 1 < 0 ? count - 1 : active - 1;
+                setActive(next);
+                scrollToIndex(next);
+                resumeAutoPlayLater();
+              }}
+              className="absolute left-3 top-1/2 z-10 hidden -translate-y-1/2 text-white/90 transition hover:text-white md:flex"
+              aria-label="Banner anterior"
+            >
+              <ChevronLeft className="h-5 w-5 drop-shadow-[0_1px_8px_rgba(0,0,0,0.45)]" />
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                stopAutoPlay();
+                const next = active + 1 >= count ? 0 : active + 1;
+                setActive(next);
+                scrollToIndex(next);
+                resumeAutoPlayLater();
+              }}
+              className="absolute right-3 top-1/2 z-10 hidden -translate-y-1/2 text-white/90 transition hover:text-white md:flex"
+              aria-label="Próximo banner"
+            >
+              <ChevronRight className="h-5 w-5 drop-shadow-[0_1px_8px_rgba(0,0,0,0.45)]" />
+            </button>
+          </>
+        )}
       </div>
 
-      {/* DOTS */}
       {count > 1 && (
         <div className="mt-3 flex justify-center gap-2">
           {enabled.map((_, i) => (
             <button
               key={i}
+              type="button"
               onClick={() => {
+                stopAutoPlay();
                 setActive(i);
                 scrollToIndex(i);
+                resumeAutoPlayLater();
               }}
+              aria-label={`Ir para banner ${i + 1}`}
               className={[
                 "h-2 rounded-full transition-all",
-                active === i ? "w-6 bg-primary" : "w-2 bg-zinc-300/60",
+                i === active ? "w-6 bg-primary" : "w-2 bg-zinc-300/60",
               ].join(" ")}
             />
           ))}
