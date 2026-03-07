@@ -43,7 +43,7 @@ const ContractorDashboard = () => {
     if (approvalStatus === "approved") {
       return {
         label: "Aprovado(a)",
-        desc: "Você já pode criar campanhas, e acompanhar as entregas por aqui.",
+        desc: "Você já pode criar campanhas e acompanhar as entregas.",
         icon: BadgeCheck,
         className: "border-accent/30 bg-accent/10 text-accent",
       };
@@ -102,7 +102,7 @@ const ContractorDashboard = () => {
     },
     {
       title: "Segurança e controle",
-      desc: "Divulgue com influenciadores verificados e tenha total controle sobre suas campanhas.",
+      desc: "Divulgue com influenciadores verificados pela Orbty e tenha total controle sobre suas campanhas.",
       icon: ShieldCheck,
     },
   ];
@@ -133,8 +133,8 @@ const ContractorDashboard = () => {
           </h2>
 
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            A Orbty conecta sua marca a creators regionais. Aqui você organiza campanhas,
-            acompanha candidaturas, entregas e resultados — tudo dentro da plataforma.
+            A Orbty conecta sua marca/negócio a criadores de conteúdo da sua região. Aqui você divulga campanhas, produtos, músicas ou eventos
+             para o público local — tudo dentro da plataforma.
           </p>
         </motion.div>
 
