@@ -78,22 +78,22 @@ const InfluencerDashboard = () => {
 
   const benefits = [
     {
+      step: "01",
       title: "Fature com seu Instagram",
       desc: "Ganhe dinheiro divulgando com seu perfil.",
       icon: FaInstagram,
-      color: "text-[#E4405F]",
     },
     {
+      step: "02",
       title: "Presença digital",
       desc: "Eleve sua influência participando de campanhas reais.",
       icon: TrendingUp,
-      color: "text-primary",
     },
     {
+      step: "03",
       title: "Garantia e segurança",
       desc: "Produção e entregas com acompanhamento da Orbty.",
       icon: ShieldCheck,
-      color: "text-primary",
     },
   ];
 
@@ -112,7 +112,6 @@ const InfluencerDashboard = () => {
       navType="influencer"
     >
       <div className="space-y-6 overflow-x-hidden px-6 py-6">
-        
         {/* HEADER */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <p className="mb-1 text-xs uppercase tracking-widest text-muted-foreground">
@@ -196,36 +195,41 @@ const InfluencerDashboard = () => {
           </div>
         </motion.div>
 
-        {/* BENEFÍCIOS */}
+        {/* COMO FUNCIONA A ORBTY */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.12 }}
         >
           <p className="mb-3 text-xs uppercase tracking-widest text-muted-foreground">
-            Benefícios
+            Como funciona a Orbty
           </p>
 
-          <div className="space-y-3">
-            {benefits.map((b) => (
-              <div
+          <div className="grid grid-cols-3 gap-3">
+            {benefits.map((b, i) => (
+              <motion.div
                 key={b.title}
-                className="glass-card-hover flex items-start gap-4 rounded-3xl p-4"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.14 + i * 0.05 }}
+                className="glass-card-hover rounded-3xl px-3 py-4 text-center"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-neon-subtle shadow-[0_0_24px_hsl(var(--primary)/0.15)]">
-                  <b.icon className={`text-[22px] ${b.color}`} />
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-neon-subtle shadow-[0_0_24px_hsl(var(--primary)/0.15)]">
+                  <b.icon className="h-6 w-6 text-primary" />
                 </div>
 
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground">
-                    {b.title}
-                  </h3>
+                <p className="mt-3 text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                  Passo {b.step}
+                </p>
 
-                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    {b.desc}
-                  </p>
-                </div>
-              </div>
+                <h3 className="mt-1 text-sm font-semibold leading-tight text-foreground">
+                  {b.title}
+                </h3>
+
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                  {b.desc}
+                </p>
+              </motion.div>
             ))}
           </div>
         </motion.div>
