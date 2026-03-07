@@ -115,7 +115,7 @@ export const dashboardContractorHeroBanners: GlobalBanner[] = [
 export const dashboardContractorNewsBanners: GlobalBanner[] = [
   {
     id: "news4",
-    imageUrl: "/banners/news1.webp",
+    imageUrl: "/banners/news4.webp",
     alt: "Organize campanhas em um só lugar",
     href: "/campanha",
     enabled: true,
@@ -123,7 +123,7 @@ export const dashboardContractorNewsBanners: GlobalBanner[] = [
 
   {
     id: "news5",
-    imageUrl: "/banners/news2.webp",
+    imageUrl: "/banners/news5.webp",
     alt: "Acompanhe candidaturas e entregas",
     href: "/campanha",
     enabled: true,
@@ -131,7 +131,7 @@ export const dashboardContractorNewsBanners: GlobalBanner[] = [
 
   {
     id: "news6",
-    imageUrl: "/banners/news3.webp",
+    imageUrl: "/banners/news6.webp",
     alt: "Fortaleça sua presença com creators locais",
     href: "/criar-campanha",
     enabled: true,
