@@ -156,8 +156,8 @@ export default function HeroCarousel({
       <div className="relative">
         <div
           ref={scrollerRef}
-          className="flex gap-3 overflow-x-auto scroll-smooth select-none touch-pan-y [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:cursor-grab md:active:cursor-grabbing"
-          style={{ scrollSnapType: "x mandatory" as any, WebkitOverflowScrolling: "touch" }}
+          className="flex gap-3 overflow-x-auto scroll-smooth select-none overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:cursor-grab md:active:cursor-grabbing"
+          style={{ scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" }}
           onMouseDown={(e) => {
             const el = scrollerRef.current;
             if (!el) return;
@@ -166,7 +166,6 @@ export default function HeroCarousel({
             dragMovedRef.current = false;
             startXRef.current = e.clientX;
             startScrollLeftRef.current = el.scrollLeft;
-
             stopAutoPlay();
           }}
           onMouseMove={(e) => {
@@ -174,10 +173,7 @@ export default function HeroCarousel({
             if (!el || !isDraggingRef.current) return;
 
             const delta = e.clientX - startXRef.current;
-
-            if (Math.abs(delta) > 6) {
-              dragMovedRef.current = true;
-            }
+            if (Math.abs(delta) > 6) dragMovedRef.current = true;
 
             el.scrollLeft = startScrollLeftRef.current - delta;
           }}
@@ -204,9 +200,10 @@ export default function HeroCarousel({
           }}
         >
           {enabled.map((b) => (
-            <button
+            <div
               key={b.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={(e) => {
                 if (dragMovedRef.current) {
                   e.preventDefault();
@@ -225,6 +222,17 @@ export default function HeroCarousel({
 
                 resumeAutoPlayLater();
               }}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                if (!b.href) return;
+
+                if (isExternal(b.href)) {
+                  window.open(b.href, "_blank", "noopener,noreferrer");
+                } else {
+                  navigate(b.href);
+                }
+              }}
               className="relative w-full shrink-0 overflow-hidden rounded-[28px] border border-white/10 bg-white/5 shadow-sm"
               style={{
                 scrollSnapAlign: "center",
@@ -239,7 +247,7 @@ export default function HeroCarousel({
                 draggable={false}
               />
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/30" />
-            </button>
+            </div>
           ))}
         </div>
 
