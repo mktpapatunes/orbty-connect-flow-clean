@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
@@ -51,6 +51,33 @@ type DeliverablesRow = {
   updated_at?: string | null;
 };
 
+type CampaignRequirements = {
+  content_segments?: string[];
+  creators_needed?: number | null;
+  deliverables?: {
+    posts?: number | null;
+    format?: string | null;
+    caption?: string | null;
+    hashtags?: string[];
+    mentions?: string[];
+    collab?: boolean | null;
+    collab_mentions?: string[];
+  } | null;
+  pricing?: {
+    creator_fee?: number | null;
+    posts_count?: number | null;
+    price_per_post?: number | null;
+    currency?: string | null;
+  } | null;
+  internal?: {
+    coupon_code?: string | null;
+    quote_total?: number | null;
+    quote_subtotal?: number | null;
+    quote_discount?: number | null;
+    selected_creator_ids?: string[];
+  } | null;
+};
+
 const formatDateBR = (value?: string | null) => {
   if (!value) return "-";
   const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -87,7 +114,18 @@ const statusLabel = (s?: string | null) => {
   if (s === "completed") return "Concluída";
   if (s === "deleted") return "Excluída";
   if (s === "draft") return "Rascunho";
+  if (s === "pending_payment") return "Pagamento pendente";
   return s;
+};
+
+const translateCampaignType = (type?: string | null) => {
+  const raw = String(type || "").trim().toLowerCase();
+
+  if (raw === "music") return "Música";
+  if (raw === "event") return "Evento";
+  if (raw === "product") return "Produto/Serviço";
+
+  return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "Campanha";
 };
 
 const getInitials = (name?: string | null) => {
@@ -100,12 +138,6 @@ const getInitials = (name?: string | null) => {
   return `${first}${last}`.toUpperCase();
 };
 
-const prettifyKey = (k: string) =>
-  (k || "")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (m) => m.toUpperCase())
-    .trim();
-
 const CHECKLIST_LABELS: Record<string, string> = {
   posts_done: "Realizei os posts combinados",
   format_done: "Entreguei no formato combinado",
@@ -117,32 +149,49 @@ const CHECKLIST_LABELS: Record<string, string> = {
   proof_links: "Adicionei link(s) da(s) publicação(ões)",
 };
 
-const REQUIREMENTS_LABELS: Record<string, string> = {
-  posts: "Quantidade de posts",
-  format: "Formato",
-  caption: "Legenda",
-  hashtags: "Hashtags",
-  mentions: "Menções",
-  collab: "Post em collab",
-  collab_mentions: "Menções (collab)",
-  coupon_code: "Cupom",
-  quote_total: "Valor total",
-  quote_subtotal: "Subtotal",
-  quote_discount: "Desconto",
-  creators_needed: "Creators necessários",
-  content_segments: "Segmentos",
-  selected_creator_ids: "Creators selecionados",
+const isValidKind = (k?: string | null): k is CampaignFileKind => k === "assets" || k === "deliverables";
+
+const renderSimpleValue = (value: unknown) => {
+  if (value === null || value === undefined || value === "") return "—";
+
+  if (typeof value === "boolean") return value ? "Sim" : "Não";
+
+  if (Array.isArray(value)) {
+    if (!value.length) return "—";
+    return (
+      <ul className="mt-1 space-y-1">
+        {value.map((item, idx) => (
+          <li key={idx} className="text-sm text-foreground/75 leading-relaxed">
+            • {String(item)}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return String(value);
 };
 
-const VALUE_KEYS = new Set(["quote_total", "quote_subtotal", "quote_discount"]);
-
-const isValidKind = (k?: string | null): k is CampaignFileKind => k === "assets" || k === "deliverables";
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-border/50 bg-card/60 p-3">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="mt-1 text-sm text-foreground/80 leading-relaxed">{value}</div>
+    </div>
+  );
+}
 
 const IconActionButton = (props: {
   onClick: () => void;
   disabled?: boolean;
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
   tone?: "default" | "primary" | "accent";
   showDot?: boolean;
 }) => {
@@ -199,7 +248,6 @@ const CampaignView = () => {
   const isContractor = userRole === "contractor";
   const isInfluencer = userRole === "influencer";
 
-  // ✅ lê filtros de arquivos pela URL
   const urlKind = (() => {
     const sp = new URLSearchParams(location.search);
     const k = sp.get("kind");
@@ -221,7 +269,6 @@ const CampaignView = () => {
 
       const clear = !!opts?.clearFilters;
 
-      // ✅ filtros só fazem sentido na aba files
       if (next !== "files" || clear) {
         sp.delete("kind");
         sp.delete("creator");
@@ -358,9 +405,9 @@ const CampaignView = () => {
     const run = async () => {
       if (!isContractor || !id || !user || !campaign) return;
 
-      const req = ((campaign as any)?.requirements as Record<string, any> | null) ?? null;
-      const selectedIds: string[] = Array.isArray(req?.selected_creator_ids)
-        ? req!.selected_creator_ids.filter((x: any) => typeof x === "string" && x.trim().length > 0)
+      const req = (((campaign as any)?.requirements as CampaignRequirements | null) ?? null);
+      const selectedIds: string[] = Array.isArray(req?.internal?.selected_creator_ids)
+        ? req.internal!.selected_creator_ids.filter((x: any) => typeof x === "string" && x.trim().length > 0)
         : [];
 
       const { data: partData, error: partErr } = await supabase
@@ -534,7 +581,7 @@ const CampaignView = () => {
   const shouldShowInfluencerConfirmCta = isInvitedInfluencer;
 
   const status = (campaign as any)?.status as string | null;
-  const req = ((campaign as any)?.requirements as Record<string, any> | null) ?? null;
+  const req = (((campaign as any)?.requirements as CampaignRequirements | null) ?? null);
 
   const city = ((campaign as any)?.city as string | null) ?? null;
   const state = ((campaign as any)?.state as string | null) ?? null;
@@ -546,20 +593,28 @@ const CampaignView = () => {
   const briefPublic = ((campaign as any)?.brief_public as string | null) ?? null;
   const briefPrivate = ((campaign as any)?.brief_private as string | null) ?? null;
 
-  const quoteTotal = typeof req?.quote_total === "number" ? req.quote_total : req?.quote_total ? Number(req.quote_total) : null;
-  const quoteSubtotal = typeof req?.quote_subtotal === "number" ? req.quote_subtotal : req?.quote_subtotal ? Number(req.quote_subtotal) : null;
-  const quoteDiscount = typeof req?.quote_discount === "number" ? req.quote_discount : req?.quote_discount ? Number(req.quote_discount) : null;
-  const couponCode = typeof req?.coupon_code === "string" ? req.coupon_code.trim() : null;
-
-  const creatorRequirementsEntries = Object.entries(req || {}).filter(([k]) => k !== "selected_creator_ids");
-  const otherEntries = creatorRequirementsEntries.filter(([k]) => !VALUE_KEYS.has(k));
-
-  const selectedCreatorIds: string[] = Array.isArray(req?.selected_creator_ids)
-    ? req.selected_creator_ids.filter((x: any) => typeof x === "string" && x.trim().length > 0)
-    : [];
-
+  const contentSegments = req?.content_segments ?? [];
   const creatorsCount =
     typeof req?.creators_needed === "number" ? req.creators_needed : req?.creators_needed ? Number(req.creators_needed) : null;
+
+  const deliverables = req?.deliverables ?? null;
+  const pricing = req?.pricing ?? null;
+  const internal = req?.internal ?? null;
+
+  const quoteTotal =
+    typeof internal?.quote_total === "number" ? internal.quote_total : internal?.quote_total ? Number(internal.quote_total) : null;
+
+  const quoteSubtotal =
+    typeof internal?.quote_subtotal === "number" ? internal.quote_subtotal : internal?.quote_subtotal ? Number(internal.quote_subtotal) : null;
+
+  const quoteDiscount =
+    typeof internal?.quote_discount === "number" ? internal.quote_discount : internal?.quote_discount ? Number(internal.quote_discount) : null;
+
+  const couponCode = typeof internal?.coupon_code === "string" ? internal.coupon_code.trim() : null;
+
+  const selectedCreatorIds: string[] = Array.isArray(internal?.selected_creator_ids)
+    ? internal.selected_creator_ids.filter((x: any) => typeof x === "string" && x.trim().length > 0)
+    : [];
 
   const creatorsToRender = Array.from(new Set([...(selectedCreatorIds || []), ...(participants.map((p) => p.influencer_id) || [])]));
 
@@ -581,7 +636,7 @@ const CampaignView = () => {
     if (!ck || typeof ck !== "object") return [];
     return Object.entries(ck).map(([k, v]) => ({
       key: k,
-      label: CHECKLIST_LABELS[k] || prettifyKey(k),
+      label: CHECKLIST_LABELS[k] || k,
       value: !!v,
     }));
   })();
@@ -598,7 +653,7 @@ const CampaignView = () => {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium capitalize">
-              {(campaign as any)?.type || "campanha"}
+              {translateCampaignType((campaign as any)?.type)}
             </span>
             <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground font-medium">
               {statusLabel(status)}
@@ -657,7 +712,6 @@ const CampaignView = () => {
           </div>
         )}
 
-        {/* ✅ ARQUIVOS: contractor sempre readOnly + suporta filtros por URL */}
         {isContractor && tab === "files" && (
           <CampaignFilesTab
             campaignId={String(id)}
@@ -773,7 +827,6 @@ const CampaignView = () => {
                                   <ClipboardCheck className="w-4 h-4" />
                                 </IconActionButton>
 
-                                {/* ✅ AGORA abre aba Files já filtrada por creator + deliverables */}
                                 <IconActionButton
                                   onClick={() =>
                                     setTabWithUrl("files", {
@@ -827,24 +880,15 @@ const CampaignView = () => {
                     </div>
 
                     <div className="mt-3 grid grid-cols-1 gap-2">
-                      {otherEntries.map(([k, v]) => {
-                        if (k === "selected_creator_ids") return null;
-                        if (VALUE_KEYS.has(k)) return null;
-                        if (k === "coupon_code") return null;
-                        if (Array.isArray(v) && v.filter(Boolean).length === 0) return null;
-
-                        const label = REQUIREMENTS_LABELS[k] || k;
-
-                        const valueText =
-                          Array.isArray(v) ? v.filter(Boolean).join(", ") || "—" : typeof v === "string" ? v || "—" : String(v ?? "—");
-
-                        return (
-                          <div key={k} className="rounded-xl border border-border/50 bg-card/60 p-3">
-                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-                            <div className="mt-1 text-sm text-foreground/80 leading-relaxed">{valueText}</div>
-                          </div>
-                        );
-                      })}
+                      <DetailRow label="Segmentos de conteúdo" value={renderSimpleValue(contentSegments)} />
+                      <DetailRow label="Creators necessários" value={renderSimpleValue(creatorsCount)} />
+                      <DetailRow label="Quantidade de posts" value={renderSimpleValue(deliverables?.posts)} />
+                      <DetailRow label="Formato do conteúdo" value={renderSimpleValue(deliverables?.format)} />
+                      <DetailRow label="Legenda" value={renderSimpleValue(deliverables?.caption)} />
+                      <DetailRow label="Hashtags" value={renderSimpleValue(deliverables?.hashtags)} />
+                      <DetailRow label="Menções" value={renderSimpleValue(deliverables?.mentions)} />
+                      <DetailRow label="Post em collab" value={renderSimpleValue(deliverables?.collab)} />
+                      <DetailRow label="Menções da collab" value={renderSimpleValue(deliverables?.collab_mentions)} />
                     </div>
                   </div>
                 )}
@@ -867,18 +911,35 @@ const CampaignView = () => {
                   </span>
                 </div>
 
-                <div className="mt-3 grid grid-cols-3 gap-2">
+                <div className="mt-3 grid grid-cols-2 gap-2">
                   <div className="rounded-xl border border-border/50 bg-card/60 p-3">
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Subtotal</div>
                     <div className="mt-1 text-sm font-semibold text-foreground">{formatMoneyBRL(quoteSubtotal)}</div>
                   </div>
+
                   <div className="rounded-xl border border-border/50 bg-card/60 p-3">
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Desconto</div>
                     <div className="mt-1 text-sm font-semibold text-foreground">{formatMoneyBRL(quoteDiscount)}</div>
                   </div>
+
                   <div className="rounded-xl border border-border/50 bg-card/60 p-3">
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Creators</div>
-                    <div className="mt-1 text-sm font-semibold text-foreground">{creatorsCount ?? "—"}</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">{renderSimpleValue(creatorsCount)}</div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-card/60 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor por creator</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">{formatMoneyBRL(pricing?.creator_fee ?? null)}</div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-card/60 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Posts por creator</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">{renderSimpleValue(pricing?.posts_count)}</div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-card/60 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor por post</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">{formatMoneyBRL(pricing?.price_per_post ?? null)}</div>
                   </div>
                 </div>
 
@@ -902,7 +963,6 @@ const CampaignView = () => {
         )}
       </div>
 
-      {/* MODAL ENTREGAS */}
       <AnimatePresence>
         {deliverableModalOpen && isContractor && (
           <motion.div
