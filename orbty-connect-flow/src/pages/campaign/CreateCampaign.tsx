@@ -145,6 +145,12 @@ type QuoteResponse = {
     posts: number;
     format: string;
   };
+  pricing?: {
+    base_per_creator?: number;
+    included_posts?: number;
+    extra_unit_price?: number;
+    extra_posts_per_creator?: number;
+  };
 };
 
 /* =========================
@@ -960,31 +966,55 @@ export default function CreateCampaign() {
       const creatorsNeededFinal = creatorsNeededNumber ?? creatorsNeededFromData;
       const postsFinal = postsNumber ?? postsFromData;
 
+      const campaignTotal = Number(quote?.total ?? 0);
+      const creatorFee =
+        creatorsNeededFinal > 0 && Number.isFinite(campaignTotal)
+          ? Number((campaignTotal / creatorsNeededFinal).toFixed(2))
+          : null;
+
+      const pricePerPost =
+        creatorFee !== null && postsFinal > 0
+          ? Number((creatorFee / postsFinal).toFixed(2))
+          : null;
+
       const requirements = {
-        posts: postsFinal,
-        format: formatFromData,
-        hashtags: String((data as any).hashtags || "")
-          ? String((data as any).hashtags)
-              .split(",")
-              .map((h) => h.trim())
-              .filter(Boolean)
-          : [],
-        mentions: String((data as any).mentions || "")
-          ? String((data as any).mentions)
-              .split(",")
-              .map((m) => m.trim())
-              .filter(Boolean)
-          : [],
-        collab: collabBool,
-        collab_mentions: collabBool ? collabMentionsList : [],
-        caption: String((data as any).caption || "").trim() || null,
-        creators_needed: creatorsNeededFinal,
         content_segments: selectedSegments,
-        selected_creator_ids: selectedCreatorIds,
-        coupon_code: couponApplied?.trim() ? couponApplied.trim() : null,
-        quote_total: quote?.total ?? null,
-        quote_subtotal: quote?.subtotal ?? null,
-        quote_discount: quote?.discount ?? null,
+        creators_needed: creatorsNeededFinal,
+
+        deliverables: {
+          posts: postsFinal,
+          format: formatFromData,
+          caption: String((data as any).caption || "").trim() || null,
+          hashtags: String((data as any).hashtags || "")
+            ? String((data as any).hashtags)
+                .split(",")
+                .map((h) => h.trim())
+                .filter(Boolean)
+            : [],
+          mentions: String((data as any).mentions || "")
+            ? String((data as any).mentions)
+                .split(",")
+                .map((m) => m.trim())
+                .filter(Boolean)
+            : [],
+          collab: collabBool,
+          collab_mentions: collabBool ? collabMentionsList : [],
+        },
+
+        pricing: {
+          creator_fee: creatorFee,
+          posts_count: postsFinal,
+          price_per_post: pricePerPost,
+          currency: "BRL",
+        },
+
+        internal: {
+          coupon_code: couponApplied?.trim() ? couponApplied.trim() : null,
+          quote_total: quote?.total ?? null,
+          quote_subtotal: quote?.subtotal ?? null,
+          quote_discount: quote?.discount ?? null,
+          selected_creator_ids: selectedCreatorIds,
+        },
       };
 
       const { data: campaignId, error: campaignError } = await supabase.rpc("create_campaign", {
@@ -1076,9 +1106,6 @@ export default function CreateCampaign() {
     >
       <CampaignProgress currentStep={step} totalSteps={5} />
 
-      {/* =========================
-          STEP 1
-      ========================= */}
       {step === 1 && (
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Informações da campanha</h3>
@@ -1328,9 +1355,6 @@ export default function CreateCampaign() {
         </div>
       )}
 
-      {/* =========================
-          STEP 2
-      ========================= */}
       {step === 2 && (
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Requisitos da campanha</h3>
@@ -1521,9 +1545,6 @@ export default function CreateCampaign() {
         </div>
       )}
 
-      {/* =========================
-          STEP 3
-      ========================= */}
       {step === 3 && (
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Arquivos & Publicação</h3>
@@ -1734,9 +1755,6 @@ export default function CreateCampaign() {
         </div>
       )}
 
-      {/* =========================
-          STEP 4
-      ========================= */}
       {step === 4 && (
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Resumo</h3>
@@ -1886,9 +1904,6 @@ export default function CreateCampaign() {
         </div>
       )}
 
-      {/* =========================
-          STEP 5
-      ========================= */}
       {step === 5 && (
         <div className="px-6 py-4 space-y-4">
           <h3 className="font-display text-xl font-bold text-foreground">Pagamento</h3>
@@ -1924,7 +1939,6 @@ export default function CreateCampaign() {
         </div>
       )}
 
-      {/* Profile modal */}
       {profileOpen && profileCreatorId && (
         <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
           <div className="absolute inset-0 bg-black/60" onMouseDown={closeProfileModal} />
@@ -1947,7 +1961,6 @@ export default function CreateCampaign() {
         </div>
       )}
 
-      {/* Bottom navigation */}
       {step < 4 && (
         <div className="sticky bottom-0 px-6 py-4 bg-background/80 backdrop-blur-xl border-t border-border/30 flex gap-3">
           {step > 1 && (
