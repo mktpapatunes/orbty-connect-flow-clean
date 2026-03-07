@@ -17,15 +17,15 @@ export const dashboardHeroBanners: GlobalBanner[] = [
   {
     id: "hero1",
     imageUrl: "/banners/hero1.webp",
-    alt: "Campanhas abertas na sua região",
-    href: "/minhas-campanhas",
+    alt: "Convide seus amigos para a Orbty",
+    href: "/escolha-perfil",
     enabled: true,
   },
 
   {
     id: "hero2",
     imageUrl: "/banners/hero2.webp",
-    alt: "Complete seu perfil",
+    alt: "Conecte seu perfil",
     href: "/perfil",
     enabled: true,
   },
@@ -58,16 +58,16 @@ export const dashboardNewsBanners: GlobalBanner[] = [
   {
     id: "news2",
     imageUrl: "/banners/news2.webp",
-    alt: "Atualize seu perfil",
-    href: "/perfil",
+    alt: "Indique a Orbty para seus amigos",
+    href: "/escolha-perfil",
     enabled: true,
   },
 
   {
     id: "news3",
     imageUrl: "/banners/news3.webp",
-    alt: "Dúvidas sobre campanhas",
-    href: "/ajuda",
+    alt: "Desconto ORBTY10 para sua próxima campanha",
+    href: "/criar-campanha",
     enabled: true,
   },
 ]
@@ -84,7 +84,7 @@ export const dashboardContractorHeroBanners: GlobalBanner[] = [
     id: "hero4",
     imageUrl: "/banners/hero4.webp",
     alt: "Encontre creators da sua região",
-    href: "/campanha",
+    href: "/criar-campanha",
     enabled: true,
   },
 
