@@ -146,12 +146,10 @@ export default function CityUfPicker({
   const ufListRef = useRef<HTMLDivElement | null>(null);
   const cityListRef = useRef<HTMLDivElement | null>(null);
 
-  const UF = normalizeUF(uf);
+  const ufPortalRef = useRef<HTMLDivElement | null>(null);
+  const cityPortalRef = useRef<HTMLDivElement | null>(null);
 
-  const selectedUfOption = useMemo(
-    () => UF_OPTIONS.find((item) => item.uf === UF) ?? null,
-    [UF]
-  );
+  const UF = normalizeUF(uf);
 
   const cityValid = useMemo(() => {
     const c = (city || "").trim();
@@ -173,8 +171,12 @@ export default function CityUfPicker({
     const onDown = (e: MouseEvent | TouchEvent) => {
       const target = e.target;
       if (!(target instanceof Node)) return;
-      const wrap = wrapRef.current;
-      if (wrap && !wrap.contains(target)) {
+
+      const insideWrap = !!wrapRef.current?.contains(target);
+      const insideUfPortal = !!ufPortalRef.current?.contains(target);
+      const insideCityPortal = !!cityPortalRef.current?.contains(target);
+
+      if (!insideWrap && !insideUfPortal && !insideCityPortal) {
         setOpenUf(false);
         setOpenCity(false);
       }
@@ -551,6 +553,7 @@ export default function CityUfPicker({
         ufPos &&
         createPortal(
           <div
+            ref={ufPortalRef}
             className="fixed z-[9999] overflow-hidden rounded-2xl border border-border/50 bg-background/95 shadow-[0_12px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl"
             style={{
               top: ufPos.top,
@@ -606,6 +609,7 @@ export default function CityUfPicker({
         filteredCities.length > 0 &&
         createPortal(
           <div
+            ref={cityPortalRef}
             className="fixed z-[9999] overflow-hidden rounded-2xl border border-border/50 bg-background/95 shadow-[0_12px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl"
             style={{
               top: cityPos.top,
@@ -629,6 +633,7 @@ export default function CityUfPicker({
                     type="button"
                     data-city-index={index}
                     onMouseDown={(e) => e.preventDefault()}
+                    onTouchStart={() => pickCity(c)}
                     onMouseEnter={() => setActiveCityIndex(index)}
                     onClick={() => pickCity(c)}
                     className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm transition ${
