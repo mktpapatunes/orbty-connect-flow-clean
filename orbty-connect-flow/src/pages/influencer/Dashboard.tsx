@@ -9,8 +9,11 @@ import orbtyLogo from "@/assets/orbty-logo.png";
 import {
   ArrowRight,
   BadgeCheck,
+  BadgeDollarSign,
   CalendarCheck,
+  ShieldCheck,
   Sparkles,
+  TrendingUp,
   Zap,
 } from "lucide-react";
 
@@ -74,19 +77,19 @@ const InfluencerDashboard = () => {
 
   const benefits = [
     {
-      title: "Campanhas locais",
-      desc: "Ações da sua região com mais relevância.",
-      icon: Sparkles,
+      title: "Fature com seu Instagram",
+      desc: "Ganhe dinheiro divulgando com seu perfil.",
+      icon: BadgeDollarSign,
     },
     {
-      title: "Tudo centralizado",
-      desc: "Entregas e status em um só lugar.",
-      icon: CalendarCheck,
+      title: "Presença digital",
+      desc: "Eleve sua influência participando de campanhas reais.",
+      icon: TrendingUp,
     },
     {
-      title: "Sua rotina organizada",
-      desc: "Convites e histórico com clareza.",
-      icon: BadgeCheck,
+      title: "Garantia e segurança",
+      desc: "Produção e entregas com acompanhamento da Orbty.",
+      icon: ShieldCheck,
     },
   ];
 
@@ -105,7 +108,6 @@ const InfluencerDashboard = () => {
       navType="influencer"
     >
       <div className="space-y-6 overflow-x-hidden px-6 py-6">
-        
         {/* HEADER */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <p className="mb-1 text-xs uppercase tracking-widest text-muted-foreground">
