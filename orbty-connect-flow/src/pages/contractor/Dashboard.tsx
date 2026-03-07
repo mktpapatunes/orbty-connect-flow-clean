@@ -12,8 +12,8 @@ import {
   BarChart3,
   CalendarCheck,
   ShieldCheck,
-  Sparkles,
-  Users,
+  TrendingUp,
+  LineChart,
   Zap,
 } from "lucide-react";
 
@@ -93,12 +93,12 @@ const ContractorDashboard = () => {
     {
       title: "Visibilidade e posicionamento",
       desc: "Encontre influenciadores da sua região para divulgar sua marca, evento ou produto com mais conexão local.",
-      icon: Users,
+      icon: TrendingUp,
     },
     {
       title: "Estratégia e resultados",
       desc: "Criação de campanha, aprovações, entregas e resultados em um só lugar.",
-      icon: CalendarCheck,
+      icon: LineChart,
     },
     {
       title: "Segurança e controle",
@@ -125,7 +125,7 @@ const ContractorDashboard = () => {
         {/* HEADER */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <p className="mb-1 text-xs uppercase tracking-widest text-muted-foreground">
-            Painel da marca
+            Painel de marca/negócio
           </p>
 
           <h2 className="font-display text-2xl font-bold text-foreground">
@@ -134,7 +134,7 @@ const ContractorDashboard = () => {
 
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             A Orbty conecta sua marca/negócio a criadores de conteúdo da sua região. Aqui você divulga campanhas, produtos, músicas ou eventos
-             para o público local — tudo dentro da plataforma.
+            para o público local — tudo dentro da plataforma.
           </p>
         </motion.div>
 
