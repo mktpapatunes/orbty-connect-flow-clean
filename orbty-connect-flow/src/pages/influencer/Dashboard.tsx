@@ -218,10 +218,6 @@ const InfluencerDashboard = () => {
                   <b.icon className="h-6 w-6 text-primary" />
                 </div>
 
-                <p className="mt-4 text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                  Passo {b.step}
-                </p>
-
                 <h3 className="mt-2 text-sm font-semibold leading-tight text-foreground">
                   {b.title}
                 </h3>
