@@ -34,7 +34,7 @@ export default function HeroCarousel({
   const autoPlayRef = useRef<number | null>(null);
   const resumeTimeoutRef = useRef<number | null>(null);
 
-  const isPointerDownRef = useRef(false);
+  const isDraggingRef = useRef(false);
   const dragMovedRef = useRef(false);
   const startXRef = useRef(0);
   const startScrollLeftRef = useRef(0);
@@ -157,26 +157,21 @@ export default function HeroCarousel({
         <div
           ref={scrollerRef}
           className="flex gap-3 overflow-x-auto scroll-smooth select-none touch-pan-y [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:cursor-grab md:active:cursor-grabbing"
-          style={{ scrollSnapType: "x mandatory" as any }}
-          onPointerDown={(e) => {
-            if (e.pointerType !== "mouse") return;
-
+          style={{ scrollSnapType: "x mandatory" as any, WebkitOverflowScrolling: "touch" }}
+          onMouseDown={(e) => {
             const el = scrollerRef.current;
             if (!el) return;
 
-            isPointerDownRef.current = true;
+            isDraggingRef.current = true;
             dragMovedRef.current = false;
             startXRef.current = e.clientX;
             startScrollLeftRef.current = el.scrollLeft;
 
             stopAutoPlay();
-            el.setPointerCapture?.(e.pointerId);
           }}
-          onPointerMove={(e) => {
-            if (e.pointerType !== "mouse") return;
-
+          onMouseMove={(e) => {
             const el = scrollerRef.current;
-            if (!el || !isPointerDownRef.current) return;
+            if (!el || !isDraggingRef.current) return;
 
             const delta = e.clientX - startXRef.current;
 
@@ -186,19 +181,17 @@ export default function HeroCarousel({
 
             el.scrollLeft = startScrollLeftRef.current - delta;
           }}
-          onPointerUp={(e) => {
-            if (e.pointerType !== "mouse") return;
-            if (!isPointerDownRef.current) return;
+          onMouseUp={() => {
+            if (!isDraggingRef.current) return;
 
-            isPointerDownRef.current = false;
+            isDraggingRef.current = false;
             updateActiveByScroll();
             resumeAutoPlayLater();
           }}
-          onPointerCancel={(e) => {
-            if (e.pointerType !== "mouse") return;
-            if (!isPointerDownRef.current) return;
+          onMouseLeave={() => {
+            if (!isDraggingRef.current) return;
 
-            isPointerDownRef.current = false;
+            isDraggingRef.current = false;
             updateActiveByScroll();
             resumeAutoPlayLater();
           }}
