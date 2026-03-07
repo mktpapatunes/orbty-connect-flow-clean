@@ -159,9 +159,11 @@ export default function BannersCarousel({
 
       <div
         ref={scrollerRef}
-        className="mt-3 flex gap-3 overflow-x-auto pb-2 select-none cursor-grab active:cursor-grabbing touch-pan-y [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="mt-3 flex gap-3 overflow-x-auto pb-2 select-none touch-pan-y [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:cursor-grab md:active:cursor-grabbing"
         style={{ scrollSnapType: "x mandatory" as any }}
         onPointerDown={(e) => {
+          if (e.pointerType !== "mouse") return;
+
           const el = scrollerRef.current;
           if (!el) return;
 
@@ -174,6 +176,8 @@ export default function BannersCarousel({
           el.setPointerCapture?.(e.pointerId);
         }}
         onPointerMove={(e) => {
+          if (e.pointerType !== "mouse") return;
+
           const el = scrollerRef.current;
           if (!el || !isPointerDownRef.current) return;
 
@@ -185,17 +189,26 @@ export default function BannersCarousel({
 
           el.scrollLeft = startScrollLeftRef.current - delta;
         }}
-        onPointerUp={() => {
+        onPointerUp={(e) => {
+          if (e.pointerType !== "mouse") return;
           if (!isPointerDownRef.current) return;
 
           isPointerDownRef.current = false;
           updateActiveByScroll();
           resumeAutoPlayLater();
         }}
-        onPointerCancel={() => {
+        onPointerCancel={(e) => {
+          if (e.pointerType !== "mouse") return;
           if (!isPointerDownRef.current) return;
 
           isPointerDownRef.current = false;
+          updateActiveByScroll();
+          resumeAutoPlayLater();
+        }}
+        onTouchStart={() => {
+          stopAutoPlay();
+        }}
+        onTouchEnd={() => {
           updateActiveByScroll();
           resumeAutoPlayLater();
         }}
@@ -223,7 +236,10 @@ export default function BannersCarousel({
               resumeAutoPlayLater();
             }}
             className="relative w-[88%] shrink-0 overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-sm"
-            style={{ scrollSnapAlign: "center" as any }}
+            style={{
+              scrollSnapAlign: "center",
+              scrollSnapStop: "always",
+            }}
           >
             <img
               src={b.imageUrl}

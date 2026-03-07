@@ -156,9 +156,11 @@ export default function HeroCarousel({
       <div className="relative">
         <div
           ref={scrollerRef}
-          className="flex gap-3 overflow-x-auto scroll-smooth select-none cursor-grab active:cursor-grabbing touch-pan-y [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex gap-3 overflow-x-auto scroll-smooth select-none touch-pan-y [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:cursor-grab md:active:cursor-grabbing"
           style={{ scrollSnapType: "x mandatory" as any }}
           onPointerDown={(e) => {
+            if (e.pointerType !== "mouse") return;
+
             const el = scrollerRef.current;
             if (!el) return;
 
@@ -171,6 +173,8 @@ export default function HeroCarousel({
             el.setPointerCapture?.(e.pointerId);
           }}
           onPointerMove={(e) => {
+            if (e.pointerType !== "mouse") return;
+
             const el = scrollerRef.current;
             if (!el || !isPointerDownRef.current) return;
 
@@ -182,17 +186,26 @@ export default function HeroCarousel({
 
             el.scrollLeft = startScrollLeftRef.current - delta;
           }}
-          onPointerUp={() => {
+          onPointerUp={(e) => {
+            if (e.pointerType !== "mouse") return;
             if (!isPointerDownRef.current) return;
 
             isPointerDownRef.current = false;
             updateActiveByScroll();
             resumeAutoPlayLater();
           }}
-          onPointerCancel={() => {
+          onPointerCancel={(e) => {
+            if (e.pointerType !== "mouse") return;
             if (!isPointerDownRef.current) return;
 
             isPointerDownRef.current = false;
+            updateActiveByScroll();
+            resumeAutoPlayLater();
+          }}
+          onTouchStart={() => {
+            stopAutoPlay();
+          }}
+          onTouchEnd={() => {
             updateActiveByScroll();
             resumeAutoPlayLater();
           }}
@@ -220,7 +233,10 @@ export default function HeroCarousel({
                 resumeAutoPlayLater();
               }}
               className="relative w-full shrink-0 overflow-hidden rounded-[28px] border border-white/10 bg-white/5 shadow-sm"
-              style={{ scrollSnapAlign: "center" as any }}
+              style={{
+                scrollSnapAlign: "center",
+                scrollSnapStop: "always",
+              }}
             >
               <img
                 src={b.imageUrl}
