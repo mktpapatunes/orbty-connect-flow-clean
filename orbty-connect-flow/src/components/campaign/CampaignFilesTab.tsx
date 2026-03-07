@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Upload, Download, Trash2, FileText, Image as ImageIcon, ShieldCheck, Filter } from "lucide-react";
+import {
+  Loader2,
+  Upload,
+  Download,
+  Trash2,
+  FileText,
+  Image as ImageIcon,
+  ShieldCheck,
+  Filter,
+} from "lucide-react";
 import {
   CampaignFileItem,
   CampaignFileKind,
@@ -16,7 +25,7 @@ function GlassCard(props: { children: React.ReactNode; className?: string }) {
 }
 
 function kindLabel(kind: CampaignFileKind) {
-  return kind === "assets" ? "Assets" : "Entregas";
+  return kind === "assets" ? "Assets" : "Arquivos enviados";
 }
 
 function fileIcon(mime?: string | null) {
@@ -27,16 +36,9 @@ function fileIcon(mime?: string | null) {
 export default function CampaignFilesTab(props: {
   campaignId: string;
   role: "contractor" | "influencer";
-  // true quando influencer foi aceita (p/ permitir upload deliverables e ver assets)
   influencerAccepted: boolean;
-
-  /** Quando true: desabilita envio e exclusão. */
   readOnly?: boolean;
-
-  /** Opcional: filtra só um tipo (assets/deliverables). */
   kindFilter?: CampaignFileKind;
-
-  /** Opcional: filtra por ownerId (creator). Útil p/ contractor ver só os arquivos de 1 creator. */
   ownerIdFilter?: string;
 }) {
   const [loading, setLoading] = useState(true);
@@ -52,15 +54,11 @@ export default function CampaignFilesTab(props: {
   const canUploadAssets = props.role === "contractor" && !isReadOnly;
   const canUploadDeliverables = props.role === "influencer" && props.influencerAccepted && !isReadOnly;
 
-  // ✅ Visibilidade por role (e respeita filtros quando existirem)
   const visibleKinds = useMemo(() => {
-    // sem aceitação: influencer não vê nada (nem assets), como você já definiu no fluxo
     if (props.role === "influencer" && !props.influencerAccepted) return [] as CampaignFileKind[];
 
-    // se filtrou kind, só aquele
     if (props.kindFilter) return [props.kindFilter];
 
-    // padrão
     if (props.role === "contractor") return ["assets", "deliverables"] as CampaignFileKind[];
     return ["assets", "deliverables"] as CampaignFileKind[];
   }, [props.role, props.influencerAccepted, props.kindFilter]);
@@ -106,9 +104,6 @@ export default function CampaignFilesTab(props: {
   const handleUploadFile = async (file?: File | null) => {
     if (!file) return;
 
-    // define kind automaticamente:
-    // contractor -> assets
-    // influencer -> deliverables
     const kind: CampaignFileKind = props.role === "contractor" ? "assets" : "deliverables";
 
     if (kind === "deliverables" && !props.influencerAccepted) {
@@ -129,7 +124,7 @@ export default function CampaignFilesTab(props: {
         upsert: true,
       });
 
-      toast.success(kind === "assets" ? "Arquivo enviado para Assets!" : "Arquivo de entrega enviado!");
+      toast.success(kind === "assets" ? "Arquivo enviado para Assets!" : "Arquivo enviado com sucesso!");
       await refetchFiles();
     } catch (e: any) {
       console.error("UPLOAD_CAMPAIGN_FILE_ERROR", e);
@@ -169,14 +164,10 @@ export default function CampaignFilesTab(props: {
 
   const canDelete = (it: CampaignFileItem) => {
     if (isReadOnly) return false;
-    // RLS já decide, mas escondemos botão por UX:
-    // contractor pode deletar assets/deliverables (da campanha dele)
     if (props.role === "contractor") return true;
-    // influencer só deletaria as próprias entregas (RLS garante).
     return props.role === "influencer" && it.kind === "deliverables";
   };
 
-  // Se influencer não aceitou, bloqueia tudo
   if (props.role === "influencer" && !props.influencerAccepted) {
     return (
       <GlassCard>
@@ -185,7 +176,7 @@ export default function CampaignFilesTab(props: {
           <div>
             <div className="text-sm font-semibold text-foreground">Arquivos da campanha</div>
             <div className="mt-1 text-sm text-muted-foreground">
-              Você verá os arquivos e poderá enviar entregas após confirmar participação.
+              Você verá os arquivos e poderá enviar comprovantes após confirmar participação.
             </div>
           </div>
         </div>
@@ -198,13 +189,14 @@ export default function CampaignFilesTab(props: {
   const headerSubtitle =
     props.role === "contractor"
       ? props.ownerIdFilter
-        ? "Arquivos enviados por este creator (entregas/comprovações)."
+        ? "Arquivos enviados por este creator."
         : "Visualize assets e entregas enviadas pelos creators."
-      : "Baixe assets e envie arquivos de comprovação (prints/PDF).";
+      : isReadOnly
+        ? "Arquivos enviados. O envio está bloqueado até a confirmação do contratante."
+        : "Envie prints, PDFs ou imagens para comprovar sua entrega.";
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <GlassCard className="flex items-center justify-between gap-3">
         <div>
           <div className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -250,11 +242,11 @@ export default function CampaignFilesTab(props: {
         <div className="space-y-4">
           {visibleKinds.map((k) => (
             <GlassCard key={k} className="space-y-3">
-              <div className="text-sm font-semibold text-foreground">{kindLabel(k)}</div>
+              {!props.kindFilter && <div className="text-sm font-semibold text-foreground">{kindLabel(k)}</div>}
 
               {grouped[k].length === 0 ? (
                 <div className="text-sm text-muted-foreground">
-                  {k === "assets" ? "Nenhum arquivo de briefing/arte foi enviado." : "Nenhuma entrega foi enviada."}
+                  {k === "assets" ? "Nenhum arquivo de briefing/arte foi enviado." : "Nenhum arquivo enviado ainda."}
                 </div>
               ) : (
                 <div className="space-y-2">

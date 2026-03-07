@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Link as LinkIcon, CheckSquare, Square, Send, FileText, ShieldCheck } from "lucide-react";
+import {
+  Loader2,
+  Link as LinkIcon,
+  CheckSquare,
+  Square,
+  Send,
+  FileText,
+  ShieldCheck,
+  Paperclip,
+  BadgeCheck,
+} from "lucide-react";
+import CampaignFilesTab from "@/components/campaign/CampaignFilesTab";
 
 type DeliverablesRow = {
   id?: string;
@@ -24,7 +35,7 @@ const CHECKLIST_ITEMS: Array<{ key: string; label: string }> = [
   { key: "hashtags_done", label: "Usei as hashtags solicitadas" },
   { key: "caption_done", label: "Usei a legenda solicitada" },
   { key: "collab_done", label: "Publicação em collab realizada (se aplicável)" },
-  { key: "proof_files", label: "Anexei prints/arquivos de comprovação (aba Arquivos)" },
+  { key: "proof_files", label: "Anexei prints/arquivos de comprovação" },
   { key: "proof_links", label: "Adicionei link(s) da(s) publicação(ões)" },
 ];
 
@@ -48,13 +59,17 @@ export default function CreatorDeliverablesPanel(props: {
   const [links, setLinks] = useState<string[]>([""]);
   const [notes, setNotes] = useState<string>("");
 
-  const canEdit = props.creatorAccepted && row?.status !== "approved";
+  const isApproved = row?.status === "approved";
+  const isSubmitted = row?.status === "submitted";
+
+  const canEdit = props.creatorAccepted && !isApproved && !isSubmitted;
+  const canSubmit = props.creatorAccepted && !isApproved && !isSubmitted;
 
   const statusLabel = useMemo(() => {
     const s = row?.status;
-    if (!s) return "—";
+    if (!s) return "Em rascunho";
     if (s === "draft") return "Em rascunho";
-    if (s === "submitted") return "Enviado para revisão";
+    if (s === "submitted") return "Entregue, aguardando confirmação";
     if (s === "approved") return "Aprovado";
     if (s === "changes_requested") return "Ajustes solicitados";
     return s;
@@ -83,7 +98,6 @@ export default function CreatorDeliverablesPanel(props: {
         setLinks(lk.length ? lk : [""]);
         setNotes(r.notes || "");
       } else {
-        // não cria automaticamente: cria no primeiro save/submit
         setRow(null);
         setChecklist({});
         setLinks([""]);
@@ -114,6 +128,8 @@ export default function CreatorDeliverablesPanel(props: {
       return;
     }
 
+    if (!canEdit) return;
+
     setSaving(true);
     try {
       const { data: auth } = await supabase.auth.getUser();
@@ -122,7 +138,7 @@ export default function CreatorDeliverablesPanel(props: {
       const payload: Partial<DeliverablesRow> = {
         campaign_id: props.campaignId,
         creator_id: auth.user.id,
-        status: (row?.status && row.status !== "approved" ? row.status : "draft") as any,
+        status: "draft",
         checklist,
         links: normalizeLinks(links),
         notes: notes.trim() || null,
@@ -135,7 +151,7 @@ export default function CreatorDeliverablesPanel(props: {
 
       if (error) throw error;
 
-      toast.success("Salvo.");
+      toast.success("Rascunho salvo.");
       await fetchRow();
     } catch (e: any) {
       console.error("SAVE_DRAFT_ERROR", e);
@@ -151,7 +167,8 @@ export default function CreatorDeliverablesPanel(props: {
       return;
     }
 
-    // valida mínima: pelo menos 1 link OU proof_files marcado OU proof_links marcado
+    if (!canSubmit) return;
+
     const hasSomeProof =
       normalizeLinks(links).length > 0 || !!checklist.proof_files || !!checklist.proof_links;
 
@@ -160,7 +177,7 @@ export default function CreatorDeliverablesPanel(props: {
       return;
     }
 
-    if (!window.confirm("Enviar para revisão?\n\nApós enviar, o contratante poderá revisar e aprovar.")) return;
+    if (!window.confirm("Enviar entregas?\n\nApós enviar, ficará bloqueado até a confirmação do contratante.")) return;
 
     setSubmitting(true);
     try {
@@ -184,11 +201,11 @@ export default function CreatorDeliverablesPanel(props: {
 
       if (error) throw error;
 
-      toast.success("Enviado para revisão!");
+      toast.success("Entregas enviadas! Agora aguarde a confirmação do contratante.");
       await fetchRow();
     } catch (e: any) {
       console.error("SUBMIT_DELIVERABLES_ERROR", e);
-      toast.error(e?.message || "Erro ao enviar para revisão.");
+      toast.error(e?.message || "Erro ao enviar entregas.");
     } finally {
       setSubmitting(false);
     }
@@ -202,7 +219,7 @@ export default function CreatorDeliverablesPanel(props: {
           <div>
             <div className="text-sm font-semibold text-foreground">Entregas</div>
             <div className="mt-1 text-sm text-muted-foreground">
-              Confirme sua participação para habilitar o envio de entregas e links de comprovação.
+              Confirme sua participação para habilitar o envio de entregas.
             </div>
           </div>
         </div>
@@ -218,9 +235,6 @@ export default function CreatorDeliverablesPanel(props: {
     );
   }
 
-  const isApproved = row?.status === "approved";
-  const isSubmitted = row?.status === "submitted";
-
   return (
     <div className="space-y-4">
       <div className="glass-card p-5">
@@ -232,14 +246,24 @@ export default function CreatorDeliverablesPanel(props: {
             </div>
           </div>
 
-          <button
-            onClick={handleSaveDraft}
-            disabled={!canEdit || saving || submitting}
-            className="rounded-2xl border border-border/50 bg-card/60 px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-card/80 transition disabled:opacity-60"
-            title="Salvar"
-          >
-            {saving ? "Salvando..." : "Salvar"}
-          </button>
+          {canEdit ? (
+            <button
+              onClick={handleSaveDraft}
+              disabled={saving || submitting}
+              className="rounded-2xl border border-border/50 bg-card/60 px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-card/80 transition disabled:opacity-60"
+              title="Salvar"
+            >
+              {saving ? "Salvando..." : "Salvar"}
+            </button>
+          ) : isSubmitted ? (
+            <div className="rounded-2xl border border-warning/25 bg-warning/10 px-3 py-2 text-[11px] font-semibold text-warning">
+              Aguardando confirmação
+            </div>
+          ) : isApproved ? (
+            <div className="rounded-2xl border border-accent/25 bg-accent/10 px-3 py-2 text-[11px] font-semibold text-accent">
+              Confirmado
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-4 space-y-2">
@@ -275,7 +299,7 @@ export default function CreatorDeliverablesPanel(props: {
           <div className="text-sm font-semibold text-foreground">Links de comprovação</div>
         </div>
         <div className="text-xs text-muted-foreground mt-1">
-          Cole aqui links dos posts/stories (ou onde fizer sentido) para validação.
+          Cole aqui links dos posts/stories para validação.
         </div>
 
         <div className="mt-3 space-y-2">
@@ -292,7 +316,7 @@ export default function CreatorDeliverablesPanel(props: {
                 }
                 disabled={!canEdit}
                 placeholder="https://..."
-                className="w-full rounded-2xl border border-border/50 bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+                className="w-full rounded-2xl border border-border/50 bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-70"
               />
               {canEdit && (
                 <button
@@ -327,6 +351,26 @@ export default function CreatorDeliverablesPanel(props: {
 
       <div className="glass-card p-5">
         <div className="flex items-center gap-2">
+          <Paperclip className="w-4 h-4 text-primary" />
+          <div className="text-sm font-semibold text-foreground">Arquivos de comprovação</div>
+        </div>
+        <div className="text-xs text-muted-foreground mt-1">
+          Envie prints, PDFs ou outros arquivos que comprovem a entrega.
+        </div>
+
+        <div className="mt-3">
+          <CampaignFilesTab
+            campaignId={props.campaignId}
+            role="influencer"
+            influencerAccepted={props.creatorAccepted}
+            kindFilter="deliverables"
+            readOnly={!canEdit}
+          />
+        </div>
+      </div>
+
+      <div className="glass-card p-5">
+        <div className="flex items-center gap-2">
           <FileText className="w-4 h-4 text-accent" />
           <div className="text-sm font-semibold text-foreground">Observações</div>
         </div>
@@ -337,33 +381,33 @@ export default function CreatorDeliverablesPanel(props: {
           disabled={!canEdit}
           rows={4}
           placeholder="Conte qualquer detalhe relevante para a revisão..."
-          className="mt-3 w-full rounded-2xl border border-border/50 bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+          className="mt-3 w-full rounded-2xl border border-border/50 bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-70"
         />
       </div>
 
       <div className="glass-card p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-foreground">Enviar para revisão</div>
+            <div className="text-sm font-semibold text-foreground">Enviar entregas</div>
             <div className="text-xs text-muted-foreground mt-1">
-              Após enviar, o contratante poderá revisar seus links/arquivos e aprovar.
+              Após enviar, seu conteúdo ficará bloqueado até a confirmação do contratante.
             </div>
           </div>
 
           <button
             onClick={handleSubmit}
-            disabled={!canEdit || submitting || saving || isApproved}
+            disabled={!canSubmit || submitting || saving}
             className={`rounded-2xl px-4 py-2 text-xs font-semibold transition flex items-center gap-2 ${
               isApproved
                 ? "border border-accent/25 bg-accent/10 text-accent cursor-default"
                 : isSubmitted
-                  ? "border border-primary/25 bg-primary/10 text-primary hover:bg-primary/15"
+                  ? "border border-warning/25 bg-warning/10 text-warning cursor-default"
                   : "bg-gradient-neon text-primary-foreground glow-blue"
             } disabled:opacity-60`}
-            title="Enviar para revisão"
+            title="Enviar entregas"
           >
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            {isApproved ? "Aprovado" : isSubmitted ? "Reenviar" : "Enviar"}
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : isApproved ? <BadgeCheck className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+            {isApproved ? "Confirmado" : isSubmitted ? "Entregue" : "Enviar"}
           </button>
         </div>
       </div>

@@ -9,7 +9,6 @@ import {
   Loader2,
   BadgeCheck,
   CheckCircle2,
-  Paperclip,
   ClipboardList,
   Info,
   ClipboardCheck,
@@ -18,7 +17,6 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import CampaignFilesTab from "@/components/campaign/CampaignFilesTab";
 import CreatorDeliverablesPanel from "@/components/campaign/CreatorDeliverablesPanel";
 
 type CampaignRequirements = {
@@ -157,7 +155,7 @@ export default function AcceptedCampaignDetail() {
   const [campaign, setCampaign] = useState<CampaignDetailForCreator | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
-  const [tab, setTab] = useState<"details" | "deliverables" | "files">("details");
+  const [tab, setTab] = useState<"details" | "deliverables">("details");
 
   const fetchDetail = async () => {
     if (!id || !user) return;
@@ -305,7 +303,7 @@ export default function AcceptedCampaignDetail() {
 
           <h2 className="font-display text-2xl font-bold text-foreground">{campaign.title}</h2>
           <p className="text-xs text-muted-foreground mt-1">
-            Revise os detalhes, registre as entregas e envie seus arquivos quando estiver tudo pronto.
+            Revise os detalhes e acompanhe o status da sua entrega.
           </p>
         </motion.div>
 
@@ -332,23 +330,9 @@ export default function AcceptedCampaignDetail() {
             <ClipboardCheck className="w-3.5 h-3.5" />
             Entregas
           </button>
-
-          <button
-            onClick={() => setTab("files")}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-              tab === "files"
-                ? "bg-primary/12 text-primary border border-primary/25"
-                : "bg-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Paperclip className="w-3.5 h-3.5" />
-            Arquivos
-          </button>
         </div>
 
-        {tab === "files" ? (
-          <CampaignFilesTab campaignId={campaign.id} role="influencer" influencerAccepted={creatorAccepted} />
-        ) : tab === "deliverables" ? (
+        {tab === "deliverables" ? (
           <CreatorDeliverablesPanel campaignId={campaign.id} creatorAccepted={creatorAccepted} />
         ) : (
           <>
@@ -393,7 +377,7 @@ export default function AcceptedCampaignDetail() {
               </div>
             )}
 
-            {!!campaign.brief_private && (
+            {creatorAccepted && !!campaign.brief_private && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-accent" />
