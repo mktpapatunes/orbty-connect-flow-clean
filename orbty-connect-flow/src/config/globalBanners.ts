@@ -1,13 +1,14 @@
 export type GlobalBanner = {
   id: string
-  imageUrl: string // /banners/...
+  imageUrl: string
   alt: string
-  href?: string // rota interna ("/campanhas") ou externa ("https://...")
+  href?: string
   enabled?: boolean
-  // mais tarde: placement, roles, startAt/endAt etc
 }
 
-export const dashboardHeroBanners = [
+/* HERO SLIDER */
+
+export const dashboardHeroBanners: GlobalBanner[] = [
   {
     id: "hero1",
     imageUrl: "/banners/hero1.png",
@@ -28,27 +29,30 @@ export const dashboardHeroBanners = [
     alt: "Promoção creators",
     href: "/ajuda",
     enabled: true,
-  }
+  },
+]
+
+/* CARROSSEL DE NOVIDADES */
 
 export const dashboardNewsBanners: GlobalBanner[] = [
   {
-    id: "n1",
-    imageUrl: "/banners/n1.png",
-    alt: "Novidade 1",
+    id: "news1",
+    imageUrl: "/banners/news1.png",
+    alt: "Campanhas abertas",
     href: "/minhas-campanhas",
     enabled: true,
   },
   {
-    id: "n2",
-    imageUrl: "/banners/n2.png",
-    alt: "Novidade 2",
-    href: "/minhas-candidaturas",
+    id: "news2",
+    imageUrl: "/banners/news2.png",
+    alt: "Atualize seu perfil",
+    href: "/perfil",
     enabled: true,
   },
   {
-    id: "n3",
-    imageUrl: "/banners/n3.png",
-    alt: "Novidade 3",
+    id: "news3",
+    imageUrl: "/banners/news3.png",
+    alt: "Ajuda Orbty",
     href: "/ajuda",
     enabled: true,
   },

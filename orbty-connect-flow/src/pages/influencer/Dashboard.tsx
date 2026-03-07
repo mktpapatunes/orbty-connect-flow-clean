@@ -15,11 +15,12 @@ import {
   CircleHelp,
 } from "lucide-react";
 
-// ✅ NOVO: banners globais (admin edita via código + arquivos em /public/banners)
 import HeroCarousel from "@/components/dashboard/HeroCarousel";
 import BannersCarousel from "@/components/dashboard/BannersCarousel";
-import { dashboardHeroBanner, dashboardNewsBanners } from "@/config/globalBanners";
-
+import {
+  dashboardHeroBanners,
+  dashboardNewsBanners,
+} from "@/config/globalBanners";
 
 const InfluencerDashboard = () => {
   const navigate = useNavigate();
@@ -30,6 +31,7 @@ const InfluencerDashboard = () => {
       (profile as any)?.name ??
       (user as any)?.user_metadata?.name ??
       (user?.email ? user.email.split("@")[0] : "");
+
     const name = String(raw ?? "").trim();
     return name ? name.split(" ")[0] : "você";
   }, [profile, user]);
@@ -43,6 +45,7 @@ const InfluencerDashboard = () => {
         className: "border-accent/30 bg-accent/10 text-accent",
       };
     }
+
     if (approvalStatus === "pending") {
       return {
         label: "Em análise",
@@ -51,6 +54,7 @@ const InfluencerDashboard = () => {
         className: "border-warning/30 bg-warning/10 text-warning",
       };
     }
+
     if (approvalStatus === "rejected") {
       return {
         label: "Precisa de ajustes",
@@ -59,6 +63,7 @@ const InfluencerDashboard = () => {
         className: "border-destructive/30 bg-destructive/5 text-destructive",
       };
     }
+
     return {
       label: "Carregando…",
       desc: "Preparando seu painel.",
@@ -139,13 +144,11 @@ const InfluencerDashboard = () => {
   return (
     <MobileLayout
       title={
-        // ✅ Slot do título com altura FIXA (não deixa o header crescer)
         <div className="relative h-10 w-[170px] overflow-visible">
           <TransparentLogo
             src={orbtyLogo}
             alt="ORBTY"
             threshold={50}
-            // ✅ Logo maior, mas ABSOLUTA (não influencia a altura do header)
             className="absolute left-0 top-1/2 -translate-y-1/2 h-20 w-auto drop-shadow-[0_0_18px_hsl(200,100%,50%,0.35)]"
           />
         </div>
@@ -153,9 +156,9 @@ const InfluencerDashboard = () => {
       navType="influencer"
     >
       <div className="px-6 py-6 space-y-6">
-        {/* HERO */}
+        {/* HERO TEXT */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <p className="text-muted-foreground text-xs uppercase tracking-widest mb-1">
+          <p className="mb-1 text-xs uppercase tracking-widest text-muted-foreground">
             Painel do creator
           </p>
 
@@ -163,29 +166,37 @@ const InfluencerDashboard = () => {
             Olá, <span className="text-gradient-neon">{firstName}</span>
           </h2>
 
-          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-            O Orbty conecta creators a campanhas regionais. Aqui você acompanha briefing,
-            entregas e status — tudo dentro de cada campanha.
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            O Orbty conecta creators a campanhas regionais. Aqui você acompanha
+            briefing, entregas e status — tudo dentro de cada campanha.
           </p>
         </motion.div>
 
-        {/* ✅ NOVO: HERO BANNER GLOBAL (admin edita via /public + config) */}
+        {/* HERO CAROUSEL GLOBAL */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="px-0"
         >
-         <HeroCarousel banners={dashboardHeroBanners} />
+          <HeroCarousel
+            banners={dashboardHeroBanners}
+            autoPlay
+            autoPlayInterval={5000}
+          />
         </motion.div>
 
-        {/* ✅ NOVO: CARROSSEL GLOBAL “Novidades para você” */}
+        {/* CARROSSEL GLOBAL */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.09 }}
         >
-          <BannersCarousel title="Novidades para você" banners={dashboardNewsBanners} autoPlay autoPlayInterval={5000} />
+          <BannersCarousel
+            title="Novidades para você"
+            banners={dashboardNewsBanners}
+            autoPlay
+            autoPlayInterval={5000}
+          />
         </motion.div>
 
         {/* STATUS + CTAs */}
@@ -197,33 +208,37 @@ const InfluencerDashboard = () => {
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs text-muted-foreground uppercase tracking-widest">Seu status</p>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">
+                Seu status
+              </p>
 
-              <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full border font-medium flex items-center gap-1 ${statusBadge.className}`}
+                  className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusBadge.className}`}
                 >
-                  <statusBadge.icon className="w-3 h-3" />
+                  <statusBadge.icon className="h-3 w-3" />
                   {statusBadge.label}
                 </span>
 
                 {user?.email ? (
-                  <span className="text-[10px] text-muted-foreground">{user.email}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {user.email}
+                  </span>
                 ) : null}
               </div>
 
-              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                 {statusBadge.desc}
               </p>
             </div>
 
             <button
               onClick={() => navigate("/perfil")}
-              className="text-muted-foreground hover:text-primary transition-colors"
+              className="text-muted-foreground transition-colors hover:text-primary"
               title="Abrir perfil"
               disabled={loading}
             >
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="h-4 w-4" />
             </button>
           </div>
 
@@ -231,7 +246,7 @@ const InfluencerDashboard = () => {
             <button
               onClick={() => navigate("/minhas-campanhas")}
               disabled={loading}
-              className="py-3 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-xs glow-blue transition-all"
+              className="rounded-xl bg-gradient-neon py-3 text-xs font-semibold text-primary-foreground transition-all glow-blue"
             >
               Ir para minhas campanhas
             </button>
@@ -239,7 +254,7 @@ const InfluencerDashboard = () => {
             <button
               onClick={() => navigate("/minhas-candidaturas")}
               disabled={loading}
-              className="py-3 rounded-xl border border-border/50 bg-card/60 text-foreground font-semibold text-xs hover:bg-card transition-colors"
+              className="rounded-xl border border-border/50 bg-card/60 py-3 text-xs font-semibold text-foreground transition-colors hover:bg-card"
             >
               Ver histórico
             </button>
@@ -253,19 +268,22 @@ const InfluencerDashboard = () => {
           transition={{ delay: 0.16 }}
           className="space-y-3"
         >
-          <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
+          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
             O que você ganha aqui
           </p>
 
           <div className="grid grid-cols-1 gap-3">
             {benefits.map((b) => (
-              <div key={b.title} className="glass-card-hover p-4 flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-neon-subtle flex items-center justify-center shrink-0">
-                  <b.icon className="w-5 h-5 text-primary" />
+              <div key={b.title} className="glass-card-hover flex items-start gap-3 p-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-neon-subtle">
+                  <b.icon className="h-5 w-5 text-primary" />
                 </div>
+
                 <div className="min-w-0">
-                  <h3 className="font-semibold text-foreground text-sm">{b.title}</h3>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{b.desc}</p>
+                  <h3 className="text-sm font-semibold text-foreground">{b.title}</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    {b.desc}
+                  </p>
                 </div>
               </div>
             ))}
@@ -279,7 +297,7 @@ const InfluencerDashboard = () => {
           transition={{ delay: 0.22 }}
           className="space-y-3"
         >
-          <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
+          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
             Como funciona
           </p>
 
@@ -293,21 +311,23 @@ const InfluencerDashboard = () => {
                 transition={{ delay: 0.24 + i * 0.06 }}
                 onClick={s.action}
                 disabled={loading}
-                className="w-full glass-card-hover p-4 flex items-center gap-3 text-left"
+                className="glass-card-hover flex w-full items-center gap-3 p-4 text-left"
               >
-                <div className="w-10 h-10 rounded-xl border border-border/50 bg-card/60 flex items-center justify-center shrink-0">
-                  <s.icon className="w-5 h-5 text-primary" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-card/60">
+                  <s.icon className="h-5 w-5 text-primary" />
                 </div>
 
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
                     Passo {s.n}
                   </p>
-                  <h4 className="font-semibold text-foreground text-sm">{s.title}</h4>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{s.desc}</p>
+                  <h4 className="text-sm font-semibold text-foreground">{s.title}</h4>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    {s.desc}
+                  </p>
                 </div>
 
-                <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
               </motion.button>
             ))}
           </div>
@@ -320,7 +340,7 @@ const InfluencerDashboard = () => {
           transition={{ delay: 0.28 }}
           className="space-y-3"
         >
-          <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
+          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
             Atalhos
           </p>
 
@@ -330,16 +350,18 @@ const InfluencerDashboard = () => {
                 key={qa.title}
                 onClick={() => navigate(qa.route)}
                 disabled={loading}
-                className="w-full glass-card-hover p-4 flex items-center gap-3 text-left group"
+                className="glass-card-hover group flex w-full items-center gap-3 p-4 text-left"
               >
-                <div className="w-10 h-10 rounded-xl bg-gradient-neon-subtle flex items-center justify-center shrink-0">
-                  <qa.icon className="w-5 h-5 text-primary" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-neon-subtle">
+                  <qa.icon className="h-5 w-5 text-primary" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-foreground text-sm">{qa.title}</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">{qa.desc}</p>
+
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-semibold text-foreground">{qa.title}</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{qa.desc}</p>
                 </div>
-                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+
+                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
               </button>
             ))}
           </div>
