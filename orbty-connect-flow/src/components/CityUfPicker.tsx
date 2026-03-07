@@ -1,14 +1,14 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
-import { createPortal } from "react-dom";
-import { MapPin, Loader2, ChevronDown, Check } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MapPin, Loader2 } from "lucide-react";
 
-const UF_OPTIONS: Array<{ uf: string; name: string }> = [
+type Props = {
+  uf: string;
+  city: string;
+  onChange: (next: { uf: string; city: string; cityValid: boolean }) => void;
+  required?: boolean;
+};
+
+const STATES = [
   { uf: "AC", name: "Acre" },
   { uf: "AL", name: "Alagoas" },
   { uf: "AP", name: "Amapá" },
@@ -38,625 +38,170 @@ const UF_OPTIONS: Array<{ uf: string; name: string }> = [
   { uf: "TO", name: "Tocantins" },
 ];
 
-function normalizeUF(v: string) {
-  return (v || "").trim().toUpperCase().slice(0, 2);
-}
+const citiesCache: Record<string, string[]> = {};
 
-function normalizeText(v: string) {
-  return (v || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
-
-async function fetchCitiesByUF(
-  uf: string,
-  signal?: AbortSignal
-): Promise<string[]> {
-  const UF = normalizeUF(uf);
-  if (!UF || UF.length !== 2) return [];
+async function fetchCities(uf: string) {
+  if (citiesCache[uf]) return citiesCache[uf];
 
   const res = await fetch(
-    `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${UF}/municipios`,
-    { signal }
+    `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios`
   );
 
-  if (!res.ok) return [];
+  const data = await res.json();
+  const cities = data.map((c: any) => c.nome);
 
-  const data = (await res.json()) as Array<{ nome: string }>;
-  return (data || []).map((x) => x?.nome).filter(Boolean);
+  citiesCache[uf] = cities;
+
+  return cities;
 }
 
-type Props = {
-  uf: string;
-  city: string;
-  onChange: (next: { uf: string; city: string; cityValid: boolean }) => void;
-  labels?: { uf?: string; city?: string };
-  required?: boolean;
-};
+export default function CityUfPicker({ uf, city, onChange, required }: Props) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
-type DropdownPosition = {
-  top: number;
-  left: number;
-  width: number;
-  maxHeight: number;
-};
+  const [ufQuery, setUfQuery] = useState(uf);
+  const [cityQuery, setCityQuery] = useState(city);
 
-function computeDropdownPosition(
-  inputEl: HTMLElement,
-  preferredHeight = 320
-): DropdownPosition {
-  const rect = inputEl.getBoundingClientRect();
-  const viewportH = window.innerHeight;
-  const margin = 8;
-  const safeBottom = 16;
-
-  const spaceBelow = viewportH - rect.bottom - safeBottom;
-  const spaceAbove = rect.top - safeBottom;
-
-  const openDown = spaceBelow >= 180 || spaceBelow >= spaceAbove;
-
-  const maxHeight = Math.max(
-    160,
-    Math.min(preferredHeight, openDown ? spaceBelow - margin : spaceAbove - margin)
-  );
-
-  const top = openDown
-    ? rect.bottom + margin
-    : Math.max(safeBottom, rect.top - margin - maxHeight);
-
-  return {
-    top,
-    left: rect.left,
-    width: rect.width,
-    maxHeight,
-  };
-}
-
-export default function CityUfPicker({
-  uf,
-  city,
-  onChange,
-  labels,
-  required,
-}: Props) {
-  const [loading, setLoading] = useState(false);
   const [cities, setCities] = useState<string[]>([]);
+  const [loadingCities, setLoadingCities] = useState(false);
 
-  const [ufQuery, setUfQuery] = useState(uf || "");
-  const [cityQuery, setCityQuery] = useState(city || "");
-
-  const [openUf, setOpenUf] = useState(false);
+  const [openState, setOpenState] = useState(false);
   const [openCity, setOpenCity] = useState(false);
 
-  const [activeUfIndex, setActiveUfIndex] = useState(-1);
-  const [activeCityIndex, setActiveCityIndex] = useState(-1);
-
-  const [ufPos, setUfPos] = useState<DropdownPosition | null>(null);
-  const [cityPos, setCityPos] = useState<DropdownPosition | null>(null);
-
-  const cacheRef = useRef<Record<string, string[]>>({});
-  const abortRef = useRef<AbortController | null>(null);
-
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  const ufInputRef = useRef<HTMLInputElement | null>(null);
-  const cityInputRef = useRef<HTMLInputElement | null>(null);
-
-  const ufListRef = useRef<HTMLDivElement | null>(null);
-  const cityListRef = useRef<HTMLDivElement | null>(null);
-
-  const ufPortalRef = useRef<HTMLDivElement | null>(null);
-  const cityPortalRef = useRef<HTMLDivElement | null>(null);
-
-  const UF = normalizeUF(uf);
-
-  const cityValid = useMemo(() => {
-    const c = (city || "").trim();
-    if (!UF || UF.length !== 2) return false;
-    if (!c) return false;
-    const list = cacheRef.current[UF] || cities;
-    return list.includes(c);
-  }, [UF, city, cities]);
-
   useEffect(() => {
-    setUfQuery(uf || "");
-  }, [uf]);
-
-  useEffect(() => {
-    setCityQuery(city || "");
-  }, [city]);
-
-  useEffect(() => {
-    const onDown = (e: MouseEvent | TouchEvent) => {
-      const target = e.target;
-      if (!(target instanceof Node)) return;
-
-      const insideWrap = !!wrapRef.current?.contains(target);
-      const insideUfPortal = !!ufPortalRef.current?.contains(target);
-      const insideCityPortal = !!cityPortalRef.current?.contains(target);
-
-      if (!insideWrap && !insideUfPortal && !insideCityPortal) {
-        setOpenUf(false);
+    const clickOutside = (e: any) => {
+      if (!wrapperRef.current?.contains(e.target)) {
+        setOpenState(false);
         setOpenCity(false);
       }
     };
 
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("touchstart", onDown);
+    document.addEventListener("mousedown", clickOutside);
+    document.addEventListener("touchstart", clickOutside);
 
     return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("mousedown", clickOutside);
+      document.removeEventListener("touchstart", clickOutside);
     };
   }, []);
 
   useEffect(() => {
-    let alive = true;
+    if (!uf) return;
 
-    if (!UF || UF.length !== 2) {
-      setCities([]);
-      setOpenCity(false);
-      setActiveCityIndex(-1);
-      return;
-    }
+    setLoadingCities(true);
 
-    (async () => {
-      try {
-        setLoading(true);
+    fetchCities(uf)
+      .then((list) => setCities(list))
+      .finally(() => setLoadingCities(false));
+  }, [uf]);
 
-        if (cacheRef.current[UF]) {
-          setCities(cacheRef.current[UF]);
-          return;
-        }
+  const filteredStates = useMemo(() => {
+    const q = ufQuery.toLowerCase();
 
-        if (abortRef.current) abortRef.current.abort();
-        const ac = new AbortController();
-        abortRef.current = ac;
-
-        const list = await fetchCitiesByUF(UF, ac.signal);
-        if (!alive) return;
-
-        cacheRef.current[UF] = list;
-        setCities(list);
-      } catch {
-        if (!alive) return;
-        setCities([]);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [UF]);
-
-  const filteredUFs = useMemo(() => {
-    const q = normalizeText(ufQuery);
-    if (!q) return UF_OPTIONS;
-
-    return UF_OPTIONS.filter((item) => {
-      const ufNorm = normalizeText(item.uf);
-      const nameNorm = normalizeText(item.name);
-      return ufNorm.includes(q) || nameNorm.includes(q);
-    });
+    return STATES.filter(
+      (s) =>
+        s.uf.toLowerCase().includes(q) ||
+        s.name.toLowerCase().includes(q)
+    );
   }, [ufQuery]);
 
   const filteredCities = useMemo(() => {
-    const q = normalizeText(cityQuery);
-    const list = cities || [];
+    const q = cityQuery.toLowerCase();
 
-    if (!q) return list.slice(0, 50);
-
-    return list.filter((x) => normalizeText(x).includes(q)).slice(0, 50);
+    return cities
+      .filter((c) => c.toLowerCase().includes(q))
+      .slice(0, 40);
   }, [cityQuery, cities]);
 
-  const updateUfPosition = () => {
-    if (!ufInputRef.current) return;
-    setUfPos(computeDropdownPosition(ufInputRef.current, 320));
-  };
+  const selectState = (ufValue: string) => {
+    onChange({ uf: ufValue, city: "", cityValid: false });
 
-  const updateCityPosition = () => {
-    if (!cityInputRef.current) return;
-    setCityPos(computeDropdownPosition(cityInputRef.current, 320));
-  };
-
-  useEffect(() => {
-    if (!openUf) return;
-    updateUfPosition();
-
-    const handler = () => updateUfPosition();
-    window.addEventListener("resize", handler);
-    window.addEventListener("scroll", handler, true);
-
-    return () => {
-      window.removeEventListener("resize", handler);
-      window.removeEventListener("scroll", handler, true);
-    };
-  }, [openUf, ufQuery]);
-
-  useEffect(() => {
-    if (!openCity) return;
-    updateCityPosition();
-
-    const handler = () => updateCityPosition();
-    window.addEventListener("resize", handler);
-    window.addEventListener("scroll", handler, true);
-
-    return () => {
-      window.removeEventListener("resize", handler);
-      window.removeEventListener("scroll", handler, true);
-    };
-  }, [openCity, cityQuery, loading, UF]);
-
-  useEffect(() => {
-    setActiveUfIndex(filteredUFs.length > 0 ? 0 : -1);
-  }, [ufQuery]);
-
-  useEffect(() => {
-    setActiveCityIndex(filteredCities.length > 0 ? 0 : -1);
-  }, [cityQuery, UF]);
-
-  useEffect(() => {
-    if (!openUf || activeUfIndex < 0 || !ufListRef.current) return;
-    const activeEl = ufListRef.current.querySelector<HTMLElement>(
-      `[data-uf-index="${activeUfIndex}"]`
-    );
-    activeEl?.scrollIntoView({ block: "nearest" });
-  }, [openUf, activeUfIndex]);
-
-  useEffect(() => {
-    if (!openCity || activeCityIndex < 0 || !cityListRef.current) return;
-    const activeEl = cityListRef.current.querySelector<HTMLElement>(
-      `[data-city-index="${activeCityIndex}"]`
-    );
-    activeEl?.scrollIntoView({ block: "nearest" });
-  }, [openCity, activeCityIndex]);
-
-  const pickUF = (value: string) => {
-    const nextUF = normalizeUF(value);
-    onChange({ uf: nextUF, city: "", cityValid: false });
-    setUfQuery(nextUF);
+    setUfQuery(ufValue);
     setCityQuery("");
-    setOpenUf(false);
+
+    setOpenState(false);
+  };
+
+  const selectCity = (cityValue: string) => {
+    onChange({ uf, city: cityValue, cityValid: true });
+
+    setCityQuery(cityValue);
     setOpenCity(false);
-  };
-
-  const pickCity = (value: string) => {
-    const v = (value || "").trim();
-    onChange({ uf: UF, city: v, cityValid: true });
-    setCityQuery(v);
-    setOpenCity(false);
-  };
-
-  const onBlurUf = () => {
-    const q = normalizeText(ufQuery);
-    if (!q) {
-      onChange({ uf: "", city: "", cityValid: false });
-      setUfQuery("");
-      setCityQuery("");
-      return;
-    }
-
-    const exact =
-      UF_OPTIONS.find((item) => normalizeText(item.uf) === q) ||
-      UF_OPTIONS.find((item) => normalizeText(item.name) === q);
-
-    if (exact) {
-      pickUF(exact.uf);
-      return;
-    }
-
-    const first = filteredUFs[0];
-    if (first) {
-      pickUF(first.uf);
-      return;
-    }
-
-    onChange({ uf: "", city: "", cityValid: false });
-    setUfQuery("");
-    setCityQuery("");
-  };
-
-  const onBlurCity = () => {
-    const q = (cityQuery || "").trim();
-
-    if (!q) {
-      onChange({ uf: UF, city: "", cityValid: false });
-      return;
-    }
-
-    const list = cacheRef.current[UF] || cities;
-    const exact = list.find((item) => item === q);
-
-    if (exact) {
-      onChange({ uf: UF, city: exact, cityValid: true });
-      setCityQuery(exact);
-      return;
-    }
-
-    onChange({ uf: UF, city: "", cityValid: false });
-    setCityQuery("");
-  };
-
-  const handleUfKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (!openUf && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-      setOpenUf(true);
-      return;
-    }
-
-    if (!filteredUFs.length) return;
-
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setOpenUf(true);
-      setActiveUfIndex((prev) => (prev < filteredUFs.length - 1 ? prev + 1 : 0));
-      return;
-    }
-
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setOpenUf(true);
-      setActiveUfIndex((prev) => (prev > 0 ? prev - 1 : filteredUFs.length - 1));
-      return;
-    }
-
-    if (e.key === "Enter") {
-      if (openUf && activeUfIndex >= 0 && filteredUFs[activeUfIndex]) {
-        e.preventDefault();
-        pickUF(filteredUFs[activeUfIndex].uf);
-      }
-      return;
-    }
-
-    if (e.key === "Escape") {
-      setOpenUf(false);
-    }
-  };
-
-  const handleCityKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (!openCity && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-      setOpenCity(true);
-      return;
-    }
-
-    if (!filteredCities.length) return;
-
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setOpenCity(true);
-      setActiveCityIndex((prev) =>
-        prev < filteredCities.length - 1 ? prev + 1 : 0
-      );
-      return;
-    }
-
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setOpenCity(true);
-      setActiveCityIndex((prev) =>
-        prev > 0 ? prev - 1 : filteredCities.length - 1
-      );
-      return;
-    }
-
-    if (e.key === "Enter") {
-      if (openCity && activeCityIndex >= 0 && filteredCities[activeCityIndex]) {
-        e.preventDefault();
-        pickCity(filteredCities[activeCityIndex]);
-      }
-      return;
-    }
-
-    if (e.key === "Escape") {
-      setOpenCity(false);
-    }
   };
 
   return (
-    <div className="space-y-3" ref={wrapRef}>
+    <div ref={wrapperRef} className="space-y-4">
+      {/* ESTADO */}
       <div className="relative">
-        <label className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          <MapPin className="h-3.5 w-3.5" />
-          {labels?.uf ?? "Estado (UF)"} {required ? "*" : ""}
+        <label className="text-xs uppercase text-muted-foreground flex gap-2 mb-2">
+          <MapPin size={14} />
+          Estado {required && "*"}
         </label>
 
-        <div className="relative">
-          <input
-            ref={ufInputRef}
-            value={ufQuery}
-            onChange={(e) => {
-              setUfQuery(e.target.value);
-              setOpenUf(true);
-              setOpenCity(false);
-            }}
-            onFocus={() => {
-              setOpenUf(true);
-              setOpenCity(false);
-            }}
-            onKeyDown={handleUfKeyDown}
-            onBlur={() => {
-              setTimeout(onBlurUf, 120);
-            }}
-            placeholder="Digite UF ou nome do estado"
-            className="w-full rounded-xl border border-border/50 bg-input px-4 py-3 pr-10 text-sm text-foreground placeholder:text-muted-foreground/50 transition-all focus:outline-none focus:ring-2 focus:ring-primary/30"
-            autoComplete="off"
-            aria-expanded={openUf}
-            aria-autocomplete="list"
-            aria-haspopup="listbox"
-          />
+        <input
+          value={ufQuery}
+          onChange={(e) => {
+            setUfQuery(e.target.value);
+            setOpenState(true);
+          }}
+          onFocus={() => setOpenState(true)}
+          placeholder="Digite seu estado"
+          className="w-full rounded-xl border border-border/50 bg-input px-4 py-3 text-sm"
+        />
 
-          <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-            <ChevronDown className="h-4 w-4" />
+        {openState && (
+          <div className="absolute z-50 w-full bg-background border border-border/40 rounded-xl mt-2 shadow-xl max-h-60 overflow-y-auto">
+            {filteredStates.map((s) => (
+              <button
+                key={s.uf}
+                type="button"
+                onClick={() => selectState(s.uf)}
+                className="w-full text-left px-4 py-3 hover:bg-muted/40 text-sm"
+              >
+                {s.uf} — {s.name}
+              </button>
+            ))}
           </div>
-        </div>
+        )}
       </div>
 
+      {/* CIDADE */}
       <div className="relative">
-        <label className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          <MapPin className="h-3.5 w-3.5" />
-          {labels?.city ?? "Cidade"} {required ? "*" : ""}
+        <label className="text-xs uppercase text-muted-foreground flex gap-2 mb-2">
+          <MapPin size={14} />
+          Cidade {required && "*"}
         </label>
 
-        <div className="relative">
-          <input
-            ref={cityInputRef}
-            value={cityQuery}
-            onChange={(e) => {
-              setCityQuery(e.target.value);
-              setOpenCity(true);
-              setOpenUf(false);
-            }}
-            onFocus={() => {
-              setOpenCity(true);
-              setOpenUf(false);
-            }}
-            onKeyDown={handleCityKeyDown}
-            onBlur={() => {
-              setTimeout(onBlurCity, 120);
-            }}
-            disabled={!UF || UF.length !== 2}
-            placeholder={!UF ? "Selecione UF primeiro" : "Digite para buscar cidade"}
-            className="w-full rounded-xl border border-border/50 bg-input px-4 py-3 pr-10 text-sm text-foreground placeholder:text-muted-foreground/50 transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
-            autoComplete="off"
-            aria-expanded={openCity}
-            aria-autocomplete="list"
-            aria-haspopup="listbox"
-          />
+        <input
+          value={cityQuery}
+          disabled={!uf}
+          onChange={(e) => {
+            setCityQuery(e.target.value);
+            setOpenCity(true);
+          }}
+          onFocus={() => setOpenCity(true)}
+          placeholder={uf ? "Digite sua cidade" : "Escolha o estado primeiro"}
+          className="w-full rounded-xl border border-border/50 bg-input px-4 py-3 text-sm disabled:opacity-50"
+        />
 
-          <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
-            )}
+        {loadingCities && (
+          <Loader2 className="absolute right-3 top-3 animate-spin" size={18} />
+        )}
+
+        {openCity && filteredCities.length > 0 && (
+          <div className="absolute z-50 w-full bg-background border border-border/40 rounded-xl mt-2 shadow-xl max-h-60 overflow-y-auto">
+            {filteredCities.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => selectCity(c)}
+                className="w-full text-left px-4 py-3 hover:bg-muted/40 text-sm"
+              >
+                {c}
+              </button>
+            ))}
           </div>
-        </div>
-
-        <div className="mt-2 text-[11px] text-muted-foreground">
-          {UF && UF.length === 2 ? (
-            cityValid ? (
-              <>
-                Selecionado: <span className="font-medium text-foreground">{city}</span>
-              </>
-            ) : (
-              <>Digite e selecione uma cidade válida.</>
-            )
-          ) : (
-            <>Defina a UF para carregar as cidades.</>
-          )}
-        </div>
+        )}
       </div>
-
-      {openUf &&
-        ufPos &&
-        createPortal(
-          <div
-            ref={ufPortalRef}
-            className="fixed z-[9999] overflow-hidden rounded-2xl border border-border/50 bg-background/95 shadow-[0_12px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl"
-            style={{
-              top: ufPos.top,
-              left: ufPos.left,
-              width: ufPos.width,
-            }}
-          >
-            <div
-              ref={ufListRef}
-              className="overflow-y-auto overscroll-contain py-1"
-              style={{ maxHeight: ufPos.maxHeight }}
-              role="listbox"
-            >
-              {filteredUFs.map((item, index) => {
-                const isActive = index === activeUfIndex;
-                const isSelected = item.uf === UF;
-
-                return (
-                  <button
-                    key={item.uf}
-                    type="button"
-                    data-uf-index={index}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onMouseEnter={() => setActiveUfIndex(index)}
-                    onClick={() => pickUF(item.uf)}
-                    className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm transition ${
-                      isActive
-                        ? "bg-primary/10 text-foreground"
-                        : "text-foreground hover:bg-white/5"
-                    }`}
-                    role="option"
-                    aria-selected={isSelected}
-                  >
-                    <span>
-                      <span className="font-medium">{item.uf}</span>
-                      <span className="ml-2 text-muted-foreground">{item.name}</span>
-                    </span>
-
-                    {isSelected ? <Check className="h-4 w-4 text-primary" /> : null}
-                  </button>
-                );
-              })}
-            </div>
-          </div>,
-          document.body
-        )}
-
-      {openCity &&
-        cityPos &&
-        !loading &&
-        UF &&
-        UF.length === 2 &&
-        filteredCities.length > 0 &&
-        createPortal(
-          <div
-            ref={cityPortalRef}
-            className="fixed z-[9999] overflow-hidden rounded-2xl border border-border/50 bg-background/95 shadow-[0_12px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl"
-            style={{
-              top: cityPos.top,
-              left: cityPos.left,
-              width: cityPos.width,
-            }}
-          >
-            <div
-              ref={cityListRef}
-              className="overflow-y-auto overscroll-contain py-1"
-              style={{ maxHeight: cityPos.maxHeight }}
-              role="listbox"
-            >
-              {filteredCities.map((c, index) => {
-                const isActive = index === activeCityIndex;
-                const isSelected = c === city;
-
-                return (
-                  <button
-                    key={c}
-                    type="button"
-                    data-city-index={index}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onTouchStart={() => pickCity(c)}
-                    onMouseEnter={() => setActiveCityIndex(index)}
-                    onClick={() => pickCity(c)}
-                    className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm transition ${
-                      isActive
-                        ? "bg-primary/10 text-foreground"
-                        : "text-foreground hover:bg-white/5"
-                    }`}
-                    role="option"
-                    aria-selected={isSelected}
-                  >
-                    <span className={isSelected ? "font-medium" : ""}>{c}</span>
-                    {isSelected ? <Check className="h-4 w-4 text-primary" /> : null}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="border-t border-border/30 px-4 py-2 text-[11px] text-muted-foreground">
-              Selecione uma cidade válida da base IBGE.
-            </div>
-          </div>,
-          document.body
-        )}
     </div>
   );
 }
