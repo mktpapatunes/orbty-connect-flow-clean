@@ -7,13 +7,28 @@ export type GlobalBanner = {
   // mais tarde: placement, roles, startAt/endAt etc
 }
 
-export const dashboardHeroBanner: GlobalBanner = {
-  id: "hero",
-  imageUrl: "/banners/hero.png",
-  alt: "Banner principal",
-  href: "/minhas-campanhas",
-  enabled: true,
-}
+export const dashboardHeroBanners = [
+  {
+    id: "hero1",
+    imageUrl: "/banners/hero1.png",
+    alt: "Campanha destaque",
+    href: "/minhas-campanhas",
+    enabled: true,
+  },
+  {
+    id: "hero2",
+    imageUrl: "/banners/hero2.png",
+    alt: "Novidades Orbty",
+    href: "/perfil",
+    enabled: true,
+  },
+  {
+    id: "hero3",
+    imageUrl: "/banners/hero3.png",
+    alt: "Promoção creators",
+    href: "/ajuda",
+    enabled: true,
+  }
 
 export const dashboardNewsBanners: GlobalBanner[] = [
   {

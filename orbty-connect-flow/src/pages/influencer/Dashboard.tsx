@@ -16,9 +16,10 @@ import {
 } from "lucide-react";
 
 // ✅ NOVO: banners globais (admin edita via código + arquivos em /public/banners)
-import HeroBanner from "@/components/dashboard/HeroBanner";
+import HeroCarousel from "@/components/dashboard/HeroCarousel";
 import BannersCarousel from "@/components/dashboard/BannersCarousel";
 import { dashboardHeroBanner, dashboardNewsBanners } from "@/config/globalBanners";
+
 
 const InfluencerDashboard = () => {
   const navigate = useNavigate();
@@ -175,7 +176,7 @@ const InfluencerDashboard = () => {
           transition={{ delay: 0.05 }}
           className="px-0"
         >
-          <HeroBanner banner={dashboardHeroBanner} />
+         <HeroCarousel banners={dashboardHeroBanners} />
         </motion.div>
 
         {/* ✅ NOVO: CARROSSEL GLOBAL “Novidades para você” */}
@@ -184,7 +185,7 @@ const InfluencerDashboard = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.09 }}
         >
-          <BannersCarousel title="Novidades para você" banners={dashboardNewsBanners} />
+          <BannersCarousel title="Novidades para você" banners={dashboardNewsBanners} autoPlay autoPlayInterval={5000} />
         </motion.div>
 
         {/* STATUS + CTAs */}
