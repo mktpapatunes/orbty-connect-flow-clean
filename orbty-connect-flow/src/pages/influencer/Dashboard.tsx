@@ -86,7 +86,7 @@ const InfluencerDashboard = () => {
     {
       step: "02",
       title: "Presença digital",
-      desc: "Eleve sua influência participando de publis reais. Expanda seu network com negócios da sua região.",
+      desc: "Eleve sua influência participando de publis reais. Expanda seu network com marcas da sua região.",
       icon: TrendingUp,
     },
     {
