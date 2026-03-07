@@ -5,16 +5,25 @@ import MobileLayout from "@/components/MobileLayout";
 import TransparentLogo from "@/components/TransparentLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import orbtyLogo from "@/assets/orbty-logo.png";
+
 import {
   ArrowRight,
   BadgeCheck,
   BarChart3,
   CalendarCheck,
-  CircleHelp,
+  ShieldCheck,
   Sparkles,
-  User,
+  Users,
   Zap,
 } from "lucide-react";
+
+import HeroCarousel from "@/components/dashboard/HeroCarousel";
+import BannersCarousel from "@/components/dashboard/BannersCarousel";
+
+import {
+  dashboardContractorHeroBanners,
+  dashboardContractorNewsBanners,
+} from "@/config/globalBanners";
 
 const ContractorDashboard = () => {
   const navigate = useNavigate();
@@ -25,6 +34,7 @@ const ContractorDashboard = () => {
       (profile as any)?.name ??
       (user as any)?.user_metadata?.name ??
       (user?.email ? user.email.split("@")[0] : "");
+
     const name = String(raw ?? "").trim();
     return name ? name.split(" ")[0] : "você";
   }, [profile, user]);
@@ -32,12 +42,13 @@ const ContractorDashboard = () => {
   const statusBadge = useMemo(() => {
     if (approvalStatus === "approved") {
       return {
-        label: "Aprovado",
-        desc: "Você já pode criar e gerenciar campanhas e acompanhar suas entregas.",
+        label: "Aprovado(a)",
+        desc: "Você já pode criar campanhas, acompanhar candidaturas e gerenciar entregas por aqui.",
         icon: BadgeCheck,
         className: "border-accent/30 bg-accent/10 text-accent",
       };
     }
+
     if (approvalStatus === "pending") {
       return {
         label: "Em análise",
@@ -46,17 +57,19 @@ const ContractorDashboard = () => {
         className: "border-warning/30 bg-warning/10 text-warning",
       };
     }
+
     if (approvalStatus === "rejected") {
       return {
         label: "Precisa de ajustes",
-        desc: "Revise seu perfil para aumentar as chances de aprovação e liberar acesso.",
+        desc: "Revise seu perfil para liberar o acesso completo à plataforma.",
         icon: BarChart3,
         className: "border-destructive/30 bg-destructive/5 text-destructive",
       };
     }
+
     return {
       label: "Carregando…",
-      desc: "Estamos preparando seu painel.",
+      desc: "Preparando seu painel.",
       icon: Zap,
       className: "border-border/50 bg-card/60 text-muted-foreground",
     };
@@ -65,12 +78,12 @@ const ContractorDashboard = () => {
   const ctas = useMemo(() => {
     const primary =
       approvalStatus === "approved"
-        ? { label: "Ir para minhas campanhas", route: "/campanha" }
-        : { label: "Ver como funciona", route: "/campanha" };
+        ? { label: "Minhas campanhas", route: "/campanha" }
+        : { label: "Ver campanhas", route: "/campanha" };
 
     const secondary =
       approvalStatus === "rejected"
-        ? { label: "Ajustar meu perfil", route: "/perfil" }
+        ? { label: "Ajustar perfil", route: "/perfil" }
         : { label: "Meu perfil", route: "/perfil" };
 
     return { primary, secondary };
@@ -78,108 +91,67 @@ const ContractorDashboard = () => {
 
   const benefits = [
     {
-      title: "Campanhas regionais",
-      desc: "Conecte-se com creators e ações locais com foco em resultado.",
-      icon: Sparkles,
+      title: "Creators regionais",
+      desc: "Encontre perfis da sua região para divulgar sua marca com mais conexão local.",
+      icon: Users,
     },
     {
-      title: "Tudo organizado",
-      desc: "Briefing, candidaturas, entregas e aprovações em um só lugar.",
+      title: "Tudo centralizado",
+      desc: "Briefing, candidaturas, aprovações e entregas em um só lugar.",
       icon: CalendarCheck,
     },
     {
-      title: "Acompanhe facilmente",
-      desc: "Veja andamento e histórico dentro de cada campanha.",
-      icon: BarChart3,
-    },
-  ];
-
-  const steps = [
-    {
-      n: "01",
-      title: "Complete seu perfil",
-      desc: "Perfil completo melhora aprovação e alinhamento das campanhas.",
-      icon: User,
-      action: () => navigate("/perfil"),
-      actionLabel: "Editar perfil",
-    },
-    {
-      n: "02",
-      title: "Crie e gerencie campanhas",
-      desc: "A lista e as ações ficam em “Minhas campanhas”.",
-      icon: Zap,
-      action: () => navigate("/campanha"),
-      actionLabel: "Ver campanhas",
-    },
-    {
-      n: "03",
-      title: "Acompanhe dentro da campanha",
-      desc: "Detalhes, prazos e entregas ficam no detalhe de cada campanha.",
-      icon: ArrowRight,
-      action: () => navigate("/campanha"),
-      actionLabel: "Abrir lista",
-    },
-  ];
-
-  const quickActions = [
-    {
-      title: "Minhas campanhas",
-      desc: "Acompanhe andamento e detalhes.",
-      icon: Zap,
-      route: "/campanha",
-    },
-    {
-      title: "Criar campanha",
-      desc: "Inicie uma nova campanha.",
-      icon: Sparkles,
-      route: "/criar-campanha",
-    },
-    {
-      title: "Meu perfil",
-      desc: "Dados e configurações da conta.",
-      icon: User,
-      route: "/perfil",
-    },
-    {
-      title: "Ajuda / FAQ",
-      desc: "Dúvidas rápidas sobre o Orbty.",
-      icon: CircleHelp,
-      route: "/ajuda",
+      title: "Mais controle",
+      desc: "Acompanhe campanhas com mais clareza, organização e segurança.",
+      icon: ShieldCheck,
     },
   ];
 
   return (
     <MobileLayout
       title={
-        // ✅ Slot do título com altura FIXA (não deixa o header crescer)
         <div className="relative h-10 w-[170px] overflow-visible">
           <TransparentLogo
             src={orbtyLogo}
             alt="ORBTY"
             threshold={50}
-            // ✅ Logo maior, mas ABSOLUTA (não influencia a altura do header)
             className="absolute left-0 top-1/2 -translate-y-1/2 h-20 w-auto drop-shadow-[0_0_18px_hsl(200,100%,50%,0.35)]"
           />
         </div>
       }
       navType="contractor"
     >
-      <div className="px-6 py-6 space-y-4">
+      <div className="space-y-6 overflow-x-hidden px-6 py-6">
+        {/* HEADER */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <p className="text-muted-foreground text-xs uppercase tracking-widest mb-1">
-            Painel de Marca/Negócios
+          <p className="mb-1 text-xs uppercase tracking-widest text-muted-foreground">
+            Painel da marca
           </p>
 
           <h2 className="font-display text-2xl font-bold text-foreground">
             Olá, <span className="text-gradient-neon">{firstName}</span>
           </h2>
 
-          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-            O Orbty te ajuda a organizar campanhas com creators regionais: briefing, candidaturas,
-            entregas e acompanhamento — tudo dentro de cada campanha.
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            A Orbty conecta sua marca a creators regionais. Aqui você organiza campanhas,
+            acompanha candidaturas, entregas e resultados — tudo dentro da plataforma.
           </p>
         </motion.div>
 
+        {/* HERO */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+        >
+          <HeroCarousel
+            banners={dashboardContractorHeroBanners}
+            autoPlay
+            autoPlayInterval={5000}
+          />
+        </motion.div>
+
+        {/* STATUS */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -187,32 +159,31 @@ const ContractorDashboard = () => {
           className="glass-card p-4"
         >
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground uppercase tracking-widest">Seu status</p>
+            <div>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">
+                Seu status
+              </p>
 
-              <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <div className="mt-2 flex items-center gap-2">
                 <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full border font-medium flex items-center gap-1 ${statusBadge.className}`}
+                  className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusBadge.className}`}
                 >
-                  <statusBadge.icon className="w-3 h-3" />
+                  <statusBadge.icon className="h-3 w-3" />
                   {statusBadge.label}
                 </span>
-
-                {user?.email ? (
-                  <span className="text-[10px] text-muted-foreground">{user.email}</span>
-                ) : null}
               </div>
 
-              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{statusBadge.desc}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {statusBadge.desc}
+              </p>
             </div>
 
             <button
-              onClick={() => navigate(ctas.secondary.route)}
-              className="text-muted-foreground hover:text-primary transition-colors"
-              title="Abrir perfil"
+              onClick={() => navigate("/perfil")}
+              className="text-muted-foreground hover:text-primary"
               disabled={loading}
             >
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="h-4 w-4" />
             </button>
           </div>
 
@@ -220,7 +191,7 @@ const ContractorDashboard = () => {
             <button
               onClick={() => navigate(ctas.primary.route)}
               disabled={loading}
-              className="py-3 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-xs glow-blue transition-all"
+              className="rounded-xl bg-gradient-neon py-3 text-xs font-semibold text-primary-foreground glow-blue"
             >
               {ctas.primary.label}
             </button>
@@ -228,119 +199,60 @@ const ContractorDashboard = () => {
             <button
               onClick={() => navigate(ctas.secondary.route)}
               disabled={loading}
-              className="py-3 rounded-xl border border-border/50 bg-card/60 text-foreground font-semibold text-xs hover:bg-card transition-colors"
+              className="rounded-xl border border-border/50 bg-card/60 py-3 text-xs font-semibold text-foreground hover:bg-card"
             >
               {ctas.secondary.label}
             </button>
           </div>
         </motion.div>
 
+        {/* BENEFÍCIOS DA ORBTY */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.12 }}
-          className="space-y-3"
         >
-          <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
-            O que você ganha aqui
+          <p className="mb-3 text-xs uppercase tracking-widest text-muted-foreground">
+            Benefícios da Orbty
           </p>
 
-          <div className="grid grid-cols-1 gap-3">
-            {benefits.map((b) => (
-              <div key={b.title} className="glass-card-hover p-4 flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-neon-subtle flex items-center justify-center shrink-0">
-                  <b.icon className="w-5 h-5 text-primary" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-semibold text-foreground text-sm">{b.title}</h3>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{b.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.16 }}
-          className="glass-card p-4 flex items-start gap-3"
-        >
-          <Sparkles className="w-4 h-4 text-accent shrink-0 mt-0.5" />
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            <span className="text-foreground font-medium">Dica:</span> tudo sobre campanha (briefing, candidaturas,
-            entregas e status) fica dentro de{" "}
-            <span className="text-foreground font-medium">Minhas campanhas</span>.
-          </p>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="space-y-3"
-        >
-          <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">Como funciona</p>
-
-          <div className="space-y-2">
-            {steps.map((s, i) => (
+          <div className="flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {benefits.map((b, i) => (
               <motion.div
-                key={s.n}
-                initial={{ opacity: 0, x: -12 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.22 + i * 0.06 }}
-                className="glass-card-hover p-4 flex items-center gap-3"
+                key={b.title}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.14 + i * 0.05 }}
+                className="glass-card-hover w-[78%] shrink-0 rounded-3xl px-4 py-5"
               >
-                <div className="w-10 h-10 rounded-xl border border-border/50 bg-card/60 flex items-center justify-center shrink-0">
-                  <s.icon className="w-5 h-5 text-primary" />
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-neon-subtle shadow-[0_0_24px_hsl(var(--primary)/0.15)]">
+                  <b.icon className="h-6 w-6 text-primary" />
                 </div>
 
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Passo {s.n}</p>
-                  <h4 className="font-semibold text-foreground text-sm">{s.title}</h4>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{s.desc}</p>
-                </div>
+                <h3 className="mt-2 text-sm font-semibold leading-tight text-foreground">
+                  {b.title}
+                </h3>
 
-                <button
-                  onClick={s.action}
-                  disabled={loading}
-                  className="text-muted-foreground hover:text-primary transition-colors shrink-0"
-                  title={s.actionLabel}
-                >
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {b.desc}
+                </p>
               </motion.div>
             ))}
           </div>
         </motion.div>
 
+        {/* NOVIDADES */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.26 }}
-          className="space-y-3"
+          transition={{ delay: 0.16 }}
         >
-          <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">Atalhos</p>
-
-          <div className="grid grid-cols-1 gap-3">
-            {quickActions.map((qa) => (
-              <button
-                key={qa.title}
-                onClick={() => navigate(qa.route)}
-                disabled={loading}
-                className="w-full glass-card-hover p-4 flex items-center gap-3 text-left group"
-              >
-                <div className="w-10 h-10 rounded-xl bg-gradient-neon-subtle flex items-center justify-center shrink-0">
-                  <qa.icon className="w-5 h-5 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-foreground text-sm">{qa.title}</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">{qa.desc}</p>
-                </div>
-                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-              </button>
-            ))}
-          </div>
+          <BannersCarousel
+            title="Novidades para sua marca"
+            banners={dashboardContractorNewsBanners}
+            autoPlay
+            autoPlayInterval={5000}
+          />
         </motion.div>
       </div>
     </MobileLayout>
