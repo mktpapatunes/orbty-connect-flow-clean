@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { GlobalBanner } from "@/config/globalBanners";
 
 function isExternal(url?: string) {
@@ -144,125 +145,124 @@ export default function HeroCarousel({
 
   return (
     <section className="w-full">
-      {count > 1 && (
-        <div className="mb-3 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              stopAutoPlay();
-              const next = active - 1 < 0 ? count - 1 : active - 1;
-              scrollToIndex(next);
-              setActive(next);
-              resumeAutoPlayLater();
-            }}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-border/50 bg-card/60 text-sm text-foreground transition-colors hover:bg-card"
-            aria-label="Banner anterior"
-          >
-            ←
-          </button>
+      <div className="relative">
+        <div
+          ref={scrollerRef}
+          className="flex gap-3 overflow-x-auto scroll-smooth select-none cursor-grab active:cursor-grabbing [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          style={{ scrollSnapType: "x mandatory" as any }}
+          onMouseDown={(e) => {
+            const el = scrollerRef.current;
+            if (!el) return;
 
-          <button
-            type="button"
-            onClick={() => {
-              stopAutoPlay();
-              const next = active + 1 >= count ? 0 : active + 1;
-              scrollToIndex(next);
-              setActive(next);
-              resumeAutoPlayLater();
-            }}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-border/50 bg-card/60 text-sm text-foreground transition-colors hover:bg-card"
-            aria-label="Próximo banner"
-          >
-            →
-          </button>
+            isDraggingRef.current = true;
+            dragMovedRef.current = false;
+            startXRef.current = e.pageX;
+            scrollLeftRef.current = el.scrollLeft;
+            stopAutoPlay();
+          }}
+          onMouseMove={(e) => {
+            const el = scrollerRef.current;
+            if (!el || !isDraggingRef.current) return;
+
+            const delta = e.pageX - startXRef.current;
+
+            if (Math.abs(delta) > 6) {
+              dragMovedRef.current = true;
+            }
+
+            el.scrollLeft = scrollLeftRef.current - delta;
+          }}
+          onMouseUp={() => {
+            if (!isDraggingRef.current) return;
+            isDraggingRef.current = false;
+            updateActiveByScroll();
+            resumeAutoPlayLater();
+          }}
+          onMouseLeave={() => {
+            if (!isDraggingRef.current) return;
+            isDraggingRef.current = false;
+            updateActiveByScroll();
+            resumeAutoPlayLater();
+          }}
+          onTouchStart={() => {
+            stopAutoPlay();
+          }}
+          onTouchEnd={() => {
+            updateActiveByScroll();
+            resumeAutoPlayLater();
+          }}
+        >
+          {enabled.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={(e) => {
+                if (dragMovedRef.current) {
+                  e.preventDefault();
+                  return;
+                }
+
+                if (!b.href) return;
+
+                stopAutoPlay();
+
+                if (isExternal(b.href)) {
+                  window.open(b.href, "_blank", "noopener,noreferrer");
+                } else {
+                  navigate(b.href);
+                }
+
+                resumeAutoPlayLater();
+              }}
+              className="relative w-full shrink-0 overflow-hidden rounded-[28px] border border-white/10 bg-white/5 shadow-sm"
+              style={{ scrollSnapAlign: "center" as any }}
+            >
+              <img
+                src={b.imageUrl}
+                alt={b.alt}
+                className="pointer-events-none h-[220px] w-full object-cover"
+                loading="lazy"
+                draggable={false}
+              />
+
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/30" />
+            </button>
+          ))}
         </div>
-      )}
 
-      <div
-        ref={scrollerRef}
-        className="flex gap-3 overflow-x-auto scroll-smooth select-none cursor-grab active:cursor-grabbing [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        style={{ scrollSnapType: "x mandatory" as any }}
-        onMouseDown={(e) => {
-          const el = scrollerRef.current;
-          if (!el) return;
+        {count > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                stopAutoPlay();
+                const next = active - 1 < 0 ? count - 1 : active - 1;
+                scrollToIndex(next);
+                setActive(next);
+                resumeAutoPlayLater();
+              }}
+              className="absolute left-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white backdrop-blur-sm transition hover:bg-black/40"
+              aria-label="Banner anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
 
-          isDraggingRef.current = true;
-          dragMovedRef.current = false;
-          startXRef.current = e.pageX;
-          scrollLeftRef.current = el.scrollLeft;
-
-          stopAutoPlay();
-        }}
-        onMouseMove={(e) => {
-          const el = scrollerRef.current;
-          if (!el || !isDraggingRef.current) return;
-
-          const delta = e.pageX - startXRef.current;
-
-          if (Math.abs(delta) > 6) {
-            dragMovedRef.current = true;
-          }
-
-          el.scrollLeft = scrollLeftRef.current - delta;
-        }}
-        onMouseUp={() => {
-          if (!isDraggingRef.current) return;
-
-          isDraggingRef.current = false;
-          updateActiveByScroll();
-          resumeAutoPlayLater();
-        }}
-        onMouseLeave={() => {
-          if (!isDraggingRef.current) return;
-
-          isDraggingRef.current = false;
-          updateActiveByScroll();
-          resumeAutoPlayLater();
-        }}
-        onTouchStart={() => {
-          stopAutoPlay();
-        }}
-        onTouchEnd={() => {
-          updateActiveByScroll();
-          resumeAutoPlayLater();
-        }}
-      >
-        {enabled.map((b) => (
-          <button
-            key={b.id}
-            type="button"
-            onClick={(e) => {
-              if (dragMovedRef.current) {
-                e.preventDefault();
-                return;
-              }
-
-              if (!b.href) return;
-
-              stopAutoPlay();
-
-              if (isExternal(b.href)) {
-                window.open(b.href, "_blank", "noopener,noreferrer");
-              } else {
-                navigate(b.href);
-              }
-
-              resumeAutoPlayLater();
-            }}
-            className="relative w-full shrink-0 overflow-hidden rounded-[28px] border border-white/10 bg-white/5 shadow-sm"
-            style={{ scrollSnapAlign: "center" as any }}
-          >
-            <img
-              src={b.imageUrl}
-              alt={b.alt}
-              className="h-[220px] w-full object-cover pointer-events-none"
-              loading="lazy"
-              draggable={false}
-            />
-
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/30" />
-          </button>
-        ))}
+            <button
+              type="button"
+              onClick={() => {
+                stopAutoPlay();
+                const next = active + 1 >= count ? 0 : active + 1;
+                scrollToIndex(next);
+                setActive(next);
+                resumeAutoPlayLater();
+              }}
+              className="absolute right-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white backdrop-blur-sm transition hover:bg-black/40"
+              aria-label="Próximo banner"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </>
+        )}
       </div>
 
       {count > 1 && (
@@ -279,8 +279,8 @@ export default function HeroCarousel({
               }}
               aria-label={`Ir para banner ${i + 1}`}
               className={[
-                "h-2.5 rounded-full transition-all",
-                i === active ? "w-6 bg-primary" : "w-2.5 bg-zinc-300/60",
+                "h-2 rounded-full transition-all",
+                i === active ? "w-6 bg-primary" : "w-2 bg-zinc-300/60",
               ].join(" ")}
             />
           ))}
