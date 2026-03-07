@@ -10,10 +10,10 @@ import {
   LogOut,
   Trophy,
   Settings,
-  Broadcast
+  Orbit,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Broadcast } from "lucide-react"
+import { Orbit } from "lucide-react";
 
 interface MobileLayoutProps {
   children: ReactNode;
@@ -329,7 +329,7 @@ const MobileLayout = ({
                 className="w-12 h-12 rounded-full bg-gradient-neon glow-blue flex items-center justify-center shadow-md transition hover:scale-105 active:scale-95"
                 title="Minhas campanhas"
               >
-                <Broadcast className="w-6 h-6 text-primary-foreground" />
+                <Orbit className="w-6 h-6 text-primary-foreground" />
               </button>
 
               {/* Perfil */}
