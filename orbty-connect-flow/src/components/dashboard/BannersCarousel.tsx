@@ -25,7 +25,10 @@ export default function BannersCarousel({
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [active, setActive] = useState(0);
 
-  const enabled = useMemo(() => banners.filter((b) => b.enabled !== false), [banners]);
+  const enabled = useMemo(
+    () => banners.filter((b) => b.enabled !== false),
+    [banners]
+  );
   const count = enabled.length;
 
   const autoPlayRef = useRef<number | null>(null);
@@ -55,7 +58,10 @@ export default function BannersCarousel({
     return clamp(left, 0, maxLeft);
   };
 
-  const scrollToIndex = (index: number, behavior: ScrollBehavior = "smooth") => {
+  const scrollToIndex = (
+    index: number,
+    behavior: ScrollBehavior = "smooth"
+  ) => {
     const el = scrollerRef.current;
     if (!el) return;
 
@@ -159,8 +165,11 @@ export default function BannersCarousel({
 
       <div
         ref={scrollerRef}
-        className="mt-3 flex gap-3 overflow-x-auto pb-2 select-none touch-pan-y [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:cursor-grab md:active:cursor-grabbing"
-        style={{ scrollSnapType: "x mandatory" as any, WebkitOverflowScrolling: "touch" }}
+        className="mt-3 flex gap-3 overflow-x-auto pb-2 scroll-smooth select-none overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:cursor-grab md:active:cursor-grabbing"
+        style={{
+          scrollSnapType: "x mandatory",
+          WebkitOverflowScrolling: "touch",
+        }}
         onMouseDown={(e) => {
           const el = scrollerRef.current;
           if (!el) return;
@@ -199,17 +208,26 @@ export default function BannersCarousel({
           resumeAutoPlayLater();
         }}
         onTouchStart={() => {
+          dragMovedRef.current = false;
           stopAutoPlay();
+        }}
+        onTouchMove={() => {
+          dragMovedRef.current = true;
         }}
         onTouchEnd={() => {
           updateActiveByScroll();
           resumeAutoPlayLater();
+
+          window.setTimeout(() => {
+            dragMovedRef.current = false;
+          }, 80);
         }}
       >
         {enabled.map((b) => (
-          <button
+          <div
             key={b.id}
-            type="button"
+            role="button"
+            tabIndex={0}
             onClick={(e) => {
               if (dragMovedRef.current) {
                 e.preventDefault();
@@ -228,6 +246,18 @@ export default function BannersCarousel({
 
               resumeAutoPlayLater();
             }}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" && e.key !== " ") return;
+              e.preventDefault();
+
+              if (!b.href) return;
+
+              if (isExternal(b.href)) {
+                window.open(b.href, "_blank", "noopener,noreferrer");
+              } else {
+                navigate(b.href);
+              }
+            }}
             className="relative w-[88%] shrink-0 overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-sm"
             style={{
               scrollSnapAlign: "center",
@@ -242,29 +272,31 @@ export default function BannersCarousel({
               draggable={false}
             />
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/20" />
-          </button>
+          </div>
         ))}
       </div>
 
-      <div className="mt-2 flex items-center justify-center gap-2">
-        {enabled.map((_, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => {
-              stopAutoPlay();
-              scrollToIndex(i);
-              setActive(i);
-              resumeAutoPlayLater();
-            }}
-            aria-label={`Ir para banner ${i + 1}`}
-            className={[
-              "h-2 rounded-full transition-all",
-              i === active ? "w-5 bg-primary" : "w-2 bg-zinc-300/60",
-            ].join(" ")}
-          />
-        ))}
-      </div>
+      {count > 1 && (
+        <div className="mt-2 flex items-center justify-center gap-2">
+          {enabled.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => {
+                stopAutoPlay();
+                scrollToIndex(i);
+                setActive(i);
+                resumeAutoPlayLater();
+              }}
+              aria-label={`Ir para banner ${i + 1}`}
+              className={[
+                "h-2 rounded-full transition-all",
+                i === active ? "w-5 bg-primary" : "w-2 bg-zinc-300/60",
+              ].join(" ")}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
