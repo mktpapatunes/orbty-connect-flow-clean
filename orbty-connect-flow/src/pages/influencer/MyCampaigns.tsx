@@ -148,16 +148,21 @@ export default function MyCampaigns() {
   };
 
   const handleConfirmParticipation = async (campaignId: string) => {
-    if (!campaignId || confirmingId) return;
+    if (!campaignId || !user || confirmingId) return;
 
     setConfirmingId(campaignId);
 
-    const { error } = await supabase.rpc("creator_accept_campaign" as any, {
-      p_campaign_id: campaignId,
-    });
+    const { error } = await supabase
+      .from("campaign_participants")
+      .update({
+        status: "confirmed",
+        confirmed_at: new Date().toISOString(),
+      })
+      .eq("campaign_id", campaignId)
+      .eq("influencer_id", user.id);
 
     if (error) {
-      console.error("CREATOR_ACCEPT_CAMPAIGN_ERROR", error);
+      console.error("CONFIRM_PARTICIPATION_CARD_ERROR", error);
       toast.error("Não foi possível confirmar participação.");
       setConfirmingId(null);
       return;
