@@ -155,7 +155,7 @@ const InfluencerDashboard = () => {
       }
       navType="influencer"
     >
-      <div className="px-6 py-6 space-y-6">
+      <div className="overflow-x-hidden px-6 py-6 space-y-6">
         {/* HERO TEXT */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <p className="mb-1 text-xs uppercase tracking-widest text-muted-foreground">

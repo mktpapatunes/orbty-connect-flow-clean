@@ -1,92 +1,87 @@
-import { useEffect, useMemo, useRef, useState } from "react"
-import { useNavigate } from "react-router-dom"
-import type { GlobalBanner } from "@/config/globalBanners"
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import type { GlobalBanner } from "@/config/globalBanners";
 
 function isExternal(url?: string) {
-  return !!url && /^https?:\/\//i.test(url)
+  return !!url && /^https?:\/\//i.test(url);
 }
 
 export default function BannersCarousel({
   title,
   banners,
 }: {
-  title: string
-  banners: GlobalBanner[]
+  title: string;
+  banners: GlobalBanner[];
 }) {
-  const navigate = useNavigate()
-  const scrollerRef = useRef<HTMLDivElement | null>(null)
+  const navigate = useNavigate();
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   const enabled = useMemo(
     () => banners.filter((b) => b.enabled !== false),
     [banners]
-  )
+  );
 
-  const count = enabled.length
-  const [active, setActive] = useState(0)
-
-  const updateActive = () => {
-    const el = scrollerRef.current
-    if (!el) return
-
-    const children = Array.from(el.children) as HTMLElement[]
-
-    const elRect = el.getBoundingClientRect()
-    const centerX = elRect.left + elRect.width / 2
-
-    let bestIdx = 0
-    let bestDist = Infinity
-
-    children.forEach((child, idx) => {
-      const r = child.getBoundingClientRect()
-      const childCenter = r.left + r.width / 2
-      const dist = Math.abs(childCenter - centerX)
-
-      if (dist < bestDist) {
-        bestDist = dist
-        bestIdx = idx
-      }
-    })
-
-    setActive(bestIdx)
-  }
+  const [active, setActive] = useState(0);
 
   useEffect(() => {
-    const el = scrollerRef.current
-    if (!el) return
+    const el = scrollerRef.current;
+    if (!el) return;
 
-    el.addEventListener("scroll", updateActive, { passive: true })
+    const onScroll = () => {
+      const children = Array.from(el.children) as HTMLElement[];
 
-    return () => {
-      el.removeEventListener("scroll", updateActive)
-    }
-  }, [])
+      const elRect = el.getBoundingClientRect();
+      const centerX = elRect.left + elRect.width / 2;
 
-  if (!enabled.length) return null
+      let bestIdx = 0;
+      let bestDist = Infinity;
+
+      children.forEach((child, idx) => {
+        const r = child.getBoundingClientRect();
+        const childCenter = r.left + r.width / 2;
+
+        const dist = Math.abs(childCenter - centerX);
+
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestIdx = idx;
+        }
+      });
+
+      setActive(bestIdx);
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  if (!enabled.length) return null;
 
   return (
     <section className="mt-6">
-      <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
+      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
         {title}
       </p>
 
       <div
         ref={scrollerRef}
-        className="mt-3 flex gap-3 overflow-x-auto pb-2 select-none [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="mt-3 flex gap-3 overflow-x-auto cursor-grab active:cursor-grabbing [&::-webkit-scrollbar]:hidden"
         style={{ scrollSnapType: "x mandatory" as any }}
       >
         {enabled.map((b) => (
           <button
             key={b.id}
             onClick={() => {
-              if (!b.href) return
+              if (!b.href) return;
 
               if (isExternal(b.href)) {
-                window.open(b.href, "_blank")
+                window.open(b.href, "_blank");
               } else {
-                navigate(b.href)
+                navigate(b.href);
               }
             }}
-            className="relative w-[88%] shrink-0 overflow-hidden rounded-3xl border border-white/10 bg-white/5"
+            className="relative w-[88%] shrink-0 overflow-hidden rounded-3xl border border-white/10"
             style={{ scrollSnapAlign: "center" as any }}
           >
             <img
@@ -104,12 +99,12 @@ export default function BannersCarousel({
           <div
             key={i}
             className={[
-              "h-2.5 rounded-full transition-all",
-              active === i ? "w-6 bg-primary" : "w-2.5 bg-zinc-300/60",
+              "h-2 rounded-full transition-all",
+              active === i ? "w-5 bg-primary" : "w-2 bg-zinc-300/60",
             ].join(" ")}
           />
         ))}
       </div>
     </section>
-  )
+  );
 }
