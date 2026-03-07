@@ -329,7 +329,7 @@ const MobileLayout = ({
                 className="w-12 h-12 rounded-full bg-gradient-neon glow-blue flex items-center justify-center shadow-md transition hover:scale-105 active:scale-95"
                 title="Minhas campanhas"
               >
-                <Star className="w-4 h-4 />
+                <Star className="w-4 h-4 text-primary-foreground" />
               </button>
 
               {/* Perfil */}
