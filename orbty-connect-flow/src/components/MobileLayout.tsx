@@ -10,10 +10,9 @@ import {
   LogOut,
   Trophy,
   Settings,
-  Orbit,
+  Broadcast
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Orbit } from "lucide-react";
 import { Broadcast } from "lucide-react"
 
 interface MobileLayoutProps {
