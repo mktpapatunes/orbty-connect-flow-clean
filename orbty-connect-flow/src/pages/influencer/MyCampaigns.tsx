@@ -16,6 +16,7 @@ import {
   X,
   Eye,
   Sparkles,
+  Building2,
 } from "lucide-react";
 
 type ParticipantStatus = "invited" | "confirmed" | "delivered" | "approved";
@@ -34,6 +35,8 @@ type MyCampaignRow = {
   confirmed_at: string | null;
   delivered_at: string | null;
   approved_at: string | null;
+  contractor_name: string | null;
+  contractor_logo_url: string | null;
 };
 
 type FilterKey = "all" | "invited" | "active" | "completed";
@@ -56,6 +59,14 @@ const translateCampaignType = (type?: string | null) => {
   if (raw === "product") return "Produto/Serviço";
 
   return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "Campanha";
+};
+
+const initials = (name?: string | null) => {
+  const n = String(name || "").trim();
+  if (!n) return "M";
+  const parts = n.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 };
 
 const statusUi: Record<
@@ -305,7 +316,7 @@ export default function MyCampaigns() {
               <button
                 key={t.key}
                 onClick={() => setFilter(t.key)}
-                className={`px-4 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
+                className={`px-4 py-3 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
                   filter === t.key
                     ? "bg-primary/10 text-primary border border-primary/30 shadow-[0_0_0_1px_rgba(59,130,246,0.08)]"
                     : "bg-card text-muted-foreground border border-border/50"
@@ -327,7 +338,7 @@ export default function MyCampaigns() {
             <p className="text-sm text-muted-foreground">Nenhuma campanha por aqui ainda.</p>
             <button
               onClick={() => navigate("/dashboard-influenciadora")}
-              className="mt-4 px-4 py-2 rounded-xl border border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground transition"
+              className="mt-4 px-4 py-3 rounded-xl border border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground transition"
             >
               Voltar para o início
             </button>
@@ -338,7 +349,7 @@ export default function MyCampaigns() {
             <p className="text-sm text-muted-foreground">Nenhuma campanha nessa aba.</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {filtered.map((r, i) => {
               const ui = statusUi[r.participant_status];
               const isInvited = r.participant_status === "invited";
@@ -351,119 +362,157 @@ export default function MyCampaigns() {
                   key={`${r.campaign_id}-${r.participant_status}-${r.invited_at || ""}`}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.06 + i * 0.035 }}
+                  transition={{ delay: 0.05 + i * 0.03 }}
                   className="glass-card-hover p-4 overflow-hidden"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-semibold text-foreground text-sm truncate">
-                          {r.title || "Campanha"}
-                        </h4>
-
-                        {isApproved && (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold text-accent">
-                            <Sparkles className="w-3 h-3" />
-                            Finalizada
+                  <div className="flex items-start gap-3">
+                    <div className="relative shrink-0">
+                      <div className="w-12 h-12 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center">
+                        {r.contractor_logo_url ? (
+                          <img
+                            src={r.contractor_logo_url}
+                            alt={r.contractor_name || "Marca"}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <span className="text-[11px] font-bold text-primary">
+                            {initials(r.contractor_name)}
                           </span>
                         )}
                       </div>
+                    </div>
 
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {translateCampaignType(r.type)}
-                      </p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <div className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[10px] text-muted-foreground">
+                              <Building2 className="w-3 h-3" />
+                              <span className="truncate max-w-[140px]">
+                                {r.contractor_name || "Marca"}
+                              </span>
+                            </div>
 
-                      <div className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        <span>
-                          {r.city}, {r.state}
-                        </span>
+                            {isApproved && (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold text-accent">
+                                <Sparkles className="w-3 h-3" />
+                                Finalizada
+                              </span>
+                            )}
+                          </div>
+
+                          <h4 className="mt-2 font-semibold text-foreground text-base leading-snug">
+                            {r.title || "Campanha"}
+                          </h4>
+
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {translateCampaignType(r.type)}
+                          </p>
+                        </div>
+
+                        <div
+                          className={`shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${ui.chip}`}
+                        >
+                          <ui.Icon className="w-3.5 h-3.5" />
+                          <span>{ui.label}</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-1 gap-2">
+                        <div className="rounded-2xl border border-border/50 bg-card/60 px-3 py-3">
+                          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <MapPin className="w-3 h-3" />
+                            Local
+                          </div>
+                          <div className="text-sm font-semibold text-foreground mt-1">
+                            {r.city}, {r.state}
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-border/50 bg-card/60 px-3 py-3">
+                          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <Calendar className="w-3 h-3" />
+                            Data do evento
+                          </div>
+                          <div className="text-sm font-semibold text-foreground mt-1">
+                            {r.campaign_date ? formatDateBR(r.campaign_date) : "A definir"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 space-y-2">
+                        <StatusRail status={r.participant_status} />
+
+                        <div className="flex items-center justify-between gap-3">
+                          <p className={`text-[11px] font-medium ${ui.cls}`}>{ui.helper}</p>
+
+                          {isDelivered ? (
+                            <span className="text-[11px] text-muted-foreground">
+                              Entregue em {r.delivered_at ? formatDateBR(r.delivered_at) : "—"}
+                            </span>
+                          ) : isApproved ? (
+                            <span className="text-[11px] text-muted-foreground">
+                              Confirmada em {r.approved_at ? formatDateBR(r.approved_at) : "—"}
+                            </span>
+                          ) : r.confirmed_at ? (
+                            <span className="text-[11px] text-muted-foreground">
+                              Confirmada em {formatDateBR(r.confirmed_at)}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 pt-4 border-t border-border/30 space-y-2">
+                        {isInvited ? (
+                          <>
+                            <button
+                              onClick={() => handleOpenDetails(r)}
+                              className="w-full min-h-[48px] py-3 rounded-2xl border border-border/50 bg-card/60 text-foreground font-semibold text-sm flex items-center justify-center gap-2 hover:bg-card/80 transition"
+                            >
+                              <Eye className="w-4 h-4" />
+                              Ver detalhes da campanha
+                            </button>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                onClick={() => openDeclineModal(r)}
+                                className="w-full min-h-[48px] py-3 rounded-2xl border border-destructive/20 bg-destructive/5 text-destructive font-semibold text-sm hover:bg-destructive/10 transition"
+                              >
+                                Recusar
+                              </button>
+
+                              <button
+                                onClick={() => handleConfirmParticipation(r.campaign_id)}
+                                disabled={isConfirmingThis}
+                                className="w-full min-h-[48px] py-3 rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue disabled:opacity-60"
+                              >
+                                {isConfirmingThis ? "Confirmando..." : "Confirmar participação"}
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => handleOpenDetails(r)}
+                            className={`w-full min-h-[48px] py-3 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition ${
+                              isDelivered
+                                ? "border border-warning/25 bg-warning/10 text-warning hover:bg-warning/15"
+                                : isApproved
+                                  ? "border border-accent/25 bg-accent/10 text-accent hover:bg-accent/15"
+                                  : "border border-accent/30 bg-accent/5 text-accent hover:bg-accent/10"
+                            }`}
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            {isDelivered
+                              ? "Ver entrega enviada"
+                              : isApproved
+                                ? "Ver campanha concluída"
+                                : "Ver detalhes da campanha"}
+                          </button>
+                        )}
                       </div>
                     </div>
-
-                    <div
-                      className={`shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${ui.chip}`}
-                    >
-                      <ui.Icon className="w-3.5 h-3.5" />
-                      <span>{ui.label}</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 rounded-2xl border border-border/50 bg-card/60 px-3 py-3">
-                    <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                      <Calendar className="w-3 h-3" />
-                      Data do evento
-                    </div>
-                    <div className="text-sm font-semibold text-foreground mt-1">
-                      {r.campaign_date ? formatDateBR(r.campaign_date) : "A definir"}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 space-y-2">
-                    <StatusRail status={r.participant_status} />
-
-                    <div className="flex items-center justify-between gap-3">
-                      <p className={`text-[11px] font-medium ${ui.cls}`}>{ui.helper}</p>
-
-                      {isDelivered ? (
-                        <span className="text-[11px] text-muted-foreground">
-                          Entregue em {r.delivered_at ? formatDateBR(r.delivered_at) : "—"}
-                        </span>
-                      ) : isApproved ? (
-                        <span className="text-[11px] text-muted-foreground">
-                          Confirmada em {r.approved_at ? formatDateBR(r.approved_at) : "—"}
-                        </span>
-                      ) : r.confirmed_at ? (
-                        <span className="text-[11px] text-muted-foreground">
-                          Confirmada em {formatDateBR(r.confirmed_at)}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-border/30 space-y-2">
-                    {isInvited ? (
-                      <>
-                        <button
-                          onClick={() => handleOpenDetails(r)}
-                          className="w-full py-2.75 rounded-xl border border-border/50 bg-card/60 text-foreground font-semibold text-xs flex items-center justify-center gap-1.5 hover:bg-card/80 transition"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          Ver detalhes da campanha
-                        </button>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            onClick={() => openDeclineModal(r)}
-                            className="w-full py-2.75 rounded-xl border border-destructive/20 bg-destructive/5 text-destructive font-semibold text-xs hover:bg-destructive/10 transition"
-                          >
-                            Recusar
-                          </button>
-
-                          <button
-                            onClick={() => handleConfirmParticipation(r.campaign_id)}
-                            disabled={isConfirmingThis}
-                            className="w-full py-2.75 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-xs glow-blue disabled:opacity-60"
-                          >
-                            {isConfirmingThis ? "Confirmando..." : "Confirmar participação"}
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => handleOpenDetails(r)}
-                        className={`w-full py-2.75 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition ${
-                          isDelivered
-                            ? "border border-warning/25 bg-warning/10 text-warning hover:bg-warning/15"
-                            : isApproved
-                              ? "border border-accent/25 bg-accent/10 text-accent hover:bg-accent/15"
-                              : "border border-accent/30 bg-accent/5 text-accent hover:bg-accent/10"
-                        }`}
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        {isDelivered ? "Ver entrega enviada" : isApproved ? "Ver campanha concluída" : "Ver detalhes da campanha"}
-                      </button>
-                    )}
                   </div>
                 </motion.div>
               );
@@ -507,7 +556,7 @@ export default function MyCampaigns() {
                 type="button"
                 onClick={closeDeclineModal}
                 disabled={declining}
-                className="w-full py-3 rounded-xl border border-border/50 text-muted-foreground font-medium text-sm"
+                className="w-full min-h-[48px] py-3 rounded-2xl border border-border/50 text-muted-foreground font-medium text-sm"
               >
                 Cancelar
               </button>
@@ -516,7 +565,7 @@ export default function MyCampaigns() {
                 type="button"
                 onClick={handleDeclineConfirmed}
                 disabled={declining}
-                className="w-full py-3 rounded-xl bg-destructive text-destructive-foreground font-semibold text-sm disabled:opacity-60"
+                className="w-full min-h-[48px] py-3 rounded-2xl bg-destructive text-destructive-foreground font-semibold text-sm disabled:opacity-60"
               >
                 {declining ? "Recusando..." : "Sim, recusar"}
               </button>
