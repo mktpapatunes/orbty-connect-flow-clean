@@ -71,3 +71,69 @@ export const dashboardNewsBanners: GlobalBanner[] = [
     enabled: true,
   },
 ]
+
+/*
+  HERO BANNERS — CONTRACTOR (MARCA / NEGÓCIO)
+
+  tamanho recomendado:
+  1200x700
+*/
+
+export const dashboardContractorHeroBanners: GlobalBanner[] = [
+  {
+    id: "hero4",
+    imageUrl: "/banners/hero4.png",
+    alt: "Encontre creators da sua região",
+    href: "/campanha",
+    enabled: true,
+  },
+
+  {
+    id: "hero5",
+    imageUrl: "/banners/hero5.png",
+    alt: "Crie campanhas com creators locais",
+    href: "/criar-campanha",
+    enabled: true,
+  },
+
+  {
+    id: "hero6",
+    imageUrl: "/banners/hero6.png",
+    alt: "Divulgue sua marca com creators",
+    href: "/campanha",
+    enabled: true,
+  },
+]
+
+/*
+  NEWS BANNERS — CONTRACTOR
+
+  tamanho recomendado:
+  1200x650
+*/
+
+export const dashboardContractorNewsBanners: GlobalBanner[] = [
+  {
+    id: "news4",
+    imageUrl: "/banners/news4.png",
+    alt: "Organize campanhas em um só lugar",
+    href: "/campanha",
+    enabled: true,
+  },
+
+  {
+    id: "news5",
+    imageUrl: "/banners/news5.png",
+    alt: "Acompanhe candidaturas e entregas",
+    href: "/campanha",
+    enabled: true,
+  },
+
+  {
+    id: "news6",
+    imageUrl: "/banners/news6.png",
+    alt: "Fortaleça sua presença com creators locais",
+    href: "/criar-campanha",
+    enabled: true,
+  },
+]
