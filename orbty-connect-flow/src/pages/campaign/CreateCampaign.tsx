@@ -116,6 +116,7 @@ type CreatorListItem = {
   content_style: string | null;
   approval_status?: string | null;
   desired_role?: string | null;
+
   avatar_url?: string | null;
   photo_url?: string | null;
   profile_photo_url?: string | null;
@@ -277,7 +278,8 @@ export default function CreateCampaign() {
         if (f.preview) URL.revokeObjectURL(f.preview);
       }
     };
-  }, [files]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const todayISO = useMemo(() => {
     const d = new Date();
@@ -408,7 +410,8 @@ export default function CreateCampaign() {
 
   useEffect(() => {
     if (!locationQuery && displayLocationLabel) setLocationQuery(displayLocationLabel);
-  }, [displayLocationLabel, locationQuery]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayLocationLabel]);
 
   useEffect(() => {
     const onDown = (e: MouseEvent | TouchEvent) => {
@@ -488,7 +491,6 @@ export default function CreateCampaign() {
     setLocationQuery(full);
     setLocationOpen(false);
     setLocationResults([]);
-
     const lat = Number(item.lat);
     const lon = Number(item.lon);
     setLocationLat(Number.isFinite(lat) ? lat : null);
@@ -549,7 +551,8 @@ export default function CreateCampaign() {
     return () => {
       alive = false;
     };
-  }, [step, (data as any).selectedCity, (data as any).selectedState, locationLat, locationLon, hydratingMap, updateData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, (data as any).selectedCity, (data as any).selectedState]);
 
   const mapSrc = useMemo(() => {
     if (locationLat !== null && locationLon !== null) {
@@ -690,11 +693,28 @@ export default function CreateCampaign() {
   useEffect(() => {
     if (!profileOpen) return;
 
-    const previousOverflow = document.body.style.overflow;
-    const previousTouchAction = document.body.style.touchAction;
+    const scrollY = window.scrollY;
 
-    document.body.style.overflow = "hidden";
-    document.body.style.touchAction = "none";
+    const htmlStyle = document.documentElement.style;
+    const bodyStyle = document.body.style;
+
+    const prevHtmlOverflow = htmlStyle.overflow;
+    const prevBodyOverflow = bodyStyle.overflow;
+    const prevBodyPosition = bodyStyle.position;
+    const prevBodyTop = bodyStyle.top;
+    const prevBodyLeft = bodyStyle.left;
+    const prevBodyRight = bodyStyle.right;
+    const prevBodyWidth = bodyStyle.width;
+    const prevBodyTouchAction = bodyStyle.touchAction;
+
+    htmlStyle.overflow = "hidden";
+    bodyStyle.overflow = "hidden";
+    bodyStyle.position = "fixed";
+    bodyStyle.top = `-${scrollY}px`;
+    bodyStyle.left = "0";
+    bodyStyle.right = "0";
+    bodyStyle.width = "100%";
+    bodyStyle.touchAction = "none";
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeProfileModal();
@@ -703,9 +723,18 @@ export default function CreateCampaign() {
     window.addEventListener("keydown", onKey);
 
     return () => {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.touchAction = previousTouchAction;
       window.removeEventListener("keydown", onKey);
+
+      htmlStyle.overflow = prevHtmlOverflow;
+      bodyStyle.overflow = prevBodyOverflow;
+      bodyStyle.position = prevBodyPosition;
+      bodyStyle.top = prevBodyTop;
+      bodyStyle.left = prevBodyLeft;
+      bodyStyle.right = prevBodyRight;
+      bodyStyle.width = prevBodyWidth;
+      bodyStyle.touchAction = prevBodyTouchAction;
+
+      window.scrollTo(0, scrollY);
     };
   }, [profileOpen]);
 
@@ -815,12 +844,14 @@ export default function CreateCampaign() {
   const [couponInput, setCouponInput] = useState<string>(String((data as any).couponInput || ""));
   useEffect(() => {
     updateData({ couponInput } as any);
-  }, [couponInput, updateData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [couponInput]);
 
   const [couponApplied, setCouponApplied] = useState<string>(String((data as any).couponApplied || ""));
   useEffect(() => {
     updateData({ couponApplied } as any);
-  }, [couponApplied, updateData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [couponApplied]);
 
   const hasCouponApplied = !!couponApplied.trim();
 
@@ -904,6 +935,7 @@ export default function CreateCampaign() {
       alive = false;
       clearTimeout(t);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     step,
     canStep4,
@@ -1963,7 +1995,10 @@ export default function CreateCampaign() {
                 </button>
               </div>
 
-              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+              <div
+                className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y"
+                style={{ WebkitOverflowScrolling: "touch" }}
+              >
                 <PublicProfile
                   key={profileCreatorId}
                   idOverride={profileCreatorId}

@@ -1,5 +1,5 @@
 // src/pages/profile/PublicProfile.tsx
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
 import VerifiedBadge from "@/components/VerifiedBadge";
@@ -425,32 +425,12 @@ async function fetchProfileById(id: string): Promise<ProfileRow | null> {
 }
 
 async function fetchOrgByOwnerProfile(profileId: string): Promise<OrgRow | null> {
-  const { data, error } = await supabase.rpc("get_public_contractor_profile" as any, {
-    p_profile_id: profileId,
-  });
+  const selectOrg =
+    "id, created_by, name, region_city, region_state, business_category, product_or_brand, bio, logo_url, instagram, website_url, address_street, address_number, address_complement, address_zip";
 
-  if (error) throw error;
-
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row || !row.organization_id) return null;
-
-  return {
-    id: row.organization_id,
-    created_by: row.profile_id,
-    name: row.organization_name,
-    region_city: row.region_city,
-    region_state: row.region_state,
-    business_category: row.business_category,
-    product_or_brand: row.product_or_brand,
-    bio: row.bio,
-    logo_url: row.logo_url,
-    instagram: row.instagram,
-    website_url: row.website_url,
-    address_street: row.address_street,
-    address_number: row.address_number,
-    address_complement: row.address_complement,
-    address_zip: row.address_zip,
-  };
+  const res = await supabase.from("organizations").select(selectOrg).eq("created_by", profileId).maybeSingle();
+  if (res.error) throw res.error;
+  return (res.data as any) ?? null;
 }
 
 async function fetchInfluencerRating(profileId: string) {
@@ -498,15 +478,13 @@ async function fetchInfluencerAcceptedCount(profileId: string) {
 
 const AGE_BARS_BUCKETS = ["18-24", "25-34", "35-44", "45-54", "55-64"] as const;
 
-export default function PublicProfile({
-  idOverride,
-  embed = false,
-  onBack,
-}: {
+type PublicProfileProps = {
   idOverride?: string;
   embed?: boolean;
   onBack?: () => void;
-}) {
+};
+
+export default function PublicProfile({ idOverride, embed = false, onBack }: PublicProfileProps) {
   const params = useParams<{ id: string }>();
   const id = idOverride ?? params.id;
   const navigate = useNavigate();
@@ -534,12 +512,15 @@ export default function PublicProfile({
   useLayoutEffect(() => {
     setLoadedId(null);
     setLoading(true);
+
     setProfile(null);
     setOrg(null);
     setRole("influencer");
+
     setRatingAvg(0);
     setRatingCount(null);
     setLoadingRatings(true);
+
     setAcceptedCount(0);
     setLoadingAccepted(true);
   }, [id]);
@@ -573,21 +554,22 @@ export default function PublicProfile({
           return;
         }
 
-        const orgData = await fetchOrgByOwnerProfile(p.id);
+        const orgFromOwner = await fetchOrgByOwnerProfile(p.id);
         if (!alive) return;
 
-        const desiredRole = String(p.desired_role ?? "").toLowerCase();
-        const finalRole: "influencer" | "contractor" =
-          orgData ? "contractor" : desiredRole === "contractor" ? "contractor" : "influencer";
+        const hasOrg = !!orgFromOwner?.id;
+        const roleFromProfile = String(p.desired_role ?? "").toLowerCase() === "contractor" ? "contractor" : "influencer";
+        const finalRole: "influencer" | "contractor" = hasOrg ? "contractor" : roleFromProfile;
 
         setProfile(p);
-        setOrg(orgData);
         setRole(finalRole);
 
         if (finalRole === "contractor") {
+          setOrg(orgFromOwner);
+
           try {
-            if (orgData?.id) {
-              const rr = await fetchOrgRating(orgData.id);
+            if (orgFromOwner?.id) {
+              const rr = await fetchOrgRating(orgFromOwner.id);
               if (!alive) return;
               setRatingAvg(rr.avg);
               setRatingCount(rr.count || null);
@@ -607,6 +589,8 @@ export default function PublicProfile({
             setLoadingAccepted(false);
           }
         } else {
+          setOrg(null);
+
           try {
             const rr = await fetchInfluencerRating(p.id);
             if (!alive) return;
@@ -757,27 +741,24 @@ export default function PublicProfile({
 
   const ready = !!id && loadedId === id && !loading;
 
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+      return;
+    }
+    navigate(-1);
+  };
+
   const pageContent = (
     <div className="px-6 py-6 space-y-6">
-      {!isEmbed ? (
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Voltar
-        </button>
-      ) : onBack ? (
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Voltar
-        </button>
-      ) : null}
+      <button
+        type="button"
+        onClick={handleBack}
+        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Voltar
+      </button>
 
       {!ready ? (
         <div className="flex justify-center py-16">
@@ -966,7 +947,7 @@ export default function PublicProfile({
   );
 
   if (isEmbed) {
-    return <div className="min-h-screen bg-background">{pageContent}</div>;
+    return <div className="min-h-full bg-background">{pageContent}</div>;
   }
 
   return (
