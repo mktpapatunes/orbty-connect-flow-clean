@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
+import PublicProfile from "@/pages/PublicProfile";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -35,6 +36,7 @@ type MyCampaignRow = {
   confirmed_at: string | null;
   delivered_at: string | null;
   approved_at: string | null;
+  contractor_id: string | null;
   contractor_name: string | null;
   contractor_logo_url: string | null;
 };
@@ -74,7 +76,6 @@ const statusUi: Record<
   {
     label: string;
     helper: string;
-    cls: string;
     chip: string;
     line: string;
     Icon: any;
@@ -83,7 +84,6 @@ const statusUi: Record<
   invited: {
     label: "Convite",
     helper: "Aguardando sua confirmação",
-    cls: "text-primary",
     chip: "border-primary/30 bg-primary/10 text-primary",
     line: "bg-primary",
     Icon: Hourglass,
@@ -91,7 +91,6 @@ const statusUi: Record<
   confirmed: {
     label: "Ativa",
     helper: "Participação confirmada",
-    cls: "text-accent",
     chip: "border-accent/30 bg-accent/10 text-accent",
     line: "bg-accent",
     Icon: CheckCircle2,
@@ -99,7 +98,6 @@ const statusUi: Record<
   delivered: {
     label: "Entregue",
     helper: "Aguardando confirmação do contratante",
-    cls: "text-warning",
     chip: "border-warning/30 bg-warning/10 text-warning",
     line: "bg-warning",
     Icon: Upload,
@@ -107,7 +105,6 @@ const statusUi: Record<
   approved: {
     label: "Concluída",
     helper: "Entrega aprovada",
-    cls: "text-accent",
     chip: "border-accent/30 bg-accent/10 text-accent",
     line: "bg-accent",
     Icon: BadgeCheck,
@@ -148,6 +145,9 @@ export default function MyCampaigns() {
   const [declineModalOpen, setDeclineModalOpen] = useState(false);
   const [decliningRow, setDecliningRow] = useState<MyCampaignRow | null>(null);
   const [declining, setDeclining] = useState(false);
+
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileContractorId, setProfileContractorId] = useState<string | null>(null);
 
   async function refetch() {
     if (!user) return;
@@ -216,6 +216,17 @@ export default function MyCampaigns() {
     }
 
     navigate(`/campanha-detalhe/${row.campaign_id}`);
+  };
+
+  const handleOpenContractorProfile = (contractorId?: string | null) => {
+    if (!contractorId) return;
+    setProfileContractorId(contractorId);
+    setProfileOpen(true);
+  };
+
+  const closeProfileModal = () => {
+    setProfileOpen(false);
+    setProfileContractorId(null);
   };
 
   const handleConfirmParticipation = async (campaignId: string) => {
@@ -316,7 +327,7 @@ export default function MyCampaigns() {
               <button
                 key={t.key}
                 onClick={() => setFilter(t.key)}
-                className={`px-4 py-3 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
+                className={`px-4 py-2.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
                   filter === t.key
                     ? "bg-primary/10 text-primary border border-primary/30 shadow-[0_0_0_1px_rgba(59,130,246,0.08)]"
                     : "bg-card text-muted-foreground border border-border/50"
@@ -338,7 +349,7 @@ export default function MyCampaigns() {
             <p className="text-sm text-muted-foreground">Nenhuma campanha por aqui ainda.</p>
             <button
               onClick={() => navigate("/dashboard-influenciadora")}
-              className="mt-4 px-4 py-3 rounded-xl border border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground transition"
+              className="mt-4 px-4 py-2.5 rounded-xl border border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground transition"
             >
               Voltar para o início
             </button>
@@ -366,8 +377,14 @@ export default function MyCampaigns() {
                   className="glass-card-hover p-4 overflow-hidden"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="relative shrink-0">
-                      <div className="w-12 h-12 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenContractorProfile(r.contractor_id)}
+                      className="shrink-0"
+                      title={r.contractor_name || "Ver perfil da marca"}
+                      disabled={!r.contractor_id}
+                    >
+                      <div className="w-14 h-14 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center">
                         {r.contractor_logo_url ? (
                           <img
                             src={r.contractor_logo_url}
@@ -377,23 +394,32 @@ export default function MyCampaigns() {
                             referrerPolicy="no-referrer"
                           />
                         ) : (
-                          <span className="text-[11px] font-bold text-primary">
+                          <span className="text-xs font-bold text-primary">
                             {initials(r.contractor_name)}
                           </span>
                         )}
                       </div>
-                    </div>
+                    </button>
 
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <div className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[10px] text-muted-foreground">
-                              <Building2 className="w-3 h-3" />
-                              <span className="truncate max-w-[140px]">
-                                {r.contractor_name || "Marca"}
-                              </span>
-                            </div>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenContractorProfile(r.contractor_id)}
+                            disabled={!r.contractor_id}
+                            className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[10px] text-muted-foreground"
+                          >
+                            <Building2 className="w-3 h-3 shrink-0" />
+                            <span className="truncate max-w-[170px]">
+                              {r.contractor_name || "Marca"}
+                            </span>
+                          </button>
+
+                          <div className="mt-2 flex items-center gap-2 flex-wrap">
+                            <h4 className="font-semibold text-foreground text-[15px] leading-snug">
+                              {r.title || "Campanha"}
+                            </h4>
 
                             {isApproved && (
                               <span className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold text-accent">
@@ -402,10 +428,6 @@ export default function MyCampaigns() {
                               </span>
                             )}
                           </div>
-
-                          <h4 className="mt-2 font-semibold text-foreground text-base leading-snug">
-                            {r.title || "Campanha"}
-                          </h4>
 
                           <p className="text-xs text-muted-foreground mt-1">
                             {translateCampaignType(r.type)}
@@ -420,13 +442,13 @@ export default function MyCampaigns() {
                         </div>
                       </div>
 
-                      <div className="mt-3 grid grid-cols-1 gap-2">
+                      <div className="grid grid-cols-2 gap-2">
                         <div className="rounded-2xl border border-border/50 bg-card/60 px-3 py-3">
                           <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                             <MapPin className="w-3 h-3" />
                             Local
                           </div>
-                          <div className="text-sm font-semibold text-foreground mt-1">
+                          <div className="text-sm font-semibold text-foreground mt-1 truncate">
                             {r.city}, {r.state}
                           </div>
                         </div>
@@ -434,7 +456,7 @@ export default function MyCampaigns() {
                         <div className="rounded-2xl border border-border/50 bg-card/60 px-3 py-3">
                           <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                             <Calendar className="w-3 h-3" />
-                            Data do evento
+                            Data
                           </div>
                           <div className="text-sm font-semibold text-foreground mt-1">
                             {r.campaign_date ? formatDateBR(r.campaign_date) : "A definir"}
@@ -442,11 +464,13 @@ export default function MyCampaigns() {
                         </div>
                       </div>
 
-                      <div className="mt-4 space-y-2">
+                      <div className="space-y-2">
                         <StatusRail status={r.participant_status} />
 
                         <div className="flex items-center justify-between gap-3">
-                          <p className={`text-[11px] font-medium ${ui.cls}`}>{ui.helper}</p>
+                          <p className="text-[11px] font-medium text-muted-foreground">
+                            {ui.helper}
+                          </p>
 
                           {isDelivered ? (
                             <span className="text-[11px] text-muted-foreground">
@@ -464,12 +488,12 @@ export default function MyCampaigns() {
                         </div>
                       </div>
 
-                      <div className="mt-4 pt-4 border-t border-border/30 space-y-2">
+                      <div className="pt-3 border-t border-border/30 space-y-2">
                         {isInvited ? (
                           <>
                             <button
                               onClick={() => handleOpenDetails(r)}
-                              className="w-full min-h-[48px] py-3 rounded-2xl border border-border/50 bg-card/60 text-foreground font-semibold text-sm flex items-center justify-center gap-2 hover:bg-card/80 transition"
+                              className="w-full min-h-[44px] py-2.5 rounded-2xl border border-border/50 bg-card/60 text-foreground font-semibold text-sm flex items-center justify-center gap-2 hover:bg-card/80 transition"
                             >
                               <Eye className="w-4 h-4" />
                               Ver detalhes da campanha
@@ -478,7 +502,7 @@ export default function MyCampaigns() {
                             <div className="grid grid-cols-2 gap-2">
                               <button
                                 onClick={() => openDeclineModal(r)}
-                                className="w-full min-h-[48px] py-3 rounded-2xl border border-destructive/20 bg-destructive/5 text-destructive font-semibold text-sm hover:bg-destructive/10 transition"
+                                className="w-full min-h-[44px] py-2.5 rounded-2xl border border-destructive/20 bg-destructive/5 text-destructive font-semibold text-sm hover:bg-destructive/10 transition"
                               >
                                 Recusar
                               </button>
@@ -486,7 +510,7 @@ export default function MyCampaigns() {
                               <button
                                 onClick={() => handleConfirmParticipation(r.campaign_id)}
                                 disabled={isConfirmingThis}
-                                className="w-full min-h-[48px] py-3 rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue disabled:opacity-60"
+                                className="w-full min-h-[44px] py-2.5 rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue disabled:opacity-60"
                               >
                                 {isConfirmingThis ? "Confirmando..." : "Confirmar participação"}
                               </button>
@@ -495,7 +519,7 @@ export default function MyCampaigns() {
                         ) : (
                           <button
                             onClick={() => handleOpenDetails(r)}
-                            className={`w-full min-h-[48px] py-3 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition ${
+                            className={`w-full min-h-[44px] py-2.5 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition ${
                               isDelivered
                                 ? "border border-warning/25 bg-warning/10 text-warning hover:bg-warning/15"
                                 : isApproved
@@ -556,7 +580,7 @@ export default function MyCampaigns() {
                 type="button"
                 onClick={closeDeclineModal}
                 disabled={declining}
-                className="w-full min-h-[48px] py-3 rounded-2xl border border-border/50 text-muted-foreground font-medium text-sm"
+                className="w-full min-h-[44px] py-2.5 rounded-2xl border border-border/50 text-muted-foreground font-medium text-sm"
               >
                 Cancelar
               </button>
@@ -565,7 +589,7 @@ export default function MyCampaigns() {
                 type="button"
                 onClick={handleDeclineConfirmed}
                 disabled={declining}
-                className="w-full min-h-[48px] py-3 rounded-2xl bg-destructive text-destructive-foreground font-semibold text-sm disabled:opacity-60"
+                className="w-full min-h-[44px] py-2.5 rounded-2xl bg-destructive text-destructive-foreground font-semibold text-sm disabled:opacity-60"
               >
                 {declining ? "Recusando..." : "Sim, recusar"}
               </button>
@@ -573,6 +597,46 @@ export default function MyCampaigns() {
           </div>
         </div>
       )}
+
+      <AnimatePresence>
+        {profileOpen && profileContractorId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) closeProfileModal();
+            }}
+          >
+            <div className="fixed inset-0 flex items-end justify-center md:items-center p-0 md:p-4">
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                className="w-full md:max-w-3xl h-[92vh] md:h-[86vh] rounded-t-3xl md:rounded-3xl border border-border/50 bg-background overflow-hidden shadow-2xl"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between bg-background/80 backdrop-blur-xl">
+                  <div className="text-sm font-semibold text-foreground">Perfil da marca</div>
+                  <button
+                    type="button"
+                    onClick={closeProfileModal}
+                    className="p-2 rounded-xl hover:bg-white/5"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="h-full overflow-auto">
+                  <PublicProfile key={profileContractorId} idOverride={profileContractorId} />
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </MobileLayout>
   );
 }
