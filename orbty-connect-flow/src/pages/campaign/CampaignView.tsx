@@ -15,14 +15,12 @@ import {
   Info,
   TicketPercent,
   Wallet,
-  Eye,
   X,
   Link as LinkIcon,
   FileText,
   CheckSquare,
   Square,
   Target,
-  ClipboardList,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -700,7 +698,7 @@ const CampaignView = () => {
             </button>
 
             <button
-              onClick={() => setTabWithUrl("files", { clearFilters: true })}
+              onClick={() => setTabWithUrl("files", { kind: "deliverables", clearFilters: false })}
               className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
                 tab === "files"
                   ? "bg-primary/12 text-primary border border-primary/25"
@@ -719,7 +717,7 @@ const CampaignView = () => {
             role="contractor"
             influencerAccepted={false}
             readOnly
-            kindFilter={urlKind}
+            kindFilter="deliverables"
             ownerIdFilter={urlCreator}
           />
         )}
@@ -761,47 +759,6 @@ const CampaignView = () => {
                 </div>
                 <p className="text-sm text-foreground/75 leading-relaxed whitespace-pre-line">{briefPublic}</p>
               </div>
-            )}
-
-            {isInvitedInfluencer && (
-              <>
-                <div className="glass-card p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <ClipboardList className="w-4 h-4 text-primary" />
-                    <h4 className="font-semibold text-foreground text-sm">Requisitos</h4>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-1 gap-2">
-                    <DetailRow label="Segmentos de conteúdo" value={renderSimpleValue(contentSegments)} />
-                    <DetailRow label="Creators necessários" value={renderSimpleValue(creatorsCount)} />
-                  </div>
-                </div>
-
-                <div className="glass-card p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <ClipboardCheck className="w-4 h-4 text-accent" />
-                    <h4 className="font-semibold text-foreground text-sm">Entregas principais</h4>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-1 gap-2">
-                    <DetailRow label="Quantidade de posts" value={renderSimpleValue(deliverables?.posts)} />
-                    <DetailRow label="Formato do conteúdo" value={renderSimpleValue(deliverables?.format)} />
-                  </div>
-                </div>
-
-                <div className="glass-card p-4 border border-primary/15">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wallet className="w-4 h-4 text-primary" />
-                    <h4 className="font-semibold text-foreground text-sm">Valores da sua participação</h4>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-1 gap-2">
-                    <DetailRow label="Valor total a receber" value={formatMoneyBRL(pricing?.creator_fee ?? null)} />
-                    <DetailRow label="Quantidade de posts" value={renderSimpleValue(pricing?.posts_count)} />
-                    <DetailRow label="Valor por post" value={formatMoneyBRL(pricing?.price_per_post ?? null)} />
-                  </div>
-                </div>
-              </>
             )}
 
             {isContractor && (
@@ -867,20 +824,6 @@ const CampaignView = () => {
                                   showDot={showDeliverablesDot}
                                 >
                                   <ClipboardCheck className="w-4 h-4" />
-                                </IconActionButton>
-
-                                <IconActionButton
-                                  onClick={() =>
-                                    setTabWithUrl("files", {
-                                      kind: "deliverables",
-                                      creator: creatorId,
-                                    })
-                                  }
-                                  title="Ver arquivos"
-                                  tone="default"
-                                  showDot={showDeliverablesDot}
-                                >
-                                  <Eye className="w-4 h-4" />
                                 </IconActionButton>
 
                                 <IconActionButton
@@ -1098,6 +1041,22 @@ const CampaignView = () => {
                             ))}
                           </div>
                         )}
+                      </div>
+
+                      <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Paperclip className="w-4 h-4 text-primary" />
+                          <div className="text-sm font-semibold text-foreground">Arquivos recebidos</div>
+                        </div>
+
+                        <CampaignFilesTab
+                          campaignId={String(id)}
+                          role="contractor"
+                          influencerAccepted={false}
+                          readOnly
+                          kindFilter="deliverables"
+                          ownerIdFilter={deliverableModalCreatorId || undefined}
+                        />
                       </div>
 
                       <div className="rounded-2xl border border-border/50 bg-card/60 p-4">

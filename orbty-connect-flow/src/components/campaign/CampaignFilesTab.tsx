@@ -25,7 +25,7 @@ function GlassCard(props: { children: React.ReactNode; className?: string }) {
 }
 
 function kindLabel(kind: CampaignFileKind) {
-  return kind === "assets" ? "Assets" : "Arquivos enviados";
+  return kind === "assets" ? "Arquivos" : "Arquivos recebidos";
 }
 
 function fileIcon(mime?: string | null) {
@@ -59,7 +59,7 @@ export default function CampaignFilesTab(props: {
 
     if (props.kindFilter) return [props.kindFilter];
 
-    if (props.role === "contractor") return ["assets", "deliverables"] as CampaignFileKind[];
+    if (props.role === "contractor") return ["deliverables"] as CampaignFileKind[];
     return ["assets", "deliverables"] as CampaignFileKind[];
   }, [props.role, props.influencerAccepted, props.kindFilter]);
 
@@ -78,7 +78,12 @@ export default function CampaignFilesTab(props: {
         ownerId: props.ownerIdFilter,
       });
 
-      setItems(all);
+      const filtered =
+        props.role === "contractor" && !props.kindFilter
+          ? all.filter((it) => it.kind === "deliverables")
+          : all;
+
+      setItems(filtered);
     } catch (e: any) {
       console.error("LIST_CAMPAIGN_FILES_ERROR", e);
       toast.error(e?.message || "Erro ao carregar arquivos.");
@@ -124,7 +129,7 @@ export default function CampaignFilesTab(props: {
         upsert: true,
       });
 
-      toast.success(kind === "assets" ? "Arquivo enviado para Assets!" : "Arquivo enviado com sucesso!");
+      toast.success(kind === "assets" ? "Arquivo enviado!" : "Arquivo enviado com sucesso!");
       await refetchFiles();
     } catch (e: any) {
       console.error("UPLOAD_CAMPAIGN_FILE_ERROR", e);
@@ -190,7 +195,7 @@ export default function CampaignFilesTab(props: {
     props.role === "contractor"
       ? props.ownerIdFilter
         ? "Arquivos enviados por este creator."
-        : "Visualize assets e entregas enviadas pelos creators."
+        : "Visualize os arquivos recebidos dos creators."
       : isReadOnly
         ? "Arquivos enviados. O envio está bloqueado até a confirmação do contratante."
         : "Envie prints, PDFs ou imagens para comprovar sua entrega.";
@@ -246,7 +251,7 @@ export default function CampaignFilesTab(props: {
 
               {grouped[k].length === 0 ? (
                 <div className="text-sm text-muted-foreground">
-                  {k === "assets" ? "Nenhum arquivo de briefing/arte foi enviado." : "Nenhum arquivo enviado ainda."}
+                  {k === "assets" ? "Nenhum arquivo enviado." : "Nenhum arquivo recebido ainda."}
                 </div>
               ) : (
                 <div className="space-y-2">
