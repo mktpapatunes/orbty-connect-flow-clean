@@ -148,6 +148,7 @@ export default function MyCampaigns() {
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileContractorId, setProfileContractorId] = useState<string | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   async function refetch() {
     if (!user) return;
@@ -174,6 +175,25 @@ export default function MyCampaigns() {
     refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  useEffect(() => {
+    const modalOpen = profileOpen || declineModalOpen;
+    if (!modalOpen) return;
+
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevBodyTouchAction = document.body.style.touchAction;
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+      document.body.style.touchAction = prevBodyTouchAction;
+    };
+  }, [profileOpen, declineModalOpen]);
 
   const counts = useMemo(() => {
     const invited = rows.filter((r) => r.participant_status === "invited").length;
@@ -218,13 +238,71 @@ export default function MyCampaigns() {
     navigate(`/campanha-detalhe/${row.campaign_id}`);
   };
 
-  const handleOpenContractorProfile = (contractorId?: string | null) => {
-    if (!contractorId) return;
-    setProfileContractorId(contractorId);
-    setProfileOpen(true);
+  const resolveContractorProfileId = async (rawId?: string | null) => {
+    const value = String(rawId || "").trim();
+    if (!value) return null;
+
+    const { data: profileRow, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, desired_role")
+      .eq("id", value)
+      .maybeSingle();
+
+    if (!profileError && profileRow) {
+      const desiredRole = String((profileRow as any).desired_role || "").toLowerCase();
+      if (desiredRole === "contractor") {
+        return String((profileRow as any).id);
+      }
+    }
+
+    const { data: orgRow, error: orgError } = await supabase
+      .from("organizations")
+      .select("id, created_by")
+      .eq("id", value)
+      .maybeSingle();
+
+    if (!orgError && orgRow && (orgRow as any).created_by) {
+      return String((orgRow as any).created_by);
+    }
+
+    const { data: orgByOwner, error: orgByOwnerError } = await supabase
+      .from("organizations")
+      .select("created_by")
+      .eq("created_by", value)
+      .maybeSingle();
+
+    if (!orgByOwnerError && orgByOwner && (orgByOwner as any).created_by) {
+      return String((orgByOwner as any).created_by);
+    }
+
+    return value;
+  };
+
+  const handleOpenContractorProfile = async (contractorId?: string | null) => {
+    if (!contractorId || profileLoading) return;
+
+    setProfileLoading(true);
+    try {
+      const resolvedId = await resolveContractorProfileId(contractorId);
+
+      if (!resolvedId) {
+        toast.error("Não foi possível abrir o perfil da marca.");
+        setProfileLoading(false);
+        return;
+      }
+
+      setProfileContractorId(resolvedId);
+      setProfileOpen(true);
+    } catch (e) {
+      console.error("OPEN_CONTRACTOR_PROFILE_ERROR", e);
+      toast.error("Não foi possível abrir o perfil da marca.");
+    } finally {
+      setProfileLoading(false);
+    }
   };
 
   const closeProfileModal = () => {
+    if (profileLoading) return;
     setProfileOpen(false);
     setProfileContractorId(null);
   };
@@ -384,7 +462,7 @@ export default function MyCampaigns() {
                           onClick={() => handleOpenContractorProfile(r.contractor_id)}
                           className="shrink-0"
                           title={r.contractor_name || "Ver perfil da marca"}
-                          disabled={!r.contractor_id}
+                          disabled={!r.contractor_id || profileLoading}
                         >
                           <div className="w-14 h-14 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center">
                             {r.contractor_logo_url ? (
@@ -407,7 +485,7 @@ export default function MyCampaigns() {
                           <button
                             type="button"
                             onClick={() => handleOpenContractorProfile(r.contractor_id)}
-                            disabled={!r.contractor_id}
+                            disabled={!r.contractor_id || profileLoading}
                             className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[10px] text-muted-foreground"
                           >
                             <Building2 className="w-3 h-3 shrink-0" />
@@ -609,28 +687,45 @@ export default function MyCampaigns() {
               if (e.target === e.currentTarget) closeProfileModal();
             }}
           >
-            <div className="fixed inset-0 flex items-end justify-center md:items-center p-0 md:p-4">
+            <div className="fixed inset-0 flex items-center justify-center p-4">
               <motion.div
                 initial={{ opacity: 0, y: 16, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 16, scale: 0.98 }}
                 transition={{ type: "spring", stiffness: 260, damping: 22 }}
-                className="w-full md:max-w-3xl h-[92vh] md:h-[86vh] rounded-t-3xl md:rounded-3xl border border-border/50 bg-background overflow-hidden shadow-2xl"
+                className="w-full max-w-[720px] h-[88vh] rounded-3xl border border-border/50 bg-background/95 shadow-2xl overflow-hidden flex flex-col"
                 onMouseDown={(e) => e.stopPropagation()}
               >
-                <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between bg-background/80 backdrop-blur-xl">
-                  <div className="text-sm font-semibold text-foreground">Perfil da marca</div>
-                  <button
-                    type="button"
-                    onClick={closeProfileModal}
-                    className="p-2 rounded-xl hover:bg-white/5"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                <div className="px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs text-muted-foreground uppercase tracking-widest">
+                        Perfil da marca
+                      </div>
+                      <div className="mt-1 text-lg font-bold text-foreground truncate">
+                        {rows.find((x) => x.contractor_id === profileContractorId)?.contractor_name ||
+                          "Marca"}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={closeProfileModal}
+                      className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 transition flex items-center justify-center text-muted-foreground hover:text-foreground shrink-0"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
 
-                <div className="h-full overflow-auto">
-                  <PublicProfile key={profileContractorId} idOverride={profileContractorId} />
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y">
+                  {profileLoading ? (
+                    <div className="flex justify-center py-16">
+                      <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                    </div>
+                  ) : (
+                    <PublicProfile key={profileContractorId} idOverride={profileContractorId} />
+                  )}
                 </div>
               </motion.div>
             </div>
