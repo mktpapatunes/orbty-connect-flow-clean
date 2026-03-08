@@ -1,4 +1,4 @@
-// src/pages/PublicProfile.tsx
+// src/pages/profile/PublicProfile.tsx
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
@@ -83,7 +83,6 @@ function isMissingColumnError(msg: string) {
   return m.includes("does not exist") || m.includes("column") || m.includes("42703");
 }
 
-/** Formatação estilo Instagram */
 function formatIGCount(input: number | null | undefined) {
   const n = Number(input ?? 0);
   if (!Number.isFinite(n) || n <= 0) return "—";
@@ -375,22 +374,18 @@ type ProfileRow = {
   neighborhood: string | null;
   bio: string | null;
   avatar_url: string | null;
-
   instagram: string | null;
   followers: string | null;
   content_style: string | null;
-
   audience_gender: any | null;
   audience_age: any | null;
-
   approval_status?: string | null;
-  desired_role?: string | null; // ✅ seu schema real
+  desired_role?: string | null;
 };
 
 type OrgRow = {
   id: string;
   created_by?: string | null;
-
   name: string | null;
   region_city: string | null;
   region_state: string | null;
@@ -400,7 +395,6 @@ type OrgRow = {
   logo_url: string | null;
   instagram: string | null;
   website_url: string | null;
-
   address_street: string | null;
   address_number: string | null;
   address_complement: string | null;
@@ -430,9 +424,6 @@ async function fetchProfileById(id: string): Promise<ProfileRow | null> {
   return (first.data as any) ?? null;
 }
 
-/** ✅ Confirmado pelo seu banco:
- * organizations.created_by = profiles.id
- */
 async function fetchOrgByOwnerProfile(profileId: string): Promise<OrgRow | null> {
   const selectOrg =
     "id, created_by, name, region_city, region_state, business_category, product_or_brand, bio, logo_url, instagram, website_url, address_street, address_number, address_complement, address_zip";
@@ -487,15 +478,22 @@ async function fetchInfluencerAcceptedCount(profileId: string) {
 
 const AGE_BARS_BUCKETS = ["18-24", "25-34", "35-44", "45-54", "55-64"] as const;
 
-export default function PublicProfile({ idOverride }: { idOverride?: string }) {
+export default function PublicProfile({
+  idOverride,
+  embed = false,
+  onBack,
+}: {
+  idOverride?: string;
+  embed?: boolean;
+  onBack?: () => void;
+}) {
   const params = useParams<{ id: string }>();
   const id = idOverride ?? params.id;
   const navigate = useNavigate();
   const { userRole } = useAuth();
 
-  // ✅ detecta embed
   const [searchParams] = useSearchParams();
-  const isEmbed = searchParams.get("embed") === "1";
+  const isEmbed = embed || searchParams.get("embed") === "1";
 
   const backTo = userRole === "contractor" ? "/dashboard-contratante" : "/dashboard-influenciadora";
 
@@ -506,34 +504,22 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
   const [org, setOrg] = useState<OrgRow | null>(null);
   const [role, setRole] = useState<"influencer" | "contractor">("influencer");
 
-  // ratings
   const [ratingAvg, setRatingAvg] = useState(0);
   const [ratingCount, setRatingCount] = useState<number | null>(null);
   const [loadingRatings, setLoadingRatings] = useState(true);
 
-  // influencer accepted
   const [acceptedCount, setAcceptedCount] = useState(0);
   const [loadingAccepted, setLoadingAccepted] = useState(true);
 
-  /**
-   * ✅ CORREÇÃO DO "FLASH":
-   * useLayoutEffect roda ANTES do browser pintar quando o :id muda.
-   * Então a gente limpa tudo aqui e evita renderizar 1 frame com o perfil anterior.
-   */
   useLayoutEffect(() => {
     setLoadedId(null);
     setLoading(true);
-
     setProfile(null);
     setOrg(null);
-
-    // força layout neutro até o fetch decidir
     setRole("influencer");
-
     setRatingAvg(0);
     setRatingCount(null);
     setLoadingRatings(true);
-
     setAcceptedCount(0);
     setLoadingAccepted(true);
   }, [id]);
@@ -567,23 +553,21 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
           return;
         }
 
-        // ✅ role real do schema
-        const rRaw = String(p.desired_role ?? "").toLowerCase();
-        const finalRole: "influencer" | "contractor" = rRaw === "contractor" ? "contractor" : "influencer";
+        const orgData = await fetchOrgByOwnerProfile(p.id);
+        if (!alive) return;
 
-        // set "base" primeiro
+        const desiredRole = String(p.desired_role ?? "").toLowerCase();
+        const finalRole: "influencer" | "contractor" =
+          orgData ? "contractor" : desiredRole === "contractor" ? "contractor" : "influencer";
+
         setProfile(p);
+        setOrg(orgData);
         setRole(finalRole);
 
         if (finalRole === "contractor") {
-          const o = await fetchOrgByOwnerProfile(p.id);
-          if (!alive) return;
-          setOrg(o);
-
-          // rating org
           try {
-            if (o?.id) {
-              const rr = await fetchOrgRating(o.id);
+            if (orgData?.id) {
+              const rr = await fetchOrgRating(orgData.id);
               if (!alive) return;
               setRatingAvg(rr.avg);
               setRatingCount(rr.count || null);
@@ -598,15 +582,11 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
             if (alive) setLoadingRatings(false);
           }
 
-          // accepted não se aplica
           if (alive) {
             setAcceptedCount(0);
             setLoadingAccepted(false);
           }
         } else {
-          setOrg(null);
-
-          // rating influencer
           try {
             const rr = await fetchInfluencerRating(p.id);
             if (!alive) return;
@@ -619,7 +599,6 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
             if (alive) setLoadingRatings(false);
           }
 
-          // accepted count
           try {
             const cnt = await fetchInfluencerAcceptedCount(p.id);
             if (!alive) return;
@@ -660,12 +639,10 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
     return (profile?.name || "Creator").toString();
   }, [role, org?.name, profile?.name]);
 
-  // ✅ label cinza abaixo do nome
   const roleLabel = useMemo(() => {
     return role === "contractor" ? "Marca/Negócios" : "Creator";
   }, [role]);
 
-  // ✅ bio completa (não cortamos string aqui)
   const headerBio = useMemo(() => {
     const b = role === "contractor" ? org?.bio : profile?.bio;
     return (b || "").trim();
@@ -696,7 +673,6 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
     );
   }, [profile?.content_style]);
 
-  // influencer location labels
   const stateUF = (profile?.state || "").toString();
   const cityLabel = (profile?.city || "—").toString();
   const neighborhoodLabel = (profile?.neighborhood || "—").toString();
@@ -711,7 +687,6 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
         ? `${neighborhoodLabel}, Brasil`
         : "";
 
-  // contractor location + maps
   const contractorLocationLabel = useMemo(() => {
     const c = org?.region_city || profile?.city;
     const s = org?.region_state || profile?.state;
@@ -738,7 +713,6 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
 
   const website = useMemo(() => safeUrl(org?.website_url), [org?.website_url]);
 
-  // audience influencer
   const gender = useMemo(() => {
     const g = (profile as any)?.audience_gender;
     if (!g || typeof g !== "object") return null;
@@ -765,11 +739,19 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
 
   const pageContent = (
     <div className="px-6 py-6 space-y-6">
-      {/* ✅ Em embed: não mostra botão Voltar */}
       {!isEmbed ? (
         <button
           type="button"
           onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Voltar
+        </button>
+      ) : onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -787,7 +769,6 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
         </div>
       ) : (
         <>
-          {/* HEADER PREMIUM */}
           <div className="relative overflow-hidden rounded-3xl border border-border/50 bg-white/5 shadow-sm">
             <div className="absolute inset-0 pointer-events-none">
               <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5" />
@@ -796,7 +777,6 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
 
             <div className="relative p-5">
               <div className="flex items-start gap-4">
-                {/* avatar/logo */}
                 <div className="relative shrink-0">
                   <div className="absolute -inset-2 rounded-3xl bg-primary/10 blur-lg opacity-60" />
                   <div className="relative w-20 h-20 rounded-3xl overflow-hidden border border-primary/20 bg-white/5 flex items-center justify-center">
@@ -816,7 +796,6 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
                   <div className="pointer-events-none absolute inset-0 rounded-3xl ring-2 ring-white/10" />
                 </div>
 
-                {/* infos */}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 min-w-0">
                     <h1 className="text-xl font-semibold text-foreground leading-tight break-words">{headerName}</h1>
@@ -827,17 +806,14 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
                     ) : null}
                   </div>
 
-                  {/* ✅ texto cinza abaixo do nome */}
                   <div className="mt-1 text-xs text-muted-foreground">{roleLabel}</div>
 
-                  {/* ✅ Bio (mantém completa, só clampa visual 1 linha) */}
                   <div className="mt-2 text-sm text-foreground/90 leading-relaxed">
                     {headerBio ? <span className="block line-clamp-1">{headerBio}</span> : <span className="text-muted-foreground">Sem descrição.</span>}
                   </div>
                 </div>
               </div>
 
-              {/* Ações públicas */}
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <IconButton
                   icon={<Instagram className="w-4 h-4" />}
@@ -868,7 +844,6 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
             </div>
           </div>
 
-          {/* CHIPS */}
           {role === "contractor" ? (
             <div className="grid grid-cols-3 gap-2">
               <LocationInfoChip
@@ -894,7 +869,6 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
             </div>
           )}
 
-          {/* AUDIÊNCIA + LOCALIZAÇÕES (influencer) */}
           {role === "influencer" ? (
             <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
               <div className="flex items-center gap-2 mb-3">
@@ -943,10 +917,8 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
             </div>
           ) : null}
 
-          {/* AVALIAÇÕES (REAIS) */}
           <RatingsCard rating={ratingAvg} count={ratingCount} loading={loadingRatings} />
 
-          {/* ATIVAÇÕES (somente influencer) */}
           {role === "influencer" ? (
             <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
               <div className="text-sm font-semibold text-foreground text-center">Ativações e campanhas</div>
@@ -973,7 +945,6 @@ export default function PublicProfile({ idOverride }: { idOverride?: string }) {
     </div>
   );
 
-  // ✅ Em embed: não renderiza MobileLayout (evita interferência/redirect)
   if (isEmbed) {
     return <div className="min-h-screen bg-background">{pageContent}</div>;
   }

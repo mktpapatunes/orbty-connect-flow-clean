@@ -148,6 +148,7 @@ export default function MyCampaigns() {
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileContractorId, setProfileContractorId] = useState<string | null>(null);
+  const [profileContractorName, setProfileContractorName] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
 
   async function refetch() {
@@ -278,7 +279,10 @@ export default function MyCampaigns() {
     return value;
   };
 
-  const handleOpenContractorProfile = async (contractorId?: string | null) => {
+  const handleOpenContractorProfile = async (
+    contractorId?: string | null,
+    contractorName?: string | null
+  ) => {
     if (!contractorId || profileLoading) return;
 
     setProfileLoading(true);
@@ -292,6 +296,7 @@ export default function MyCampaigns() {
       }
 
       setProfileContractorId(resolvedId);
+      setProfileContractorName(contractorName || "Marca");
       setProfileOpen(true);
     } catch (e) {
       console.error("OPEN_CONTRACTOR_PROFILE_ERROR", e);
@@ -305,6 +310,7 @@ export default function MyCampaigns() {
     if (profileLoading) return;
     setProfileOpen(false);
     setProfileContractorId(null);
+    setProfileContractorName(null);
   };
 
   const handleConfirmParticipation = async (campaignId: string) => {
@@ -459,7 +465,9 @@ export default function MyCampaigns() {
                       <div className="flex items-start gap-3 min-w-0 flex-1">
                         <button
                           type="button"
-                          onClick={() => handleOpenContractorProfile(r.contractor_id)}
+                          onClick={() =>
+                            handleOpenContractorProfile(r.contractor_id, r.contractor_name)
+                          }
                           className="shrink-0"
                           title={r.contractor_name || "Ver perfil da marca"}
                           disabled={!r.contractor_id || profileLoading}
@@ -484,7 +492,9 @@ export default function MyCampaigns() {
                         <div className="min-w-0 flex-1">
                           <button
                             type="button"
-                            onClick={() => handleOpenContractorProfile(r.contractor_id)}
+                            onClick={() =>
+                              handleOpenContractorProfile(r.contractor_id, r.contractor_name)
+                            }
                             disabled={!r.contractor_id || profileLoading}
                             className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[10px] text-muted-foreground"
                           >
@@ -703,8 +713,7 @@ export default function MyCampaigns() {
                         Perfil da marca
                       </div>
                       <div className="mt-1 text-lg font-bold text-foreground truncate">
-                        {rows.find((x) => x.contractor_id === profileContractorId)?.contractor_name ||
-                          "Marca"}
+                        {profileContractorName || "Marca"}
                       </div>
                     </div>
 
@@ -724,7 +733,12 @@ export default function MyCampaigns() {
                       <Loader2 className="w-8 h-8 text-primary animate-spin" />
                     </div>
                   ) : (
-                    <PublicProfile key={profileContractorId} idOverride={profileContractorId} />
+                    <PublicProfile
+                      key={profileContractorId}
+                      idOverride={profileContractorId}
+                      embed
+                      onBack={closeProfileModal}
+                    />
                   )}
                 </div>
               </motion.div>
