@@ -14,11 +14,13 @@ import {
 } from "lucide-react";
 import CampaignFilesTab from "@/components/campaign/CampaignFilesTab";
 
+type DeliverablesStatus = "draft" | "submitted" | "approved" | "changes_requested";
+
 type DeliverablesRow = {
   id?: string;
   campaign_id: string;
   creator_id: string;
-  status: "draft" | "submitted" | "approved" | "changes_requested";
+  status: DeliverablesStatus;
   checklist: Record<string, boolean> | null;
   links: string[] | null;
   notes: string | null;
@@ -57,7 +59,7 @@ export default function CreatorDeliverablesPanel(props: {
   const [row, setRow] = useState<DeliverablesRow | null>(null);
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
   const [links, setLinks] = useState<string[]>([""]);
-  const [notes, setNotes] = useState<string>("");
+  const [notes, setNotes] = useState("");
 
   const isApproved = row?.status === "approved";
   const isSubmitted = row?.status === "submitted";
@@ -75,15 +77,17 @@ export default function CreatorDeliverablesPanel(props: {
     return s;
   }, [row?.status]);
 
+  const getCreatorId = async () => {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) throw error;
+    if (!data.user?.id) throw new Error("Usuário não autenticado.");
+    return data.user.id;
+  };
+
   const fetchRow = async () => {
     setLoading(true);
-
     try {
-      const { data: auth } = await supabase.auth.getUser();
-
-      if (!auth.user) throw new Error("Usuário não autenticado.");
-
-      const creatorId = auth.user.id;
+      const creatorId = await getCreatorId();
 
       const { data, error } = await supabase
         .from("campaign_creator_deliverables")
@@ -96,10 +100,9 @@ export default function CreatorDeliverablesPanel(props: {
 
       if (data) {
         const r = data as DeliverablesRow;
-
         setRow(r);
         setChecklist(r.checklist ?? {});
-        setLinks(Array.isArray(r.links) && r.links.length ? r.links : [""]);
+        setLinks(Array.isArray(r.links) && r.links.length > 0 ? r.links : [""]);
         setNotes(r.notes ?? "");
       } else {
         setRow(null);
@@ -110,6 +113,7 @@ export default function CreatorDeliverablesPanel(props: {
     } catch (e: any) {
       console.error("FETCH_DELIVERABLES_ERROR", e);
       toast.error(e?.message || "Erro ao carregar entregas.");
+      setRow(null);
     } finally {
       setLoading(false);
     }
@@ -121,11 +125,7 @@ export default function CreatorDeliverablesPanel(props: {
 
   const toggleChecklist = (key: string) => {
     if (!canEdit) return;
-
-    setChecklist((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+    setChecklist((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleSaveDraft = async () => {
@@ -137,21 +137,18 @@ export default function CreatorDeliverablesPanel(props: {
     if (!canEdit) return;
 
     setSaving(true);
-
     try {
-      const { data: auth } = await supabase.auth.getUser();
-
-      if (!auth.user) throw new Error("Usuário não autenticado.");
-
-      const creatorId = auth.user.id;
+      const creatorId = await getCreatorId();
 
       const payload = {
         campaign_id: props.campaignId,
         creator_id: creatorId,
-        status: "draft",
+        status: "draft" as DeliverablesStatus,
         checklist: checklist ?? {},
         links: normalizeLinks(links),
         notes: notes.trim() || null,
+        submitted_at: row?.submitted_at ?? null,
+        approved_at: row?.approved_at ?? null,
         updated_at: new Date().toISOString(),
       };
 
@@ -162,7 +159,6 @@ export default function CreatorDeliverablesPanel(props: {
       if (error) throw error;
 
       toast.success("Rascunho salvo.");
-
       await fetchRow();
     } catch (e: any) {
       console.error("SAVE_DRAFT_ERROR", e);
@@ -190,23 +186,23 @@ export default function CreatorDeliverablesPanel(props: {
       return;
     }
 
+    if (!window.confirm("Enviar entregas?\n\nApós enviar, ficará bloqueado até a confirmação do contratante.")) {
+      return;
+    }
+
     setSubmitting(true);
-
     try {
-      const { data: auth } = await supabase.auth.getUser();
-
-      if (!auth.user) throw new Error("Usuário não autenticado.");
-
-      const creatorId = auth.user.id;
+      const creatorId = await getCreatorId();
 
       const payload = {
         campaign_id: props.campaignId,
         creator_id: creatorId,
-        status: "submitted",
+        status: "submitted" as DeliverablesStatus,
         checklist: checklist ?? {},
         links: normalizeLinks(links),
         notes: notes.trim() || null,
         submitted_at: new Date().toISOString(),
+        approved_at: row?.approved_at ?? null,
         updated_at: new Date().toISOString(),
       };
 
@@ -216,8 +212,7 @@ export default function CreatorDeliverablesPanel(props: {
 
       if (error) throw error;
 
-      toast.success("Entregas enviadas!");
-
+      toast.success("Entregas enviadas! Agora aguarde a confirmação do contratante.");
       await fetchRow();
     } catch (e: any) {
       console.error("SUBMIT_DELIVERABLES_ERROR", e);
@@ -233,9 +228,7 @@ export default function CreatorDeliverablesPanel(props: {
         <div className="flex items-start gap-3">
           <ShieldCheck className="w-4 h-4 text-muted-foreground mt-0.5" />
           <div>
-            <div className="text-sm font-semibold text-foreground">
-              Entregas
-            </div>
+            <div className="text-sm font-semibold text-foreground">Entregas</div>
             <div className="mt-1 text-sm text-muted-foreground">
               Confirme sua participação para habilitar o envio de entregas.
             </div>
@@ -255,28 +248,185 @@ export default function CreatorDeliverablesPanel(props: {
 
   return (
     <div className="space-y-4">
+      <div className="glass-card p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-foreground">Checklist e comprovação</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Status: <span className="text-foreground/80 font-medium">{statusLabel}</span>
+            </div>
+          </div>
 
-      {/* restante da UI permanece igual */}
+          {canEdit ? (
+            <button
+              onClick={handleSaveDraft}
+              disabled={saving || submitting}
+              className="rounded-2xl border border-border/50 bg-card/60 px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-card/80 transition disabled:opacity-60"
+              title="Salvar"
+              type="button"
+            >
+              {saving ? "Salvando..." : "Salvar"}
+            </button>
+          ) : isSubmitted ? (
+            <div className="rounded-2xl border border-warning/25 bg-warning/10 px-3 py-2 text-[11px] font-semibold text-warning">
+              Aguardando confirmação
+            </div>
+          ) : isApproved ? (
+            <div className="rounded-2xl border border-accent/25 bg-accent/10 px-3 py-2 text-[11px] font-semibold text-accent">
+              Confirmado
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {CHECKLIST_ITEMS.map((it) => {
+            const checked = !!checklist[it.key];
+            return (
+              <button
+                key={it.key}
+                type="button"
+                onClick={() => toggleChecklist(it.key)}
+                disabled={!canEdit}
+                className={`w-full text-left flex items-center gap-3 rounded-2xl border px-4 py-3 transition ${
+                  checked
+                    ? "border-accent/25 bg-accent/10"
+                    : "border-border/50 bg-white/5 hover:bg-white/10"
+                } ${!canEdit ? "opacity-70 cursor-default" : ""}`}
+              >
+                {checked ? (
+                  <CheckSquare className="w-4 h-4 text-accent" />
+                ) : (
+                  <Square className="w-4 h-4 text-muted-foreground" />
+                )}
+                <span className="text-sm text-foreground/85">{it.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="glass-card p-5">
+        <div className="flex items-center gap-2">
+          <LinkIcon className="w-4 h-4 text-primary" />
+          <div className="text-sm font-semibold text-foreground">Links de comprovação</div>
+        </div>
+        <div className="text-xs text-muted-foreground mt-1">
+          Cole aqui links dos posts/stories para validação.
+        </div>
+
+        <div className="mt-3 space-y-2">
+          {links.map((val, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <input
+                value={val}
+                onChange={(e) =>
+                  setLinks((prev) => {
+                    const copy = [...prev];
+                    copy[idx] = e.target.value;
+                    return copy;
+                  })
+                }
+                disabled={!canEdit}
+                placeholder="https://..."
+                className="w-full rounded-2xl border border-border/50 bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-70"
+              />
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLinks((prev) => {
+                      const copy = [...prev];
+                      copy.splice(idx, 1);
+                      return copy.length ? copy : [""];
+                    })
+                  }
+                  className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 transition text-muted-foreground hover:text-foreground"
+                  title="Remover"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => setLinks((prev) => [...prev, ""])}
+            className="mt-3 text-xs font-semibold text-primary hover:opacity-80 transition"
+          >
+            + Adicionar outro link
+          </button>
+        )}
+      </div>
+
+      <div className="glass-card p-5">
+        <div className="flex items-center gap-2">
+          <Paperclip className="w-4 h-4 text-primary" />
+          <div className="text-sm font-semibold text-foreground">Arquivos de comprovação</div>
+        </div>
+        <div className="text-xs text-muted-foreground mt-1">
+          Envie prints, PDFs ou outros arquivos que comprovem a entrega.
+        </div>
+
+        <div className="mt-3">
+          <CampaignFilesTab
+            campaignId={props.campaignId}
+            role="influencer"
+            influencerAccepted={props.creatorAccepted}
+            kindFilter="deliverables"
+            readOnly={!canEdit}
+          />
+        </div>
+      </div>
+
+      <div className="glass-card p-5">
+        <div className="flex items-center gap-2">
+          <FileText className="w-4 h-4 text-accent" />
+          <div className="text-sm font-semibold text-foreground">Observações</div>
+        </div>
+
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          disabled={!canEdit}
+          rows={4}
+          placeholder="Conte qualquer detalhe relevante para a revisão..."
+          className="mt-3 w-full rounded-2xl border border-border/50 bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-70"
+        />
+      </div>
 
       <div className="glass-card p-5">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold text-foreground">
-              Enviar entregas
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-foreground">Enviar entregas</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Após enviar, seu conteúdo ficará bloqueado até a confirmação do contratante.
             </div>
           </div>
 
           <button
             onClick={handleSubmit}
             disabled={!canSubmit || submitting || saving}
-            className="bg-gradient-neon text-primary-foreground px-4 py-2 rounded-2xl text-xs font-semibold flex items-center gap-2"
+            className={`rounded-2xl px-4 py-2 text-xs font-semibold transition flex items-center gap-2 ${
+              isApproved
+                ? "border border-accent/25 bg-accent/10 text-accent cursor-default"
+                : isSubmitted
+                  ? "border border-warning/25 bg-warning/10 text-warning cursor-default"
+                  : "bg-gradient-neon text-primary-foreground glow-blue"
+            } disabled:opacity-60`}
+            title="Enviar entregas"
+            type="button"
           >
             {submitting ? (
               <Loader2 className="w-4 h-4 animate-spin" />
+            ) : isApproved ? (
+              <BadgeCheck className="w-4 h-4" />
             ) : (
               <Send className="w-4 h-4" />
             )}
-            Enviar
+            {isApproved ? "Confirmado" : isSubmitted ? "Entregue" : "Enviar"}
           </button>
         </div>
       </div>
