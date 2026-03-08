@@ -20,6 +20,7 @@ import {
   Store,
   RefreshCw,
   CheckCircle2,
+  Building2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -35,6 +36,11 @@ type MyCampaignRow = MyCampaign & {
   type?: string | null;
 };
 
+type BusinessInfo = {
+  name: string | null;
+  logo_url: string | null;
+};
+
 const ContractorCampaigns = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -44,9 +50,11 @@ const ContractorCampaigns = () => {
   const [bucket, setBucket] = useState<Bucket>("active");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  const [businessName, setBusinessName] = useState<string | null>(null);
+  const [businessInfo, setBusinessInfo] = useState<BusinessInfo>({
+    name: null,
+    logo_url: null,
+  });
 
-  // creators selecionados por campanha
   const [selectedCounts, setSelectedCounts] = useState<Record<string, number>>({});
 
   const formatDateBR = (value?: string | null) => {
@@ -59,7 +67,15 @@ const ContractorCampaigns = () => {
       : d.toLocaleDateString("pt-BR");
   };
 
-  const fetchBusinessName = useCallback(async () => {
+  const initials = (name?: string | null) => {
+    const n = String(name || "").trim();
+    if (!n) return "M";
+    const parts = n.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  };
+
+  const fetchBusinessInfo = useCallback(async () => {
     if (!user) return;
 
     const linkCols: Array<"created_by" | "owner_id" | "user_id"> = ["created_by", "owner_id", "user_id"];
@@ -67,7 +83,7 @@ const ContractorCampaigns = () => {
     for (const col of linkCols) {
       const { data, error } = await supabase
         .from("organizations")
-        .select("name")
+        .select("name,logo_url")
         .eq(col as any, user.id)
         .order("created_at" as any, { ascending: false })
         .limit(1)
@@ -75,14 +91,22 @@ const ContractorCampaigns = () => {
 
       if (error) continue;
 
-      const name = (data as any)?.name;
-      if (typeof name === "string" && name.trim().length > 0) {
-        setBusinessName(name.trim());
+      const name = typeof (data as any)?.name === "string" ? (data as any).name.trim() : null;
+      const logo_url = typeof (data as any)?.logo_url === "string" ? (data as any).logo_url.trim() : null;
+
+      if (name || logo_url) {
+        setBusinessInfo({
+          name: name || null,
+          logo_url: logo_url || null,
+        });
         return;
       }
     }
 
-    setBusinessName(null);
+    setBusinessInfo({
+      name: null,
+      logo_url: null,
+    });
   }, [user]);
 
   const fetchCampaigns = useCallback(async () => {
@@ -104,31 +128,6 @@ const ContractorCampaigns = () => {
     setIsLoading(false);
   }, [user]);
 
-  // Helper: tenta contar "selecionados" em uma tabela.
-  // Se a tabela não existir ou RLS bloquear, ele falha silenciosamente e retorna null.
-  const tryCountSelectedFromTable = useCallback(
-    async (
-      table: string,
-      opts: { campaignIdCol?: string; statusCol?: string; selectedStatus?: string } = {}
-    ): Promise<Record<string, number> | null> => {
-      const campaignIdCol = opts.campaignIdCol ?? "campaign_id";
-
-      try {
-        let q = supabase.from(table as any).select(`${campaignIdCol}${opts.statusCol ? `,${opts.statusCol}` : ""}`);
-
-        // filtra pelos campaign ids (vamos aplicar isso fora, aqui não temos ids ainda)
-        // -> essa função vai ser chamada já com .in aplicado por fora via params (abaixo)
-        // Como o supabase client não permite compor fora, vamos montar aqui em outra função.
-        // (mantemos essa função simples e segura)
-        // Nunca chega aqui.
-        return null;
-      } catch {
-        return null;
-      }
-    },
-    []
-  );
-
   const fetchSelectedCreatorsCounts = useCallback(
     async (rows: MyCampaignRow[]) => {
       if (!user) return;
@@ -139,8 +138,6 @@ const ContractorCampaigns = () => {
         return;
       }
 
-      // 1) Primeira tentativa: campaign_applications, selecionados = accepted
-      // (pode retornar vazio se RLS bloquear ou se a seleção estiver em outra tabela)
       const attempt1 = async (): Promise<Record<string, number> | null> => {
         const { data, error } = await supabase
           .from("campaign_applications")
@@ -157,11 +154,9 @@ const ContractorCampaigns = () => {
           map[cid] = (map[cid] ?? 0) + 1;
         }
 
-        // se vier vazio, pode ser RLS ou não ser a fonte certa
         return map;
       };
 
-      // 2) Fallbacks: nomes comuns para tabela de selecionados/participantes
       const fallbackTables: Array<{ table: string; campaignIdCol: string }> = [
         { table: "campaign_selected_creators", campaignIdCol: "campaign_id" },
         { table: "campaign_creators", campaignIdCol: "campaign_id" },
@@ -190,10 +185,7 @@ const ContractorCampaigns = () => {
         return null;
       };
 
-      // Executa tentativas
       const map1 = await attempt1();
-
-      // Se map1 vier com pelo menos 1 campanha com count > 0, usamos.
       const hasAny1 = map1 && Object.values(map1).some((n) => n > 0);
 
       if (hasAny1) {
@@ -209,10 +201,8 @@ const ContractorCampaigns = () => {
         return;
       }
 
-      // Se nenhum caminho retornar, deixa 0 (mas avisa no console pra gente ajustar a fonte certa)
       console.warn(
-        "SELECTED_CREATORS_COUNT: não encontrei fonte acessível/compatível. " +
-          "Provável: RLS em campaign_applications ou seleção em outra tabela não listada.",
+        "SELECTED_CREATORS_COUNT: não encontrei fonte acessível/compatível.",
         { campaignIds: ids }
       );
       setSelectedCounts({});
@@ -222,8 +212,8 @@ const ContractorCampaigns = () => {
 
   useEffect(() => {
     fetchCampaigns();
-    fetchBusinessName();
-  }, [fetchCampaigns, fetchBusinessName]);
+    fetchBusinessInfo();
+  }, [fetchCampaigns, fetchBusinessInfo]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -321,41 +311,6 @@ const ContractorCampaigns = () => {
   const bucketTitle =
     bucket === "active" ? "Campanhas ativas" : bucket === "completed" ? "Campanhas concluídas" : "Todas as campanhas";
 
-  const getStatusPill = (c: MyCampaignRow) => {
-    if (c.bucket === "completed") {
-      return (
-        <span className="text-[10px] px-2 py-0.5 rounded-full border border-accent/50 bg-accent/15 text-accent font-medium flex items-center gap-1">
-          <BadgeCheck className="w-3 h-3" />
-          Concluída
-        </span>
-      );
-    }
-    if (c.bucket === "closed_manual") {
-      return (
-        <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground font-medium flex items-center gap-1">
-          <Ban className="w-3 h-3" />
-          Encerrada
-        </span>
-      );
-    }
-    if (c.bucket === "closed_expired") {
-      return (
-        <span className="text-[10px] px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning font-medium flex items-center gap-1">
-          <AlertTriangle className="w-3 h-3" />
-          Vencida
-        </span>
-      );
-    }
-    if (c.bucket === "draft") {
-      return (
-        <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-card/60 text-muted-foreground font-medium">
-          Rascunho
-        </span>
-      );
-    }
-    return null;
-  };
-
   const menuItems = [
     { icon: Users, label: "Histórico", description: "Campanhas finalizadas e informações anteriores", route: "/historico" },
   ];
@@ -371,8 +326,78 @@ const ContractorCampaigns = () => {
       tech: "Tech",
       travel: "Viagem",
       other: "Outro",
+      event: "Evento",
+      product: "Produto/Serviço",
     };
     return map[t] ?? t;
+  };
+
+  const campaignVisualStatus = (c: MyCampaignRow) => {
+    if (c.bucket === "completed") {
+      return {
+        label: "Concluída",
+        helper: "Campanha finalizada",
+        chip: "border-accent/30 bg-accent/10 text-accent",
+        line: "bg-accent",
+        Icon: BadgeCheck,
+        step: 4,
+      };
+    }
+
+    if (c.bucket === "closed_manual") {
+      return {
+        label: "Encerrada",
+        helper: "Encerrada manualmente",
+        chip: "border-border/50 bg-card/60 text-muted-foreground",
+        line: "bg-muted-foreground",
+        Icon: Ban,
+        step: 3,
+      };
+    }
+
+    if (c.bucket === "closed_expired") {
+      return {
+        label: "Vencida",
+        helper: "Prazo encerrado",
+        chip: "border-warning/30 bg-warning/10 text-warning",
+        line: "bg-warning",
+        Icon: AlertTriangle,
+        step: 3,
+      };
+    }
+
+    if (c.bucket === "draft") {
+      return {
+        label: "Rascunho",
+        helper: "Ainda não publicada",
+        chip: "border-border/50 bg-card/60 text-muted-foreground",
+        line: "bg-muted-foreground",
+        Icon: Store,
+        step: 1,
+      };
+    }
+
+    return {
+      label: "Ativa",
+      helper: "Campanha em andamento",
+      chip: "border-primary/30 bg-primary/10 text-primary",
+      line: "bg-primary",
+      Icon: Zap,
+      step: 2,
+    };
+  };
+
+  const StatusRail = ({ step, line }: { step: number; line: string }) => {
+    return (
+      <div className="grid grid-cols-4 gap-1.5">
+        {[1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className={`h-1.5 rounded-full transition-all ${i <= step ? line : "bg-border/60"}`}
+          />
+        ))}
+      </div>
+    );
   };
 
   return (
@@ -458,9 +483,12 @@ const ContractorCampaigns = () => {
 
                   const typeLabel = niceType(campaign.type);
                   const locationLabel =
-                    campaign.city && campaign.state ? `${campaign.city} · ${campaign.state}` : `${campaign.city || ""}${campaign.state ? ` · ${campaign.state}` : ""}`.trim();
+                    campaign.city && campaign.state
+                      ? `${campaign.city}, ${campaign.state}`
+                      : `${campaign.city || ""}${campaign.state ? `, ${campaign.state}` : ""}`.trim();
 
                   const selected = selectedCounts[campaign.id] ?? 0;
+                  const ui = campaignVisualStatus(campaign);
 
                   return (
                     <motion.div
@@ -468,112 +496,131 @@ const ContractorCampaigns = () => {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.08 + i * 0.05 }}
-                      className="glass-card-hover p-4"
+                      className="glass-card-hover p-4 overflow-hidden"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="font-semibold text-foreground text-sm truncate">{campaign.title}</h4>
-                            {getStatusPill(campaign)}
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
+                            <div className="shrink-0">
+                              <div className="w-14 h-14 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center">
+                                {businessInfo.logo_url ? (
+                                  <img
+                                    src={businessInfo.logo_url}
+                                    alt={businessInfo.name || "Marca"}
+                                    className="w-full h-full object-cover"
+                                    loading="lazy"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : (
+                                  <span className="text-xs font-bold text-primary">
+                                    {initials(businessInfo.name)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[10px] text-muted-foreground">
+                                <Building2 className="w-3 h-3 shrink-0" />
+                                <span className="truncate max-w-[180px]">
+                                  {businessInfo.name || "Marca/Negócio"}
+                                </span>
+                              </div>
+
+                              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                <h4 className="font-semibold text-foreground text-[15px] leading-snug">
+                                  {campaign.title}
+                                </h4>
+                              </div>
+
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {typeLabel || "Campanha"}
+                              </p>
+                            </div>
                           </div>
 
-                          {businessName && (
-                            <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
-                              <Store className="w-3.5 h-3.5" />
-                              Marca/Negócio: <span className="text-foreground/90 font-medium">{businessName}</span>
+                          <div
+                            className={`shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${ui.chip}`}
+                          >
+                            <ui.Icon className="w-3.5 h-3.5" />
+                            <span>{ui.label}</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="rounded-2xl border border-border/50 bg-card/60 px-3 py-3">
+                            <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                              <MapPin className="w-3 h-3" />
+                              Local
+                            </div>
+                            <div className="text-sm font-semibold text-foreground mt-1 truncate">
+                              {locationLabel || "—"}
+                            </div>
+                          </div>
+
+                          <div className="rounded-2xl border border-border/50 bg-card/60 px-3 py-3">
+                            <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                              <Calendar className="w-3 h-3" />
+                              Data
+                            </div>
+                            <div className="text-sm font-semibold text-foreground mt-1">
+                              {eventDate ? formatDateBR(eventDate) : "A definir"}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-border/50 bg-card/60 px-3 py-3">
+                          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <Users className="w-3 h-3" />
+                            Creators selecionados
+                          </div>
+                          <div className="text-sm font-semibold text-foreground mt-1">
+                            {selected} creator(s)
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <StatusRail step={ui.step} line={ui.line} />
+
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-[11px] font-medium text-muted-foreground">
+                              {ui.helper}
                             </p>
-                          )}
 
-                          <div className="mt-2 flex items-center gap-2 flex-wrap">
-                            {typeLabel && (
-                              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
-                                <Tag className="w-3 h-3" />
-                                {typeLabel}
-                              </span>
-                            )}
-
-                            {locationLabel && (
-                              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
-                                <MapPin className="w-3 h-3" />
-                                {locationLabel}
-                              </span>
-                            )}
-
-                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
-                              <Users className="w-3 h-3" />
-                              {selected} creator(s) selecionado(s)
+                            <span className="text-[11px] text-muted-foreground">
+                              {campaign.created_at ? `Criada em ${formatDateBR(campaign.created_at)}` : ""}
                             </span>
                           </div>
                         </div>
 
-                        <button
-                          onClick={() => navigate(`/campanha/${campaign.id}`)}
-                          className="text-muted-foreground hover:text-primary transition-colors"
-                          title="Abrir campanha"
-                        >
-                          <ArrowRight className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        <div className="rounded-xl border border-border/50 bg-card/60 px-3 py-2">
-                          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                            <Calendar className="w-3 h-3" />
-                            Data do evento
-                          </div>
-                          <div className="text-sm font-semibold text-foreground mt-0.5">
-                            {eventDate ? formatDateBR(eventDate) : "A definir"}
-                          </div>
-                        </div>
-
-                        <div className="rounded-xl border border-border/50 bg-card/60 px-3 py-2">
-                          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                            <CheckCircle2 className="w-3 h-3" />
-                            Status
-                          </div>
-                          <div className="text-sm font-semibold text-foreground mt-0.5">
-                            {campaign.bucket === "active"
-                              ? "Em andamento"
-                              : campaign.bucket === "completed"
-                                ? "Concluída"
-                                : campaign.bucket === "closed_manual"
-                                  ? "Encerrada"
-                                  : campaign.bucket === "closed_expired"
-                                    ? "Vencida"
-                                    : campaign.bucket === "draft"
-                                      ? "Rascunho"
-                                      : "—"}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 pt-3 border-t border-border/30 flex gap-2">
-                        <button
-                          onClick={() => navigate(`/campanha/${campaign.id}`)}
-                          className="flex-1 py-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-semibold text-xs hover:bg-primary/12 transition-colors"
-                        >
-                          Abrir campanha
-                        </button>
-
-                        {(campaign.bucket === "active" || campaign.bucket === "closed_manual" || campaign.bucket === "closed_expired") && (
+                        <div className="pt-3 border-t border-border/30 flex gap-2">
                           <button
-                            onClick={() => runAction(campaign.id, "complete")}
-                            disabled={isBusy}
-                            className="flex-1 py-2.5 rounded-xl border border-accent/30 bg-accent/10 text-accent font-semibold text-xs disabled:opacity-60"
-                            title="Concluir (exige confirmação)"
+                            onClick={() => navigate(`/campanha/${campaign.id}`)}
+                            className="flex-1 min-h-[42px] py-2.5 rounded-2xl bg-primary/10 border border-primary/20 text-primary font-semibold text-sm hover:bg-primary/12 transition-colors"
                           >
-                            Concluir
+                            Abrir campanha
                           </button>
-                        )}
 
-                        <button
-                          onClick={() => runAction(campaign.id, "delete")}
-                          disabled={isBusy}
-                          className="w-11 py-2.5 rounded-xl border border-destructive/30 bg-destructive/5 text-destructive font-semibold text-xs flex items-center justify-center disabled:opacity-60"
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                          {(campaign.bucket === "active" || campaign.bucket === "closed_manual" || campaign.bucket === "closed_expired") && (
+                            <button
+                              onClick={() => runAction(campaign.id, "complete")}
+                              disabled={isBusy}
+                              className="flex-1 min-h-[42px] py-2.5 rounded-2xl border border-accent/30 bg-accent/10 text-accent font-semibold text-sm disabled:opacity-60"
+                              title="Concluir (exige confirmação)"
+                            >
+                              Concluir
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => runAction(campaign.id, "delete")}
+                            disabled={isBusy}
+                            className="w-11 min-h-[42px] py-2.5 rounded-2xl border border-destructive/30 bg-destructive/5 text-destructive font-semibold text-xs flex items-center justify-center disabled:opacity-60"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </motion.div>
                   );
