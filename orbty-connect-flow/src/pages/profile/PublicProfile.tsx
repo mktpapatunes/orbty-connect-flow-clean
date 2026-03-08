@@ -425,12 +425,32 @@ async function fetchProfileById(id: string): Promise<ProfileRow | null> {
 }
 
 async function fetchOrgByOwnerProfile(profileId: string): Promise<OrgRow | null> {
-  const selectOrg =
-    "id, created_by, name, region_city, region_state, business_category, product_or_brand, bio, logo_url, instagram, website_url, address_street, address_number, address_complement, address_zip";
+  const { data, error } = await supabase.rpc("get_public_contractor_profile" as any, {
+    p_profile_id: profileId,
+  });
 
-  const res = await supabase.from("organizations").select(selectOrg).eq("created_by", profileId).maybeSingle();
-  if (res.error) throw res.error;
-  return (res.data as any) ?? null;
+  if (error) throw error;
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || !row.organization_id) return null;
+
+  return {
+    id: row.organization_id,
+    created_by: row.profile_id,
+    name: row.organization_name,
+    region_city: row.region_city,
+    region_state: row.region_state,
+    business_category: row.business_category,
+    product_or_brand: row.product_or_brand,
+    bio: row.bio,
+    logo_url: row.logo_url,
+    instagram: row.instagram,
+    website_url: row.website_url,
+    address_street: row.address_street,
+    address_number: row.address_number,
+    address_complement: row.address_complement,
+    address_zip: row.address_zip,
+  };
 }
 
 async function fetchInfluencerRating(profileId: string) {
