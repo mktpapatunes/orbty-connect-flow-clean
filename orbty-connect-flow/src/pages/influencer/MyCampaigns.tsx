@@ -376,34 +376,34 @@ export default function MyCampaigns() {
                   transition={{ delay: 0.05 + i * 0.03 }}
                   className="glass-card-hover p-4 overflow-hidden"
                 >
-                  <div className="flex items-start gap-3">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenContractorProfile(r.contractor_id)}
-                      className="shrink-0"
-                      title={r.contractor_name || "Ver perfil da marca"}
-                      disabled={!r.contractor_id}
-                    >
-                      <div className="w-14 h-14 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center">
-                        {r.contractor_logo_url ? (
-                          <img
-                            src={r.contractor_logo_url}
-                            alt={r.contractor_name || "Marca"}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <span className="text-xs font-bold text-primary">
-                            {initials(r.contractor_name)}
-                          </span>
-                        )}
-                      </div>
-                    </button>
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenContractorProfile(r.contractor_id)}
+                          className="shrink-0"
+                          title={r.contractor_name || "Ver perfil da marca"}
+                          disabled={!r.contractor_id}
+                        >
+                          <div className="w-14 h-14 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center">
+                            {r.contractor_logo_url ? (
+                              <img
+                                src={r.contractor_logo_url}
+                                alt={r.contractor_name || "Marca"}
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <span className="text-xs font-bold text-primary">
+                                {initials(r.contractor_name)}
+                              </span>
+                            )}
+                          </div>
+                        </button>
 
-                    <div className="min-w-0 flex-1 space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <button
                             type="button"
                             onClick={() => handleOpenContractorProfile(r.contractor_id)}
@@ -411,7 +411,7 @@ export default function MyCampaigns() {
                             className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/50 bg-card/60 px-2.5 py-1 text-[10px] text-muted-foreground"
                           >
                             <Building2 className="w-3 h-3 shrink-0" />
-                            <span className="truncate max-w-[170px]">
+                            <span className="truncate max-w-[180px]">
                               {r.contractor_name || "Marca"}
                             </span>
                           </button>
@@ -433,109 +433,109 @@ export default function MyCampaigns() {
                             {translateCampaignType(r.type)}
                           </p>
                         </div>
+                      </div>
 
-                        <div
-                          className={`shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${ui.chip}`}
-                        >
-                          <ui.Icon className="w-3.5 h-3.5" />
-                          <span>{ui.label}</span>
+                      <div
+                        className={`shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${ui.chip}`}
+                      >
+                        <ui.Icon className="w-3.5 h-3.5" />
+                        <span>{ui.label}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-2xl border border-border/50 bg-card/60 px-3 py-3">
+                        <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                          <MapPin className="w-3 h-3" />
+                          Local
+                        </div>
+                        <div className="text-sm font-semibold text-foreground mt-1 truncate">
+                          {r.city}, {r.state}
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="rounded-2xl border border-border/50 bg-card/60 px-3 py-3">
-                          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                            <MapPin className="w-3 h-3" />
-                            Local
-                          </div>
-                          <div className="text-sm font-semibold text-foreground mt-1 truncate">
-                            {r.city}, {r.state}
-                          </div>
+                      <div className="rounded-2xl border border-border/50 bg-card/60 px-3 py-3">
+                        <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                          <Calendar className="w-3 h-3" />
+                          Data
                         </div>
-
-                        <div className="rounded-2xl border border-border/50 bg-card/60 px-3 py-3">
-                          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                            <Calendar className="w-3 h-3" />
-                            Data
-                          </div>
-                          <div className="text-sm font-semibold text-foreground mt-1">
-                            {r.campaign_date ? formatDateBR(r.campaign_date) : "A definir"}
-                          </div>
+                        <div className="text-sm font-semibold text-foreground mt-1">
+                          {r.campaign_date ? formatDateBR(r.campaign_date) : "A definir"}
                         </div>
                       </div>
+                    </div>
 
-                      <div className="space-y-2">
-                        <StatusRail status={r.participant_status} />
+                    <div className="space-y-2">
+                      <StatusRail status={r.participant_status} />
 
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-[11px] font-medium text-muted-foreground">
-                            {ui.helper}
-                          </p>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-[11px] font-medium text-muted-foreground">
+                          {ui.helper}
+                        </p>
 
-                          {isDelivered ? (
-                            <span className="text-[11px] text-muted-foreground">
-                              Entregue em {r.delivered_at ? formatDateBR(r.delivered_at) : "—"}
-                            </span>
-                          ) : isApproved ? (
-                            <span className="text-[11px] text-muted-foreground">
-                              Confirmada em {r.approved_at ? formatDateBR(r.approved_at) : "—"}
-                            </span>
-                          ) : r.confirmed_at ? (
-                            <span className="text-[11px] text-muted-foreground">
-                              Confirmada em {formatDateBR(r.confirmed_at)}
-                            </span>
-                          ) : null}
-                        </div>
+                        {isDelivered ? (
+                          <span className="text-[11px] text-muted-foreground">
+                            Entregue em {r.delivered_at ? formatDateBR(r.delivered_at) : "—"}
+                          </span>
+                        ) : isApproved ? (
+                          <span className="text-[11px] text-muted-foreground">
+                            Confirmada em {r.approved_at ? formatDateBR(r.approved_at) : "—"}
+                          </span>
+                        ) : r.confirmed_at ? (
+                          <span className="text-[11px] text-muted-foreground">
+                            Confirmada em {formatDateBR(r.confirmed_at)}
+                          </span>
+                        ) : null}
                       </div>
+                    </div>
 
-                      <div className="pt-3 border-t border-border/30 space-y-2">
-                        {isInvited ? (
-                          <>
-                            <button
-                              onClick={() => handleOpenDetails(r)}
-                              className="w-full min-h-[44px] py-2.5 rounded-2xl border border-border/50 bg-card/60 text-foreground font-semibold text-sm flex items-center justify-center gap-2 hover:bg-card/80 transition"
-                            >
-                              <Eye className="w-4 h-4" />
-                              Ver detalhes da campanha
-                            </button>
-
-                            <div className="grid grid-cols-2 gap-2">
-                              <button
-                                onClick={() => openDeclineModal(r)}
-                                className="w-full min-h-[44px] py-2.5 rounded-2xl border border-destructive/20 bg-destructive/5 text-destructive font-semibold text-sm hover:bg-destructive/10 transition"
-                              >
-                                Recusar
-                              </button>
-
-                              <button
-                                onClick={() => handleConfirmParticipation(r.campaign_id)}
-                                disabled={isConfirmingThis}
-                                className="w-full min-h-[44px] py-2.5 rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue disabled:opacity-60"
-                              >
-                                {isConfirmingThis ? "Confirmando..." : "Confirmar participação"}
-                              </button>
-                            </div>
-                          </>
-                        ) : (
+                    <div className="pt-3 border-t border-border/30 space-y-2">
+                      {isInvited ? (
+                        <>
                           <button
                             onClick={() => handleOpenDetails(r)}
-                            className={`w-full min-h-[44px] py-2.5 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition ${
-                              isDelivered
-                                ? "border border-warning/25 bg-warning/10 text-warning hover:bg-warning/15"
-                                : isApproved
-                                  ? "border border-accent/25 bg-accent/10 text-accent hover:bg-accent/15"
-                                  : "border border-accent/30 bg-accent/5 text-accent hover:bg-accent/10"
-                            }`}
+                            className="w-full min-h-[42px] py-2.5 rounded-2xl border border-border/50 bg-card/60 text-foreground font-semibold text-sm flex items-center justify-center gap-2 hover:bg-card/80 transition"
                           >
-                            <CheckCircle2 className="w-4 h-4" />
-                            {isDelivered
-                              ? "Ver entrega enviada"
-                              : isApproved
-                                ? "Ver campanha concluída"
-                                : "Ver detalhes da campanha"}
+                            <Eye className="w-4 h-4" />
+                            Ver detalhes da campanha
                           </button>
-                        )}
-                      </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              onClick={() => openDeclineModal(r)}
+                              className="w-full min-h-[42px] py-2.5 rounded-2xl border border-destructive/20 bg-destructive/5 text-destructive font-semibold text-sm hover:bg-destructive/10 transition"
+                            >
+                              Recusar
+                            </button>
+
+                            <button
+                              onClick={() => handleConfirmParticipation(r.campaign_id)}
+                              disabled={isConfirmingThis}
+                              className="w-full min-h-[42px] py-2.5 rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue disabled:opacity-60"
+                            >
+                              {isConfirmingThis ? "Confirmando..." : "Confirmar participação"}
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenDetails(r)}
+                          className={`w-full min-h-[42px] py-2.5 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition ${
+                            isDelivered
+                              ? "border border-warning/25 bg-warning/10 text-warning hover:bg-warning/15"
+                              : isApproved
+                                ? "border border-accent/25 bg-accent/10 text-accent hover:bg-accent/15"
+                                : "border border-accent/30 bg-accent/5 text-accent hover:bg-accent/10"
+                          }`}
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          {isDelivered
+                            ? "Ver entrega enviada"
+                            : isApproved
+                              ? "Ver campanha concluída"
+                              : "Ver detalhes da campanha"}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </motion.div>
@@ -580,7 +580,7 @@ export default function MyCampaigns() {
                 type="button"
                 onClick={closeDeclineModal}
                 disabled={declining}
-                className="w-full min-h-[44px] py-2.5 rounded-2xl border border-border/50 text-muted-foreground font-medium text-sm"
+                className="w-full min-h-[42px] py-2.5 rounded-2xl border border-border/50 text-muted-foreground font-medium text-sm"
               >
                 Cancelar
               </button>
@@ -589,7 +589,7 @@ export default function MyCampaigns() {
                 type="button"
                 onClick={handleDeclineConfirmed}
                 disabled={declining}
-                className="w-full min-h-[44px] py-2.5 rounded-2xl bg-destructive text-destructive-foreground font-semibold text-sm disabled:opacity-60"
+                className="w-full min-h-[42px] py-2.5 rounded-2xl bg-destructive text-destructive-foreground font-semibold text-sm disabled:opacity-60"
               >
                 {declining ? "Recusando..." : "Sim, recusar"}
               </button>
