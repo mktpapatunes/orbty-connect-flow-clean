@@ -1154,7 +1154,6 @@ const CampaignView = () => {
                 <div className="px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="text-xs text-muted-foreground uppercase tracking-widest">Perfil público</div>
                       <div className="mt-1 text-lg font-bold text-foreground truncate">
                         {creatorProfiles[profileModalCreatorId]?.name || "Creator"}
                       </div>
