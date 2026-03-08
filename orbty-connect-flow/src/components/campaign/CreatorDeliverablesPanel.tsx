@@ -86,7 +86,6 @@ export default function CreatorDeliverablesPanel(props: {
 
   const fetchRow = async () => {
     setLoading(true);
-
     try {
       const creatorId = await getCreatorId();
 
@@ -129,72 +128,6 @@ export default function CreatorDeliverablesPanel(props: {
     setChecklist((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const saveDeliverable = async (nextStatus: DeliverablesStatus) => {
-    const creatorId = await getCreatorId();
-
-    const basePayload = {
-      checklist: checklist ?? {},
-      links: normalizeLinks(links),
-      notes: notes.trim() || null,
-      updated_at: new Date().toISOString(),
-    };
-
-    if (row?.id) {
-      const updatePayload =
-        nextStatus === "submitted"
-          ? {
-              ...basePayload,
-              status: "submitted" as const,
-              submitted_at: new Date().toISOString(),
-            }
-          : {
-              ...basePayload,
-              status: "draft" as const,
-            };
-
-      const { error } = await supabase
-        .from("campaign_creator_deliverables")
-        .update(updatePayload)
-        .eq("id", row.id)
-        .eq("campaign_id", props.campaignId)
-        .eq("creator_id", creatorId);
-
-      if (error) throw error;
-      return;
-    }
-
-    const insertPayload =
-      nextStatus === "submitted"
-        ? {
-            campaign_id: props.campaignId,
-            creator_id: creatorId,
-            status: "submitted" as const,
-            checklist: checklist ?? {},
-            links: normalizeLinks(links),
-            notes: notes.trim() || null,
-            submitted_at: new Date().toISOString(),
-            approved_at: null,
-            updated_at: new Date().toISOString(),
-          }
-        : {
-            campaign_id: props.campaignId,
-            creator_id: creatorId,
-            status: "draft" as const,
-            checklist: checklist ?? {},
-            links: normalizeLinks(links),
-            notes: notes.trim() || null,
-            submitted_at: null,
-            approved_at: null,
-            updated_at: new Date().toISOString(),
-          };
-
-    const { error } = await supabase
-      .from("campaign_creator_deliverables")
-      .insert(insertPayload);
-
-    if (error) throw error;
-  };
-
   const handleSaveDraft = async () => {
     if (!props.creatorAccepted) {
       toast.error("Você precisa confirmar participação.");
@@ -204,9 +137,31 @@ export default function CreatorDeliverablesPanel(props: {
     if (!canEdit) return;
 
     setSaving(true);
-
     try {
-      await saveDeliverable("draft");
+      const creatorId = await getCreatorId();
+
+      if (!row?.id) {
+        toast.error("Entrega base não encontrada para esta campanha.");
+        return;
+      }
+
+      const payload = {
+        status: "draft" as DeliverablesStatus,
+        checklist: checklist ?? {},
+        links: normalizeLinks(links),
+        notes: notes.trim() || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from("campaign_creator_deliverables")
+        .update(payload)
+        .eq("id", row.id)
+        .eq("campaign_id", props.campaignId)
+        .eq("creator_id", creatorId);
+
+      if (error) throw error;
+
       toast.success("Rascunho salvo.");
       await fetchRow();
     } catch (e: any) {
@@ -240,9 +195,32 @@ export default function CreatorDeliverablesPanel(props: {
     }
 
     setSubmitting(true);
-
     try {
-      await saveDeliverable("submitted");
+      const creatorId = await getCreatorId();
+
+      if (!row?.id) {
+        toast.error("Entrega base não encontrada para esta campanha.");
+        return;
+      }
+
+      const payload = {
+        status: "submitted" as DeliverablesStatus,
+        checklist: checklist ?? {},
+        links: normalizeLinks(links),
+        notes: notes.trim() || null,
+        submitted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from("campaign_creator_deliverables")
+        .update(payload)
+        .eq("id", row.id)
+        .eq("campaign_id", props.campaignId)
+        .eq("creator_id", creatorId);
+
+      if (error) throw error;
+
       toast.success("Entregas enviadas! Agora aguarde a confirmação do contratante.");
       await fetchRow();
     } catch (e: any) {
@@ -273,6 +251,22 @@ export default function CreatorDeliverablesPanel(props: {
     return (
       <div className="glass-card p-6 flex justify-center">
         <Loader2 className="w-6 h-6 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (!row) {
+    return (
+      <div className="glass-card p-5">
+        <div className="flex items-start gap-3">
+          <ShieldCheck className="w-4 h-4 text-muted-foreground mt-0.5" />
+          <div>
+            <div className="text-sm font-semibold text-foreground">Entregas</div>
+            <div className="mt-1 text-sm text-muted-foreground">
+              Registro de entrega ainda não foi criado para esta campanha.
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

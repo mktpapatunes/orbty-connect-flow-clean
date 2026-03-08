@@ -65,7 +65,9 @@ export default function CampaignFilesTab(props: {
 
   const grouped = useMemo(() => {
     const map: Record<CampaignFileKind, CampaignFileItem[]> = { assets: [], deliverables: [] };
-    for (const it of items) map[it.kind].push(it);
+    for (const it of items) {
+      map[it.kind].push(it);
+    }
     return map;
   }, [items]);
 
@@ -95,7 +97,6 @@ export default function CampaignFilesTab(props: {
 
   useEffect(() => {
     refetchFiles();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.campaignId, props.role, props.influencerAccepted, props.kindFilter, props.ownerIdFilter]);
 
   const handlePickUpload = () => {
@@ -118,8 +119,10 @@ export default function CampaignFilesTab(props: {
 
     setUploading(true);
     try {
-      const { data: auth } = await supabase.auth.getUser();
-      if (!auth.user) throw new Error("Usuário não autenticado.");
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+
+      if (authError) throw authError;
+      if (!auth.user?.id) throw new Error("Usuário não autenticado.");
 
       await uploadCampaignFile({
         campaignId: props.campaignId,
@@ -221,6 +224,7 @@ export default function CampaignFilesTab(props: {
 
         {showUploader && (
           <button
+            type="button"
             onClick={handlePickUpload}
             disabled={uploading}
             className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition flex items-center gap-2 disabled:opacity-60"
@@ -272,6 +276,7 @@ export default function CampaignFilesTab(props: {
 
                       <div className="flex items-center gap-2">
                         <button
+                          type="button"
                           onClick={() => handleDownload(it)}
                           disabled={downloadingPath === it.path}
                           className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition disabled:opacity-60"
@@ -286,6 +291,7 @@ export default function CampaignFilesTab(props: {
 
                         {canDelete(it) && (
                           <button
+                            type="button"
                             onClick={() => handleDelete(it)}
                             disabled={deletingPath === it.path}
                             className="rounded-xl bg-white/5 border border-border/50 px-3 py-2 text-sm hover:bg-white/10 transition disabled:opacity-60"
