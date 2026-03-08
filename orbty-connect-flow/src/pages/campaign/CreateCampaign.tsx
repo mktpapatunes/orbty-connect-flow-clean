@@ -62,7 +62,7 @@ const segmentOptions = [
   "Tecnologia",
   "Games",
   "Negócios",
-  "Arte",
+  "Eventos",
   "Esportes",
   "Pets",
 ] as const;
