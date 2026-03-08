@@ -296,8 +296,7 @@ const CampaignView = () => {
       const next = t as TabKey;
       if (tab !== next) setTab(next);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.search]);
+  }, [location.search, tab]);
 
   useEffect(() => {
     const modalOpen = deliverableModalOpen || profileModalOpen;
@@ -542,20 +541,40 @@ const CampaignView = () => {
     if (!window.confirm("Confirmar entregas deste creator?\n\nUse apenas quando estiver tudo correto.")) return;
 
     setApprovingCreatorId(creatorId);
+
     try {
-      const { error: dErr } = await supabase
+      const approvedAt = new Date().toISOString();
+
+      const { data: updatedRows, error: updateErr } = await supabase
         .from("campaign_creator_deliverables")
-        .upsert(
-          {
+        .update({
+          status: "approved",
+          approved_at: approvedAt,
+          updated_at: approvedAt,
+        })
+        .eq("campaign_id", id)
+        .eq("creator_id", creatorId)
+        .select("campaign_id, creator_id");
+
+      if (updateErr) throw updateErr;
+
+      if (!updatedRows || updatedRows.length === 0) {
+        const { error: insertErr } = await supabase
+          .from("campaign_creator_deliverables")
+          .insert({
             campaign_id: id,
             creator_id: creatorId,
             status: "approved",
-            approved_at: new Date().toISOString(),
-          } as any,
-          { onConflict: "campaign_id,creator_id" }
-        );
+            approved_at: approvedAt,
+            updated_at: approvedAt,
+            checklist: {},
+            links: [],
+            notes: null,
+            submitted_at: null,
+          });
 
-      if (dErr) throw dErr;
+        if (insertErr) throw insertErr;
+      }
 
       const { error: pErr } = await supabase
         .from("campaign_participants")
@@ -567,15 +586,18 @@ const CampaignView = () => {
 
       toast.success("Entregas confirmadas.");
 
-      setParticipants((prev) => prev.map((p) => (p.influencer_id === creatorId ? { ...p, status: "approved" } : p)));
+      setParticipants((prev) =>
+        prev.map((p) => (p.influencer_id === creatorId ? { ...p, status: "approved" } : p))
+      );
+
       setDeliverablesMap((prev) => ({
         ...prev,
         [creatorId]: {
           ...(prev[creatorId] || ({} as any)),
           creator_id: creatorId,
           status: "approved",
-          approved_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          approved_at: approvedAt,
+          updated_at: approvedAt,
         },
       }));
     } catch (e: any) {
