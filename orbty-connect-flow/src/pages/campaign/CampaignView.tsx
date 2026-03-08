@@ -26,6 +26,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { PublicCampaignFeed } from "@/types/database";
 import CampaignFilesTab from "@/components/campaign/CampaignFilesTab";
+import PublicProfile from "@/pages/profile/PublicProfile";
 import { toast } from "sonner";
 import type { CampaignFileKind } from "@/services/campaignFiles";
 
@@ -244,6 +245,9 @@ const CampaignView = () => {
   const [deliverableModalLoading, setDeliverableModalLoading] = useState(false);
   const [deliverableModalRow, setDeliverableModalRow] = useState<DeliverablesRow | null>(null);
 
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileModalCreatorId, setProfileModalCreatorId] = useState<string | null>(null);
+
   const isContractor = userRole === "contractor";
   const isInfluencer = userRole === "influencer";
 
@@ -296,7 +300,8 @@ const CampaignView = () => {
   }, [location.search]);
 
   useEffect(() => {
-    if (!deliverableModalOpen) return;
+    const modalOpen = deliverableModalOpen || profileModalOpen;
+    if (!modalOpen) return;
 
     const previousHtmlOverflow = document.documentElement.style.overflow;
     const previousBodyOverflow = document.body.style.overflow;
@@ -311,7 +316,17 @@ const CampaignView = () => {
       document.body.style.overflow = previousBodyOverflow;
       document.body.style.touchAction = previousBodyTouchAction;
     };
-  }, [deliverableModalOpen]);
+  }, [deliverableModalOpen, profileModalOpen]);
+
+  const openCreatorProfileModal = (creatorId: string) => {
+    setProfileModalCreatorId(creatorId);
+    setProfileModalOpen(true);
+  };
+
+  const closeCreatorProfileModal = () => {
+    setProfileModalOpen(false);
+    setProfileModalCreatorId(null);
+  };
 
   const confirmParticipation = useCallback(async () => {
     if (!id || !user) return;
@@ -813,13 +828,18 @@ const CampaignView = () => {
                           <div key={creatorId} className="rounded-2xl border border-border/50 bg-white/5 px-3 py-2.5">
                             <div className="flex items-center justify-between gap-3">
                               <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => openCreatorProfileModal(creatorId)}
+                                  className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center shrink-0 hover:opacity-90 transition"
+                                  title="Ver perfil público"
+                                >
                                   {prof?.avatar_url ? (
                                     <img src={prof.avatar_url} alt={name} className="w-full h-full object-cover" loading="lazy" />
                                   ) : (
                                     <span className="text-[11px] font-bold text-primary">{getInitials(name)}</span>
                                   )}
-                                </div>
+                                </button>
 
                                 <div className="min-w-0">
                                   <div className="text-sm font-semibold text-foreground truncate">{name}</div>
@@ -1104,6 +1124,55 @@ const CampaignView = () => {
                       </div>
                     </div>
                   )}
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {profileModalOpen && profileModalCreatorId && isContractor && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) closeCreatorProfileModal();
+            }}
+          >
+            <div className="fixed inset-0 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                className="w-full max-w-[720px] h-[88vh] rounded-3xl border border-border/50 bg-background/95 shadow-2xl overflow-hidden flex flex-col"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs text-muted-foreground uppercase tracking-widest">Perfil público</div>
+                      <div className="mt-1 text-lg font-bold text-foreground truncate">
+                        {creatorProfiles[profileModalCreatorId]?.name || "Creator"}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={closeCreatorProfileModal}
+                      className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 transition flex items-center justify-center text-muted-foreground hover:text-foreground shrink-0"
+                      title="Fechar"
+                      type="button"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y">
+                  <PublicProfile key={profileModalCreatorId} idOverride={profileModalCreatorId} />
                 </div>
               </motion.div>
             </div>
