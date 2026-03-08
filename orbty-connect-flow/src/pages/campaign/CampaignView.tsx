@@ -295,6 +295,24 @@ const CampaignView = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
+  useEffect(() => {
+    if (!deliverableModalOpen) return;
+
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyTouchAction = document.body.style.touchAction;
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.touchAction = previousBodyTouchAction;
+    };
+  }, [deliverableModalOpen]);
+
   const confirmParticipation = useCallback(async () => {
     if (!id || !user) return;
     if (!isInfluencer) return;
@@ -965,11 +983,10 @@ const CampaignView = () => {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 16, scale: 0.98 }}
                 transition={{ type: "spring", stiffness: 260, damping: 22 }}
-                className="w-full max-w-[560px] rounded-3xl border border-border/50 bg-background/95 shadow-2xl overflow-hidden"
-                style={{ maxHeight: "85vh" }}
+                className="w-full max-w-[560px] h-[85vh] rounded-3xl border border-border/50 bg-background/95 shadow-2xl overflow-hidden flex flex-col"
                 onMouseDown={(e) => e.stopPropagation()}
               >
-                <div className="px-5 pt-5 pb-4 border-b border-border/40">
+                <div className="px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-xs text-muted-foreground uppercase tracking-widest">Entregas</div>
@@ -979,15 +996,16 @@ const CampaignView = () => {
 
                     <button
                       onClick={closeDeliverablesModal}
-                      className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 transition flex items-center justify-center text-muted-foreground hover:text-foreground"
+                      className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 transition flex items-center justify-center text-muted-foreground hover:text-foreground shrink-0"
                       title="Fechar"
+                      type="button"
                     >
                       <X className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
 
-                <div className="px-5 py-5 overflow-auto" style={{ maxHeight: "calc(85vh - 84px)" }}>
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-5 touch-pan-y">
                   {deliverableModalLoading ? (
                     <div className="flex justify-center py-10">
                       <Loader2 className="w-6 h-6 text-primary animate-spin" />
@@ -998,7 +1016,7 @@ const CampaignView = () => {
                       <div className="text-sm text-muted-foreground">Nenhuma entrega encontrada para este creator.</div>
                     </div>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-4 pb-6">
                       <div className="rounded-2xl border border-border/50 bg-card/60 p-4">
                         <div className="flex items-center gap-2 mb-3">
                           <ClipboardCheck className="w-4 h-4 text-primary" />
@@ -1035,6 +1053,7 @@ const CampaignView = () => {
                                 onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
                                 className="w-full text-left rounded-xl border border-border/40 bg-white/5 px-3 py-2 hover:bg-white/10 transition"
                                 title="Abrir link"
+                                type="button"
                               >
                                 <div className="text-sm text-foreground truncate">{url}</div>
                               </button>
@@ -1073,7 +1092,7 @@ const CampaignView = () => {
                       </div>
 
                       <div className="text-[11px] text-muted-foreground flex items-start gap-2">
-                        <Info className="w-4 h-4 mt-0.5" />
+                        <Info className="w-4 h-4 mt-0.5 shrink-0" />
                         <div>
                           <div>
                             Enviado: <span className="text-foreground/80">{formatDateTimeBR(deliverableModalRow.submitted_at)}</span>
