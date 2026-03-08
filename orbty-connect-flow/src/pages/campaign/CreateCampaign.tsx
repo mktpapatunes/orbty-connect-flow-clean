@@ -116,7 +116,6 @@ type CreatorListItem = {
   content_style: string | null;
   approval_status?: string | null;
   desired_role?: string | null;
-
   avatar_url?: string | null;
   photo_url?: string | null;
   profile_photo_url?: string | null;
@@ -278,8 +277,7 @@ export default function CreateCampaign() {
         if (f.preview) URL.revokeObjectURL(f.preview);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [files]);
 
   const todayISO = useMemo(() => {
     const d = new Date();
@@ -410,8 +408,7 @@ export default function CreateCampaign() {
 
   useEffect(() => {
     if (!locationQuery && displayLocationLabel) setLocationQuery(displayLocationLabel);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayLocationLabel]);
+  }, [displayLocationLabel, locationQuery]);
 
   useEffect(() => {
     const onDown = (e: MouseEvent | TouchEvent) => {
@@ -552,8 +549,7 @@ export default function CreateCampaign() {
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, (data as any).selectedCity, (data as any).selectedState]);
+  }, [step, (data as any).selectedCity, (data as any).selectedState, locationLat, locationLon, hydratingMap, updateData]);
 
   const mapSrc = useMemo(() => {
     if (locationLat !== null && locationLon !== null) {
@@ -694,12 +690,23 @@ export default function CreateCampaign() {
   useEffect(() => {
     if (!profileOpen) return;
 
+    const previousOverflow = document.body.style.overflow;
+    const previousTouchAction = document.body.style.touchAction;
+
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeProfileModal();
     };
+
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.touchAction = previousTouchAction;
+      window.removeEventListener("keydown", onKey);
+    };
   }, [profileOpen]);
 
   const toggleSelectCreator = (id: string) => {
@@ -808,14 +815,12 @@ export default function CreateCampaign() {
   const [couponInput, setCouponInput] = useState<string>(String((data as any).couponInput || ""));
   useEffect(() => {
     updateData({ couponInput } as any);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [couponInput]);
+  }, [couponInput, updateData]);
 
   const [couponApplied, setCouponApplied] = useState<string>(String((data as any).couponApplied || ""));
   useEffect(() => {
     updateData({ couponApplied } as any);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [couponApplied]);
+  }, [couponApplied, updateData]);
 
   const hasCouponApplied = !!couponApplied.trim();
 
@@ -899,7 +904,6 @@ export default function CreateCampaign() {
       alive = false;
       clearTimeout(t);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     step,
     canStep4,
@@ -1940,22 +1944,33 @@ export default function CreateCampaign() {
       )}
 
       {profileOpen && profileCreatorId && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-          <div className="absolute inset-0 bg-black/60" onMouseDown={closeProfileModal} />
-          <div
-            className="relative w-full md:max-w-3xl h-[85vh] md:h-[80vh] rounded-t-3xl md:rounded-3xl border border-border/50 bg-background overflow-hidden"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between bg-background/80 backdrop-blur-xl">
-              <div className="text-sm font-semibold text-foreground">Perfil do creator</div>
-              <button type="button" onClick={closeProfileModal} className="p-2 rounded-xl hover:bg-white/5">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+        <div
+          className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeProfileModal();
+          }}
+        >
+          <div className="fixed inset-0 flex items-end justify-center md:items-center p-0 md:p-4">
+            <div
+              className="w-full md:max-w-3xl h-[92vh] md:h-[86vh] rounded-t-3xl md:rounded-3xl border border-border/50 bg-background shadow-2xl overflow-hidden flex flex-col"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between bg-background/80 backdrop-blur-xl shrink-0">
+                <div className="text-sm font-semibold text-foreground">Perfil do creator</div>
+                <button type="button" onClick={closeProfileModal} className="p-2 rounded-xl hover:bg-white/5">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-            <div className="h-full overflow-auto">
-              <PublicProfile key={profileCreatorId} idOverride={profileCreatorId} />
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+                <PublicProfile
+                  key={profileCreatorId}
+                  idOverride={profileCreatorId}
+                  embed
+                  onBack={closeProfileModal}
+                />
+              </div>
             </div>
           </div>
         </div>
