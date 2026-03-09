@@ -148,7 +148,7 @@ function StarPicker(props: {
             type="button"
             disabled={props.disabled}
             onClick={() => props.onChange(n)}
-            className={`text-3xl leading-none transition ${
+            className={`text-3xl transition ${
               active ? "text-yellow-400" : "text-white/20"
             } disabled:opacity-60`}
           >
@@ -157,6 +157,192 @@ function StarPicker(props: {
         );
       })}
     </div>
+  );
+}
+
+function ReviewActionCard(props: {
+  title: string;
+  subtitle: string;
+  imageUrl?: string | null;
+  fallbackName?: string | null;
+  buttonLabel: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.disabled ? undefined : props.onClick}
+      disabled={props.disabled}
+      className="w-full rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-left hover:bg-primary/15 transition disabled:opacity-60 disabled:hover:bg-primary/10"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-12 h-12 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center shrink-0">
+          {props.imageUrl ? (
+            <img
+              src={props.imageUrl}
+              alt={props.fallbackName || "Perfil"}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <span className="text-xs font-bold text-primary">
+              {initials(props.fallbackName)}
+            </span>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-foreground truncate">
+            {props.title}
+          </div>
+          <div className="text-xs text-muted-foreground truncate mt-0.5">
+            {props.subtitle}
+          </div>
+        </div>
+
+        <div className="shrink-0 text-primary">
+          <Star className="w-5 h-5" />
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-center gap-1 text-white/20">
+        <span className="text-2xl leading-none">★</span>
+        <span className="text-2xl leading-none">★</span>
+        <span className="text-2xl leading-none">★</span>
+        <span className="text-2xl leading-none">★</span>
+        <span className="text-2xl leading-none">★</span>
+      </div>
+
+      <div className="mt-3 text-center text-sm font-semibold text-primary">
+        {props.buttonLabel}
+      </div>
+    </button>
+  );
+}
+
+function ReviewModal(props: {
+  open: boolean;
+  name: string;
+  campaignTitle: string;
+  imageUrl?: string | null;
+  rating: number;
+  comment: string;
+  submitting?: boolean;
+  onClose: () => void;
+  onChangeRating: (value: number) => void;
+  onChangeComment: (value: string) => void;
+  onSubmit: () => void;
+}) {
+  if (!props.open) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[85] bg-black/60 backdrop-blur-sm"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) props.onClose();
+        }}
+      >
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 260, damping: 22 }}
+            className="w-full max-w-[520px] rounded-3xl border border-border/50 bg-background/95 shadow-2xl overflow-hidden"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 pt-5 pb-4 border-b border-border/40">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex items-start gap-3">
+                  <div className="w-14 h-14 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center shrink-0">
+                    {props.imageUrl ? (
+                      <img
+                        src={props.imageUrl}
+                        alt={props.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <span className="text-xs font-bold text-primary">
+                        {initials(props.name)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="text-xs text-muted-foreground uppercase tracking-widest">
+                      Avaliação
+                    </div>
+                    <div className="mt-1 text-lg font-bold text-foreground truncate">
+                      {props.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1 truncate">
+                      Campanha: {props.campaignTitle}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={props.onClose}
+                  className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 transition flex items-center justify-center text-muted-foreground hover:text-foreground shrink-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="px-5 py-5 space-y-5">
+              <div>
+                <div className="text-sm font-semibold text-foreground text-center mb-3">
+                  Nota de 1 a 5
+                </div>
+                <StarPicker
+                  value={props.rating}
+                  onChange={props.onChangeRating}
+                  disabled={props.submitting}
+                />
+              </div>
+
+              <div>
+                <div className="text-sm font-semibold text-foreground mb-2">
+                  Comentário
+                </div>
+                <textarea
+                  value={props.comment}
+                  onChange={(e) => props.onChangeComment(e.target.value)}
+                  disabled={props.submitting}
+                  rows={4}
+                  placeholder="Opcional"
+                  className="w-full rounded-2xl border border-border/50 bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-70"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={props.onSubmit}
+                disabled={props.submitting || props.rating < 1}
+                className="w-full min-h-[44px] rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {props.submitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Star className="w-4 h-4" />
+                )}
+                {props.submitting ? "Enviando..." : "Enviar avaliação"}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
@@ -181,10 +367,10 @@ export default function MyCampaigns() {
 
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewCampaignId, setReviewCampaignId] = useState<string | null>(null);
+  const [reviewCampaignTitle, setReviewCampaignTitle] = useState<string | null>(null);
   const [reviewBusinessId, setReviewBusinessId] = useState<string | null>(null);
   const [reviewBusinessName, setReviewBusinessName] = useState<string | null>(null);
   const [reviewBusinessLogoUrl, setReviewBusinessLogoUrl] = useState<string | null>(null);
-  const [reviewCampaignTitle, setReviewCampaignTitle] = useState<string | null>(null);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState("");
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
@@ -465,10 +651,10 @@ export default function MyCampaigns() {
     if (!row.campaign_id || !row.contractor_id) return;
 
     setReviewCampaignId(row.campaign_id);
+    setReviewCampaignTitle(row.title || "Campanha");
     setReviewBusinessId(row.contractor_id);
     setReviewBusinessName(row.contractor_name || "Marca");
     setReviewBusinessLogoUrl(row.contractor_logo_url || null);
-    setReviewCampaignTitle(row.title || "Campanha");
     setReviewRating(0);
     setReviewComment("");
     setReviewOpen(true);
@@ -478,10 +664,10 @@ export default function MyCampaigns() {
     if (reviewSubmitting) return;
     setReviewOpen(false);
     setReviewCampaignId(null);
+    setReviewCampaignTitle(null);
     setReviewBusinessId(null);
     setReviewBusinessName(null);
     setReviewBusinessLogoUrl(null);
-    setReviewCampaignTitle(null);
     setReviewRating(0);
     setReviewComment("");
   };
@@ -764,14 +950,14 @@ export default function MyCampaigns() {
                           </button>
 
                           {isApproved && !alreadyReviewed && (
-                            <button
-                              type="button"
+                            <ReviewActionCard
+                              title={r.contractor_name || "Marca"}
+                              subtitle={`Campanha: ${r.title || "Campanha"}`}
+                              imageUrl={r.contractor_logo_url || null}
+                              fallbackName={r.contractor_name || "Marca"}
+                              buttonLabel="Avaliar marca/negócio"
                               onClick={() => openReviewModal(r)}
-                              className="w-full min-h-[42px] py-2.5 rounded-2xl border border-primary/25 bg-primary/10 text-primary font-semibold text-sm flex items-center justify-center gap-2 hover:bg-primary/15 transition"
-                            >
-                              <Star className="w-4 h-4" />
-                              Avaliar marca/negócio
-                            </button>
+                            />
                           )}
 
                           {isApproved && alreadyReviewed && (
@@ -844,109 +1030,19 @@ export default function MyCampaigns() {
         </div>
       )}
 
-      <AnimatePresence>
-        {reviewOpen && reviewCampaignId && reviewBusinessId && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[85] bg-black/60 backdrop-blur-sm"
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) closeReviewModal();
-            }}
-          >
-            <div className="fixed inset-0 flex items-center justify-center p-4">
-              <motion.div
-                initial={{ opacity: 0, y: 16, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 16, scale: 0.98 }}
-                transition={{ type: "spring", stiffness: 260, damping: 22 }}
-                className="w-full max-w-[520px] rounded-3xl border border-border/50 bg-background/95 shadow-2xl overflow-hidden"
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                <div className="px-5 pt-5 pb-4 border-b border-border/40">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex items-start gap-3">
-                      <div className="w-14 h-14 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center shrink-0">
-                        {reviewBusinessLogoUrl ? (
-                          <img
-                            src={reviewBusinessLogoUrl}
-                            alt={reviewBusinessName || "Marca"}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <span className="text-xs font-bold text-primary">
-                            {initials(reviewBusinessName)}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="text-xs text-muted-foreground uppercase tracking-widest">
-                          Avaliação
-                        </div>
-                        <div className="mt-1 text-lg font-bold text-foreground truncate">
-                          {reviewBusinessName || "Marca"}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1 truncate">
-                          Campanha: {reviewCampaignTitle || "Campanha"}
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={closeReviewModal}
-                      className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 transition flex items-center justify-center text-muted-foreground hover:text-foreground shrink-0"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="px-5 py-5 space-y-5">
-                  <div>
-                    <div className="text-sm font-semibold text-foreground text-center mb-3">
-                      Nota de 1 a 5
-                    </div>
-                    <StarPicker
-                      value={reviewRating}
-                      onChange={setReviewRating}
-                      disabled={reviewSubmitting}
-                    />
-                  </div>
-
-                  <div>
-                    <div className="text-sm font-semibold text-foreground mb-2">
-                      Comentário
-                    </div>
-                    <textarea
-                      value={reviewComment}
-                      onChange={(e) => setReviewComment(e.target.value)}
-                      disabled={reviewSubmitting}
-                      rows={4}
-                      placeholder="Opcional"
-                      className="w-full rounded-2xl border border-border/50 bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-70"
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={submitReview}
-                    disabled={reviewSubmitting || reviewRating < 1}
-                    className="w-full min-h-[44px] rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue disabled:opacity-60 flex items-center justify-center gap-2"
-                  >
-                    {reviewSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4" />}
-                    {reviewSubmitting ? "Enviando..." : "Enviar avaliação"}
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <ReviewModal
+        open={reviewOpen && !!reviewCampaignId && !!reviewBusinessId}
+        name={reviewBusinessName || "Marca"}
+        campaignTitle={reviewCampaignTitle || "Campanha"}
+        imageUrl={reviewBusinessLogoUrl || null}
+        rating={reviewRating}
+        comment={reviewComment}
+        submitting={reviewSubmitting}
+        onClose={closeReviewModal}
+        onChangeRating={setReviewRating}
+        onChangeComment={setReviewComment}
+        onSubmit={submitReview}
+      />
 
       <AnimatePresence>
         {profileOpen && profileContractorId && (

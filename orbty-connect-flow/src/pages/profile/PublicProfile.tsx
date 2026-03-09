@@ -61,7 +61,7 @@ function openInstagram(handle?: string | null) {
       try {
         window.open(links.web, "_blank", "noopener,noreferrer");
       } catch {
-        //
+        // ignore
       }
     }, 450);
   }
@@ -364,6 +364,95 @@ function AgeBarsCard(props: { data: Record<string, number> | null; buckets: stri
   );
 }
 
+function ReviewActionCard(props: {
+  title: string;
+  subtitle: string;
+  imageUrl?: string | null;
+  fallbackName?: string | null;
+  buttonLabel: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.disabled ? undefined : props.onClick}
+      disabled={props.disabled}
+      className="w-full rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-left hover:bg-primary/15 transition disabled:opacity-60 disabled:hover:bg-primary/10"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-12 h-12 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center shrink-0">
+          {props.imageUrl ? (
+            <img
+              src={props.imageUrl}
+              alt={props.fallbackName || "Perfil"}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <span className="text-xs font-bold text-primary">
+              {initials(props.fallbackName)}
+            </span>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-foreground truncate">
+            {props.title}
+          </div>
+          <div className="text-xs text-muted-foreground truncate mt-0.5">
+            {props.subtitle}
+          </div>
+        </div>
+
+        <div className="shrink-0 text-primary">
+          <Star className="w-5 h-5" />
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-center gap-1 text-white/20">
+        <span className="text-2xl leading-none">★</span>
+        <span className="text-2xl leading-none">★</span>
+        <span className="text-2xl leading-none">★</span>
+        <span className="text-2xl leading-none">★</span>
+        <span className="text-2xl leading-none">★</span>
+      </div>
+
+      <div className="mt-3 text-center text-sm font-semibold text-primary">
+        {props.buttonLabel}
+      </div>
+    </button>
+  );
+}
+
+function StarPicker(props: {
+  value: number;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-center gap-2">
+      {[1, 2, 3, 4, 5].map((n) => {
+        const active = n <= props.value;
+        return (
+          <button
+            key={n}
+            type="button"
+            disabled={props.disabled}
+            onClick={() => props.onChange(n)}
+            className={`text-3xl transition ${
+              active ? "text-yellow-400" : "text-white/20"
+            } disabled:opacity-60`}
+          >
+            ★
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /* =========================
    Types
 ========================= */
@@ -423,9 +512,9 @@ type PublicContractorProfileRow = {
   address_zip: string | null;
 };
 
-type ReviewableBusinessCampaignRow = {
+type ReviewableCampaignRow = {
   campaign_id: string | null;
-  title?: string | null;
+  campaign_title?: string | null;
 };
 
 /* =========================
@@ -728,12 +817,13 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
 
         if (error) throw error;
 
-        const row = (Array.isArray(data) ? data[0] : data) as ReviewableBusinessCampaignRow | null;
+        const row = Array.isArray(data) ? data[0] : data;
+        const parsed = (row as ReviewableCampaignRow | null) ?? null;
 
         if (!alive) return;
 
-        setReviewableCampaignId(row?.campaign_id ? String(row.campaign_id) : null);
-        setReviewableCampaignTitle(row?.title ? String(row.title) : null);
+        setReviewableCampaignId(parsed?.campaign_id ? String(parsed.campaign_id) : null);
+        setReviewableCampaignTitle(parsed?.campaign_title ? String(parsed.campaign_title) : null);
       } catch (e) {
         console.error("CHECK_REVIEWABLE_BUSINESS_ERROR", e);
         if (!alive) return;
@@ -1099,51 +1189,14 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
                     <Loader2 className="w-5 h-5 text-primary animate-spin" />
                   </div>
                 ) : canReviewThisBusiness ? (
-                  <button
-                    type="button"
+                  <ReviewActionCard
+                    title={headerName}
+                    subtitle={`Campanha: ${reviewableCampaignTitle || "Campanha concluída"}`}
+                    imageUrl={org?.logo_url || null}
+                    fallbackName={headerName}
+                    buttonLabel="Avaliar marca/negócio"
                     onClick={openReviewModal}
-                    className="w-full rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-left hover:bg-primary/15 transition"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center shrink-0">
-                        {org?.logo_url ? (
-                          <img
-                            src={org.logo_url}
-                            alt={headerName}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <span className="text-xs font-bold text-primary">{initials(headerName)}</span>
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold text-foreground truncate">
-                          {headerName}
-                        </div>
-                        <div className="text-xs text-muted-foreground truncate mt-0.5">
-                          Campanha: {reviewableCampaignTitle || "Campanha concluída"}
-                        </div>
-                      </div>
-
-                      <div className="shrink-0 text-primary">
-                        <Star className="w-5 h-5" />
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-center gap-1 text-white/20">
-                      <span className="text-2xl leading-none">★</span>
-                      <span className="text-2xl leading-none">★</span>
-                      <span className="text-2xl leading-none">★</span>
-                      <span className="text-2xl leading-none">★</span>
-                      <span className="text-2xl leading-none">★</span>
-                    </div>
-
-                    <div className="mt-3 text-center text-sm font-semibold text-primary">
-                      Avaliar marca/negócio
-                    </div>
-                  </button>
+                  />
                 ) : (
                   <div className="text-center text-xs text-muted-foreground">
                     Você só pode avaliar esta marca após concluir uma campanha com ela.
@@ -1241,25 +1294,11 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
                     <div className="text-sm font-semibold text-foreground text-center mb-3">
                       Nota de 1 a 5
                     </div>
-
-                    <div className="flex items-center justify-center gap-2">
-                      {[1, 2, 3, 4, 5].map((n) => {
-                        const active = n <= reviewRating;
-                        return (
-                          <button
-                            key={n}
-                            type="button"
-                            disabled={reviewSubmitting}
-                            onClick={() => setReviewRating(n)}
-                            className={`text-3xl leading-none transition ${
-                              active ? "text-yellow-400" : "text-white/20"
-                            } disabled:opacity-60`}
-                          >
-                            ★
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <StarPicker
+                      value={reviewRating}
+                      onChange={setReviewRating}
+                      disabled={reviewSubmitting}
+                    />
                   </div>
 
                   <div>
