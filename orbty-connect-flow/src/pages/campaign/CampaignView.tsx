@@ -296,7 +296,8 @@ const CampaignView = () => {
       const next = t as TabKey;
       if (tab !== next) setTab(next);
     }
-  }, [location.search, tab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   useEffect(() => {
     const modalOpen = deliverableModalOpen || profileModalOpen;
@@ -541,7 +542,6 @@ const CampaignView = () => {
     if (!window.confirm("Confirmar entregas deste creator?\n\nUse apenas quando estiver tudo correto.")) return;
 
     setApprovingCreatorId(creatorId);
-
     try {
       const approvedAt = new Date().toISOString();
 
@@ -586,10 +586,7 @@ const CampaignView = () => {
 
       toast.success("Entregas confirmadas.");
 
-      setParticipants((prev) =>
-        prev.map((p) => (p.influencer_id === creatorId ? { ...p, status: "approved" } : p))
-      );
-
+      setParticipants((prev) => prev.map((p) => (p.influencer_id === creatorId ? { ...p, status: "approved" } : p)));
       setDeliverablesMap((prev) => ({
         ...prev,
         [creatorId]: {

@@ -14,13 +14,11 @@ import {
 } from "lucide-react";
 import CampaignFilesTab from "@/components/campaign/CampaignFilesTab";
 
-type DeliverablesStatus = "draft" | "submitted" | "approved" | "changes_requested";
-
 type DeliverablesRow = {
   id?: string;
   campaign_id: string;
   creator_id: string;
-  status: DeliverablesStatus;
+  status: "draft" | "submitted" | "approved" | "changes_requested";
   checklist: Record<string, boolean> | null;
   links: string[] | null;
   notes: string | null;
@@ -59,7 +57,7 @@ export default function CreatorDeliverablesPanel(props: {
   const [row, setRow] = useState<DeliverablesRow | null>(null);
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
   const [links, setLinks] = useState<string[]>([""]);
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState<string>("");
 
   const isApproved = row?.status === "approved";
   const isSubmitted = row?.status === "submitted";
@@ -77,17 +75,15 @@ export default function CreatorDeliverablesPanel(props: {
     return s;
   }, [row?.status]);
 
-  const getCreatorId = async () => {
-    const { data, error } = await supabase.auth.getUser();
-    if (error) throw error;
-    if (!data.user?.id) throw new Error("Usuário não autenticado.");
-    return data.user.id;
-  };
-
   const fetchRow = async () => {
     setLoading(true);
+
     try {
-      const creatorId = await getCreatorId();
+      const { data: auth } = await supabase.auth.getUser();
+
+      if (!auth.user) throw new Error("Usuário não autenticado.");
+
+      const creatorId = auth.user.id;
 
       const { data, error } = await supabase
         .from("campaign_creator_deliverables")
@@ -100,9 +96,10 @@ export default function CreatorDeliverablesPanel(props: {
 
       if (data) {
         const r = data as DeliverablesRow;
+
         setRow(r);
         setChecklist(r.checklist ?? {});
-        setLinks(Array.isArray(r.links) && r.links.length > 0 ? r.links : [""]);
+        setLinks(Array.isArray(r.links) && r.links.length ? r.links : [""]);
         setNotes(r.notes ?? "");
       } else {
         setRow(null);
@@ -113,7 +110,6 @@ export default function CreatorDeliverablesPanel(props: {
     } catch (e: any) {
       console.error("FETCH_DELIVERABLES_ERROR", e);
       toast.error(e?.message || "Erro ao carregar entregas.");
-      setRow(null);
     } finally {
       setLoading(false);
     }
@@ -125,7 +121,11 @@ export default function CreatorDeliverablesPanel(props: {
 
   const toggleChecklist = (key: string) => {
     if (!canEdit) return;
-    setChecklist((prev) => ({ ...prev, [key]: !prev[key] }));
+
+    setChecklist((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
   };
 
   const handleSaveDraft = async () => {
@@ -137,16 +137,18 @@ export default function CreatorDeliverablesPanel(props: {
     if (!canEdit) return;
 
     setSaving(true);
-    try {
-      const creatorId = await getCreatorId();
 
-      if (!row?.id) {
-        toast.error("Entrega base não encontrada para esta campanha.");
-        return;
-      }
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+
+      if (!auth.user) throw new Error("Usuário não autenticado.");
+
+      const creatorId = auth.user.id;
 
       const payload = {
-        status: "draft" as DeliverablesStatus,
+        campaign_id: props.campaignId,
+        creator_id: creatorId,
+        status: "draft" as const,
         checklist: checklist ?? {},
         links: normalizeLinks(links),
         notes: notes.trim() || null,
@@ -155,10 +157,7 @@ export default function CreatorDeliverablesPanel(props: {
 
       const { error } = await supabase
         .from("campaign_creator_deliverables")
-        .update(payload)
-        .eq("id", row.id)
-        .eq("campaign_id", props.campaignId)
-        .eq("creator_id", creatorId);
+        .upsert(payload, { onConflict: "campaign_id,creator_id" });
 
       if (error) throw error;
 
@@ -190,21 +189,19 @@ export default function CreatorDeliverablesPanel(props: {
       return;
     }
 
-    if (!window.confirm("Enviar entregas?\n\nApós enviar, ficará bloqueado até a confirmação do contratante.")) {
-      return;
-    }
-
     setSubmitting(true);
-    try {
-      const creatorId = await getCreatorId();
 
-      if (!row?.id) {
-        toast.error("Entrega base não encontrada para esta campanha.");
-        return;
-      }
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+
+      if (!auth.user) throw new Error("Usuário não autenticado.");
+
+      const creatorId = auth.user.id;
 
       const payload = {
-        status: "submitted" as DeliverablesStatus,
+        campaign_id: props.campaignId,
+        creator_id: creatorId,
+        status: "submitted" as const,
         checklist: checklist ?? {},
         links: normalizeLinks(links),
         notes: notes.trim() || null,
@@ -214,14 +211,11 @@ export default function CreatorDeliverablesPanel(props: {
 
       const { error } = await supabase
         .from("campaign_creator_deliverables")
-        .update(payload)
-        .eq("id", row.id)
-        .eq("campaign_id", props.campaignId)
-        .eq("creator_id", creatorId);
+        .upsert(payload, { onConflict: "campaign_id,creator_id" });
 
       if (error) throw error;
 
-      toast.success("Entregas enviadas! Agora aguarde a confirmação do contratante.");
+      toast.success("Entregas enviadas!");
       await fetchRow();
     } catch (e: any) {
       console.error("SUBMIT_DELIVERABLES_ERROR", e);
@@ -251,22 +245,6 @@ export default function CreatorDeliverablesPanel(props: {
     return (
       <div className="glass-card p-6 flex justify-center">
         <Loader2 className="w-6 h-6 text-primary animate-spin" />
-      </div>
-    );
-  }
-
-  if (!row) {
-    return (
-      <div className="glass-card p-5">
-        <div className="flex items-start gap-3">
-          <ShieldCheck className="w-4 h-4 text-muted-foreground mt-0.5" />
-          <div>
-            <div className="text-sm font-semibold text-foreground">Entregas</div>
-            <div className="mt-1 text-sm text-muted-foreground">
-              Registro de entrega ainda não foi criado para esta campanha.
-            </div>
-          </div>
-        </div>
       </div>
     );
   }
