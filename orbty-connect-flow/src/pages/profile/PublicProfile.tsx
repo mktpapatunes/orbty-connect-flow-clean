@@ -1,4 +1,3 @@
-// src/pages/profile/PublicProfile.tsx
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -62,7 +61,7 @@ function openInstagram(handle?: string | null) {
       try {
         window.open(links.web, "_blank", "noopener,noreferrer");
       } catch {
-        // ignore
+        //
       }
     }, 450);
   }
@@ -424,6 +423,11 @@ type PublicContractorProfileRow = {
   address_zip: string | null;
 };
 
+type ReviewableBusinessCampaignRow = {
+  campaign_id: string | null;
+  title?: string | null;
+};
+
 /* =========================
    Fetchers
 ========================= */
@@ -535,6 +539,7 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
   const [loadingAccepted, setLoadingAccepted] = useState(true);
 
   const [reviewableCampaignId, setReviewableCampaignId] = useState<string | null>(null);
+  const [reviewableCampaignTitle, setReviewableCampaignTitle] = useState<string | null>(null);
   const [checkingReviewable, setCheckingReviewable] = useState(false);
 
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -558,6 +563,7 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
     setLoadingAccepted(true);
 
     setReviewableCampaignId(null);
+    setReviewableCampaignTitle(null);
     setCheckingReviewable(false);
     setReviewOpen(false);
     setReviewRating(0);
@@ -707,6 +713,7 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
       if (!user || userRole !== "influencer" || role !== "contractor" || !profile?.id) {
         if (!alive) return;
         setReviewableCampaignId(null);
+        setReviewableCampaignTitle(null);
         setCheckingReviewable(false);
         return;
       }
@@ -721,14 +728,17 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
 
         if (error) throw error;
 
-        const row = Array.isArray(data) ? data[0] : data;
+        const row = (Array.isArray(data) ? data[0] : data) as ReviewableBusinessCampaignRow | null;
+
         if (!alive) return;
 
         setReviewableCampaignId(row?.campaign_id ? String(row.campaign_id) : null);
+        setReviewableCampaignTitle(row?.title ? String(row.title) : null);
       } catch (e) {
         console.error("CHECK_REVIEWABLE_BUSINESS_ERROR", e);
         if (!alive) return;
         setReviewableCampaignId(null);
+        setReviewableCampaignTitle(null);
       } finally {
         if (alive) setCheckingReviewable(false);
       }
@@ -896,6 +906,7 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
 
       toast.success("Avaliação enviada com sucesso.");
       setReviewableCampaignId(null);
+      setReviewableCampaignTitle(null);
       closeReviewModal();
     } catch (e: any) {
       console.error("SUBMIT_PUBLIC_BUSINESS_REVIEW_ERROR", e);
@@ -1091,10 +1102,47 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
                   <button
                     type="button"
                     onClick={openReviewModal}
-                    className="w-full min-h-[44px] rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue flex items-center justify-center gap-2"
+                    className="w-full rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-left hover:bg-primary/15 transition"
                   >
-                    <Star className="w-4 h-4" />
-                    Avaliar marca/negócio
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center shrink-0">
+                        {org?.logo_url ? (
+                          <img
+                            src={org.logo_url}
+                            alt={headerName}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <span className="text-xs font-bold text-primary">{initials(headerName)}</span>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold text-foreground truncate">
+                          {headerName}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate mt-0.5">
+                          Campanha: {reviewableCampaignTitle || "Campanha concluída"}
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 text-primary">
+                        <Star className="w-5 h-5" />
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-center gap-1 text-white/20">
+                      <span className="text-2xl leading-none">★</span>
+                      <span className="text-2xl leading-none">★</span>
+                      <span className="text-2xl leading-none">★</span>
+                      <span className="text-2xl leading-none">★</span>
+                      <span className="text-2xl leading-none">★</span>
+                    </div>
+
+                    <div className="mt-3 text-center text-sm font-semibold text-primary">
+                      Avaliar marca/negócio
+                    </div>
                   </button>
                 ) : (
                   <div className="text-center text-xs text-muted-foreground">
@@ -1151,12 +1199,30 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
               >
                 <div className="px-5 pt-5 pb-4 border-b border-border/40">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-xs text-muted-foreground uppercase tracking-widest">
-                        Avaliação
+                    <div className="min-w-0 flex items-start gap-3">
+                      <div className="w-14 h-14 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center shrink-0">
+                        {org?.logo_url ? (
+                          <img
+                            src={org.logo_url}
+                            alt={headerName}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <span className="text-xs font-bold text-primary">{initials(headerName)}</span>
+                        )}
                       </div>
-                      <div className="mt-1 text-lg font-bold text-foreground truncate">
-                        {headerName}
+
+                      <div className="min-w-0">
+                        <div className="text-xs text-muted-foreground uppercase tracking-widest">
+                          Avaliação
+                        </div>
+                        <div className="mt-1 text-lg font-bold text-foreground truncate">
+                          {headerName}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1 truncate">
+                          Campanha: {reviewableCampaignTitle || "Campanha concluída"}
+                        </div>
                       </div>
                     </div>
 
@@ -1185,7 +1251,7 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
                             type="button"
                             disabled={reviewSubmitting}
                             onClick={() => setReviewRating(n)}
-                            className={`text-3xl transition ${
+                            className={`text-3xl leading-none transition ${
                               active ? "text-yellow-400" : "text-white/20"
                             } disabled:opacity-60`}
                           >

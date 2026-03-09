@@ -148,7 +148,7 @@ function StarPicker(props: {
             type="button"
             disabled={props.disabled}
             onClick={() => props.onChange(n)}
-            className={`text-3xl transition ${
+            className={`text-3xl leading-none transition ${
               active ? "text-yellow-400" : "text-white/20"
             } disabled:opacity-60`}
           >
@@ -183,6 +183,8 @@ export default function MyCampaigns() {
   const [reviewCampaignId, setReviewCampaignId] = useState<string | null>(null);
   const [reviewBusinessId, setReviewBusinessId] = useState<string | null>(null);
   const [reviewBusinessName, setReviewBusinessName] = useState<string | null>(null);
+  const [reviewBusinessLogoUrl, setReviewBusinessLogoUrl] = useState<string | null>(null);
+  const [reviewCampaignTitle, setReviewCampaignTitle] = useState<string | null>(null);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState("");
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
@@ -465,6 +467,8 @@ export default function MyCampaigns() {
     setReviewCampaignId(row.campaign_id);
     setReviewBusinessId(row.contractor_id);
     setReviewBusinessName(row.contractor_name || "Marca");
+    setReviewBusinessLogoUrl(row.contractor_logo_url || null);
+    setReviewCampaignTitle(row.title || "Campanha");
     setReviewRating(0);
     setReviewComment("");
     setReviewOpen(true);
@@ -476,6 +480,8 @@ export default function MyCampaigns() {
     setReviewCampaignId(null);
     setReviewBusinessId(null);
     setReviewBusinessName(null);
+    setReviewBusinessLogoUrl(null);
+    setReviewCampaignTitle(null);
     setReviewRating(0);
     setReviewComment("");
   };
@@ -860,12 +866,33 @@ export default function MyCampaigns() {
               >
                 <div className="px-5 pt-5 pb-4 border-b border-border/40">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-xs text-muted-foreground uppercase tracking-widest">
-                        Avaliação
+                    <div className="min-w-0 flex items-start gap-3">
+                      <div className="w-14 h-14 rounded-2xl border border-border/50 bg-card/60 overflow-hidden flex items-center justify-center shrink-0">
+                        {reviewBusinessLogoUrl ? (
+                          <img
+                            src={reviewBusinessLogoUrl}
+                            alt={reviewBusinessName || "Marca"}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <span className="text-xs font-bold text-primary">
+                            {initials(reviewBusinessName)}
+                          </span>
+                        )}
                       </div>
-                      <div className="mt-1 text-lg font-bold text-foreground truncate">
-                        {reviewBusinessName || "Marca"}
+
+                      <div className="min-w-0">
+                        <div className="text-xs text-muted-foreground uppercase tracking-widest">
+                          Avaliação
+                        </div>
+                        <div className="mt-1 text-lg font-bold text-foreground truncate">
+                          {reviewBusinessName || "Marca"}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1 truncate">
+                          Campanha: {reviewCampaignTitle || "Campanha"}
+                        </div>
                       </div>
                     </div>
 
