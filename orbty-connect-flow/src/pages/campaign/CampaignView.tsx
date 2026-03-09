@@ -21,6 +21,7 @@ import {
   CheckSquare,
   Square,
   Target,
+  Star,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -248,6 +249,12 @@ const CampaignView = () => {
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileModalCreatorId, setProfileModalCreatorId] = useState<string | null>(null);
 
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewCreatorId, setReviewCreatorId] = useState<string | null>(null);
+  const [reviewRating, setReviewRating] = useState<number>(0);
+  const [reviewComment, setReviewComment] = useState<string>("");
+  const [reviewSaving, setReviewSaving] = useState(false);
+
   const isContractor = userRole === "contractor";
   const isInfluencer = userRole === "influencer";
 
@@ -299,7 +306,7 @@ const CampaignView = () => {
   }, [location.search, tab]);
 
   useEffect(() => {
-    const modalOpen = deliverableModalOpen || profileModalOpen;
+    const modalOpen = deliverableModalOpen || profileModalOpen || reviewModalOpen;
     if (!modalOpen) return;
 
     const previousHtmlOverflow = document.documentElement.style.overflow;
@@ -315,7 +322,7 @@ const CampaignView = () => {
       document.body.style.overflow = previousBodyOverflow;
       document.body.style.touchAction = previousBodyTouchAction;
     };
-  }, [deliverableModalOpen, profileModalOpen]);
+  }, [deliverableModalOpen, profileModalOpen, reviewModalOpen]);
 
   const openCreatorProfileModal = (creatorId: string) => {
     setProfileModalCreatorId(creatorId);
@@ -325,6 +332,74 @@ const CampaignView = () => {
   const closeCreatorProfileModal = () => {
     setProfileModalOpen(false);
     setProfileModalCreatorId(null);
+  };
+
+  const closeReviewModal = () => {
+    if (reviewSaving) return;
+    setReviewModalOpen(false);
+    setReviewCreatorId(null);
+    setReviewRating(0);
+    setReviewComment("");
+  };
+
+  const openReviewModalIfNeeded = async (creatorId: string) => {
+    if (!id || !user) return;
+
+    try {
+      const { data: existing, error } = await supabase
+        .from("campaign_reviews")
+        .select("id")
+        .eq("campaign_id", id)
+        .eq("influencer_id", creatorId)
+        .eq("business_id", user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("CHECK_EXISTING_REVIEW_ERROR", error);
+        return;
+      }
+
+      if (existing) return;
+
+      setReviewCreatorId(creatorId);
+      setReviewRating(0);
+      setReviewComment("");
+      setReviewModalOpen(true);
+    } catch (e) {
+      console.error("OPEN_REVIEW_MODAL_ERROR", e);
+    }
+  };
+
+  const submitReview = async () => {
+    if (!id || !user || !reviewCreatorId) return;
+
+    if (reviewRating < 1 || reviewRating > 5) {
+      toast.error("Selecione uma nota de 1 a 5.");
+      return;
+    }
+
+    setReviewSaving(true);
+    try {
+      const payload = {
+        campaign_id: id,
+        influencer_id: reviewCreatorId,
+        business_id: user.id,
+        rating: reviewRating,
+        comment: reviewComment.trim() || null,
+      };
+
+      const { error } = await supabase.from("campaign_reviews").insert(payload);
+
+      if (error) throw error;
+
+      toast.success("Avaliação enviada com sucesso.");
+      closeReviewModal();
+    } catch (e: any) {
+      console.error("SUBMIT_REVIEW_ERROR", e);
+      toast.error(e?.message || "Erro ao enviar avaliação.");
+    } finally {
+      setReviewSaving(false);
+    }
   };
 
   const confirmParticipation = useCallback(async () => {
@@ -594,6 +669,8 @@ const CampaignView = () => {
           updated_at: approvedAt,
         },
       }));
+
+      await openReviewModalIfNeeded(creatorId);
     } catch (e: any) {
       console.error("APPROVE_CREATOR_ERROR", e);
       toast.error(e?.message || "Erro ao confirmar entregas.");
@@ -672,6 +749,9 @@ const CampaignView = () => {
   const modalCreatorName = (modalCreatorProfile?.name || "Creator").trim();
   const modalCreatorIg = normalizeAt(modalCreatorProfile?.instagram) || null;
 
+  const reviewCreatorProfile = reviewCreatorId ? creatorProfiles[reviewCreatorId] : null;
+  const reviewCreatorName = (reviewCreatorProfile?.name || "Creator").trim();
+
   const normalizedLinks: string[] = (() => {
     const raw = deliverableModalRow?.links;
     if (!raw) return [];
@@ -694,12 +774,7 @@ const CampaignView = () => {
   const confirmedCreatorIds = creatorsToRender.filter((cid) => {
     const p = participants.find((x) => x.influencer_id === cid);
     if (!p) return true;
-
-    return (
-      p.status === "confirmed" ||
-      p.status === "delivered" ||
-      p.status === "approved"
-    );
+    return p.status === "confirmed" || p.status === "delivered" || p.status === "approved";
   });
 
   return (
@@ -841,12 +916,10 @@ const CampaignView = () => {
 
                         const p = participants.find((x) => x.influencer_id === creatorId);
                         const isApproved = p?.status === "approved";
-                        const isDelivered = p?.status === "delivered";
-
                         const hasDeliverables = !!deliverablesMap[creatorId];
                         const isBusy = approvingCreatorId === creatorId;
 
-                        const showDeliverablesDot = hasDeliverables && (isDelivered || !isApproved);
+                        const showDeliverablesDot = hasDeliverables && !isApproved;
 
                         return (
                           <div key={creatorId} className="rounded-2xl border border-border/50 bg-white/5 px-3 py-2.5">
@@ -1181,6 +1254,108 @@ const CampaignView = () => {
                       </div>
                     </div>
                   )}
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {reviewModalOpen && reviewCreatorId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[95] bg-black/60 backdrop-blur-sm"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) closeReviewModal();
+            }}
+          >
+            <div className="fixed inset-0 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                className="w-full max-w-[520px] rounded-3xl border border-border/50 bg-background/95 shadow-2xl overflow-hidden"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="px-5 pt-5 pb-4 border-b border-border/40">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs text-muted-foreground uppercase tracking-widest">Avaliação</div>
+                      <div className="mt-1 text-lg font-bold text-foreground truncate">{reviewCreatorName}</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Avalie este creator pela campanha concluída.
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={closeReviewModal}
+                      className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 transition flex items-center justify-center text-muted-foreground hover:text-foreground shrink-0"
+                      title="Fechar"
+                      type="button"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="px-5 py-5 space-y-5">
+                  <div>
+                    <div className="text-sm font-semibold text-foreground mb-3">Nota de 1 a 5</div>
+                    <div className="flex items-center gap-2">
+                      {[1, 2, 3, 4, 5].map((n) => {
+                        const active = n <= reviewRating;
+                        return (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setReviewRating(n)}
+                            className={`w-11 h-11 rounded-2xl border flex items-center justify-center transition ${
+                              active
+                                ? "border-yellow-400/40 bg-yellow-400/10 text-yellow-400"
+                                : "border-border/50 bg-card/60 text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            <Star className={`w-5 h-5 ${active ? "fill-yellow-400" : ""}`} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-semibold text-foreground mb-2">Comentário</div>
+                    <textarea
+                      value={reviewComment}
+                      onChange={(e) => setReviewComment(e.target.value)}
+                      rows={4}
+                      placeholder="Opcional"
+                      className="w-full rounded-2xl border border-border/50 bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={closeReviewModal}
+                      disabled={reviewSaving}
+                      className="flex-1 min-h-[44px] rounded-2xl border border-border/50 bg-card/60 text-muted-foreground font-semibold text-sm"
+                    >
+                      Agora não
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={submitReview}
+                      disabled={reviewSaving || reviewRating < 1}
+                      className="flex-1 min-h-[44px] rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue disabled:opacity-60"
+                    >
+                      {reviewSaving ? "Enviando..." : "Enviar avaliação"}
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             </div>
