@@ -2044,14 +2044,13 @@ export default function CreateCampaign() {
                 </p>
 
                 <div className="mt-6 space-y-3">
-  <button
-    type="button"
-    onClick={handleGoToMyCampaigns}
-    className="w-full min-h-[44px] rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue"
-  >
-    Ver campanhas
-  </button>
-</div>
+                  <button
+                    type="button"
+                    onClick={handleGoToMyCampaigns}
+                    className="w-full min-h-[44px] rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue"
+                  >
+                    Ver campanhas
+                  </button>
 
                   <button
                     type="button"
