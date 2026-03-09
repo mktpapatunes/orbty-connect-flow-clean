@@ -994,7 +994,7 @@ export default function CreateCampaign() {
 
   const handleGoToMyCampaigns = () => {
     setSuccessModalOpen(false);
-    navigate("/dashboard-contratante");
+    navigate("/campanha");
   };
 
   const onSimulateApproved = async () => {
@@ -2043,12 +2043,7 @@ export default function CreateCampaign() {
                   Sua campanha foi criada e o pagamento foi confirmado com sucesso.
                 </p>
 
-                const handleGoToMyCampaigns = () => {
-  setSuccessModalOpen(false);
-  navigate("/campanha");
-};
-
-<div className="mt-6 space-y-3">
+                <div className="mt-6 space-y-3">
   <button
     type="button"
     onClick={handleGoToMyCampaigns}
