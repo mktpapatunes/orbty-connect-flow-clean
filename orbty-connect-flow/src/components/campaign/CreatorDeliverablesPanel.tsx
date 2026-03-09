@@ -117,6 +117,7 @@ export default function CreatorDeliverablesPanel(props: {
 
   useEffect(() => {
     fetchRow();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.campaignId]);
 
   const toggleChecklist = (key: string) => {
@@ -189,6 +190,10 @@ export default function CreatorDeliverablesPanel(props: {
       return;
     }
 
+    if (!window.confirm("Enviar entregas?\n\nApós enviar, ficará bloqueado até a confirmação do contratante.")) {
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -197,6 +202,7 @@ export default function CreatorDeliverablesPanel(props: {
       if (!auth.user) throw new Error("Usuário não autenticado.");
 
       const creatorId = auth.user.id;
+      const submittedAt = new Date().toISOString();
 
       const payload = {
         campaign_id: props.campaignId,
@@ -205,17 +211,28 @@ export default function CreatorDeliverablesPanel(props: {
         checklist: checklist ?? {},
         links: normalizeLinks(links),
         notes: notes.trim() || null,
-        submitted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        submitted_at: submittedAt,
+        updated_at: submittedAt,
       };
 
-      const { error } = await supabase
+      const { error: deliverablesError } = await supabase
         .from("campaign_creator_deliverables")
         .upsert(payload, { onConflict: "campaign_id,creator_id" });
 
-      if (error) throw error;
+      if (deliverablesError) throw deliverablesError;
 
-      toast.success("Entregas enviadas!");
+      const { error: participantError } = await supabase
+        .from("campaign_participants")
+        .update({
+          status: "delivered",
+          delivered_at: submittedAt,
+        })
+        .eq("campaign_id", props.campaignId)
+        .eq("influencer_id", creatorId);
+
+      if (participantError) throw participantError;
+
+      toast.success("Entregas enviadas! Agora aguarde a confirmação do contratante.");
       await fetchRow();
     } catch (e: any) {
       console.error("SUBMIT_DELIVERABLES_ERROR", e);
