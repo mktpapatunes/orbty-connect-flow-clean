@@ -2043,14 +2043,20 @@ export default function CreateCampaign() {
                   Sua campanha foi criada e o pagamento foi confirmado com sucesso.
                 </p>
 
-                <div className="mt-6 space-y-3">
-                  <button
-                    type="button"
-                    onClick={handleGoToMyCampaigns}
-                    className="w-full min-h-[44px] rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue"
-                  >
-                    Ver campanhas
-                  </button>
+                const handleGoToMyCampaigns = () => {
+  setSuccessModalOpen(false);
+  navigate("/campanha");
+};
+
+<div className="mt-6 space-y-3">
+  <button
+    type="button"
+    onClick={handleGoToMyCampaigns}
+    className="w-full min-h-[44px] rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue"
+  >
+    Ver campanhas
+  </button>
+</div>
 
                   <button
                     type="button"
