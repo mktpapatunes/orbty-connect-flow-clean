@@ -630,6 +630,8 @@ const CampaignView = () => {
 
   const isInvitedInfluencer = isInfluencer && myParticipationStatus === "invited";
   const shouldShowInfluencerConfirmCta = isInvitedInfluencer;
+  const shouldShowRequirementsToInfluencer = isInfluencer;
+  const shouldShowCompensationToInfluencer = isInfluencer;
 
   const status = (campaign as any)?.status as string | null;
   const req = (((campaign as any)?.requirements as CampaignRequirements | null) ?? null);
@@ -902,40 +904,40 @@ const CampaignView = () => {
               </div>
             )}
 
-            {!isInvitedInfluencer && (
-              <>
-                {isContractor && !!briefPrivate && (
-                  <div className="glass-card p-4 border border-accent/15">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Sparkles className="w-4 h-4 text-accent" />
-                      <h4 className="font-semibold text-foreground text-sm">Briefing completo</h4>
-                    </div>
-                    <p className="text-sm text-foreground/75 leading-relaxed whitespace-pre-line">{briefPrivate}</p>
+            <>
+              {isContractor && !!briefPrivate && (
+                <div className="glass-card p-4 border border-accent/15">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="w-4 h-4 text-accent" />
+                    <h4 className="font-semibold text-foreground text-sm">Briefing completo</h4>
                   </div>
-                )}
+                  <p className="text-sm text-foreground/75 leading-relaxed whitespace-pre-line">{briefPrivate}</p>
+                </div>
+              )}
 
-                {isContractor && (
-                  <div className="glass-card p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Info className="w-4 h-4 text-primary" />
-                      <h4 className="font-semibold text-foreground text-sm">Detalhes definidos na criação</h4>
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-1 gap-2">
-                      <DetailRow label="Segmentos de conteúdo" value={renderSimpleValue(contentSegments)} />
-                      <DetailRow label="Creators necessários" value={renderSimpleValue(creatorsCount)} />
-                      <DetailRow label="Quantidade de posts" value={renderSimpleValue(deliverables?.posts)} />
-                      <DetailRow label="Formato do conteúdo" value={renderSimpleValue(deliverables?.format)} />
-                      <DetailRow label="Legenda" value={renderSimpleValue(deliverables?.caption)} />
-                      <DetailRow label="Hashtags" value={renderSimpleValue(deliverables?.hashtags)} />
-                      <DetailRow label="Menções" value={renderSimpleValue(deliverables?.mentions)} />
-                      <DetailRow label="Post em collab" value={renderSimpleValue(deliverables?.collab)} />
-                      <DetailRow label="Menções da collab" value={renderSimpleValue(deliverables?.collab_mentions)} />
-                    </div>
+              {(isContractor || shouldShowRequirementsToInfluencer) && (
+                <div className="glass-card p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Info className="w-4 h-4 text-primary" />
+                    <h4 className="font-semibold text-foreground text-sm">
+                      {isContractor ? "Detalhes definidos na criação" : "Requisitos da campanha"}
+                    </h4>
                   </div>
-                )}
-              </>
-            )}
+
+                  <div className="mt-3 grid grid-cols-1 gap-2">
+                    <DetailRow label="Segmentos de conteúdo" value={renderSimpleValue(contentSegments)} />
+                    <DetailRow label="Creators necessários" value={renderSimpleValue(creatorsCount)} />
+                    <DetailRow label="Quantidade de posts" value={renderSimpleValue(deliverables?.posts)} />
+                    <DetailRow label="Formato do conteúdo" value={renderSimpleValue(deliverables?.format)} />
+                    <DetailRow label="Legenda" value={renderSimpleValue(deliverables?.caption)} />
+                    <DetailRow label="Hashtags" value={renderSimpleValue(deliverables?.hashtags)} />
+                    <DetailRow label="Menções" value={renderSimpleValue(deliverables?.mentions)} />
+                    <DetailRow label="Post em collab" value={renderSimpleValue(deliverables?.collab)} />
+                    <DetailRow label="Menções da collab" value={renderSimpleValue(deliverables?.collab_mentions)} />
+                  </div>
+                </div>
+              )}
+            </>
 
             {isContractor && (
               <div className="glass-card p-4 border border-primary/15">
@@ -998,6 +1000,39 @@ const CampaignView = () => {
                 <div className="mt-3 text-[11px] text-muted-foreground flex items-start gap-2">
                   <ShieldCheck className="w-4 h-4 mt-0.5" />
                   <span>Valores e aprovações devem ser feitos com cuidado para evitar conflitos futuros com entregas e pagamentos.</span>
+                </div>
+              </div>
+            )}
+
+            {shouldShowCompensationToInfluencer && (
+              <div className="glass-card p-4 border border-primary/15">
+                <div className="flex items-center gap-2 mb-2">
+                  <Wallet className="w-4 h-4 text-primary" />
+                  <h4 className="font-semibold text-foreground text-sm">Sua remuneração nesta campanha</h4>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-border/50 bg-card/60 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor por creator</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">{formatMoneyBRL(pricing?.creator_fee ?? null)}</div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-card/60 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Posts por creator</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">{renderSimpleValue(pricing?.posts_count)}</div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-card/60 p-3 col-span-2">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor por post</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">{formatMoneyBRL(pricing?.price_per_post ?? null)}</div>
+                  </div>
+                </div>
+
+                <div className="mt-3 text-[11px] text-muted-foreground flex items-start gap-2">
+                  <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>
+                    Ao confirmar participação, você libera o restante do fluxo da campanha e pode seguir para entregas normalmente.
+                  </span>
                 </div>
               </div>
             )}
