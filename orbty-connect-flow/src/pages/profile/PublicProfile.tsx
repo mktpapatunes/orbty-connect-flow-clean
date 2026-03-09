@@ -1,4 +1,3 @@
-// src/pages/profile/PublicProfile.tsx
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
@@ -401,6 +400,26 @@ type OrgRow = {
   address_zip: string | null;
 };
 
+type PublicContractorProfileRow = {
+  profile_id: string | null;
+  profile_name: string | null;
+  approval_status: string | null;
+  organization_id: string | null;
+  organization_name: string | null;
+  region_city: string | null;
+  region_state: string | null;
+  business_category: string | null;
+  product_or_brand: string | null;
+  bio: string | null;
+  logo_url: string | null;
+  instagram: string | null;
+  website_url: string | null;
+  address_street: string | null;
+  address_number: string | null;
+  address_complement: string | null;
+  address_zip: string | null;
+};
+
 /* =========================
    Fetchers
 ========================= */
@@ -424,13 +443,15 @@ async function fetchProfileById(id: string): Promise<ProfileRow | null> {
   return (first.data as any) ?? null;
 }
 
-async function fetchOrgByOwnerProfile(profileId: string): Promise<OrgRow | null> {
-  const selectOrg =
-    "id, created_by, name, region_city, region_state, business_category, product_or_brand, bio, logo_url, instagram, website_url, address_street, address_number, address_complement, address_zip";
+async function fetchPublicContractorProfile(profileId: string): Promise<PublicContractorProfileRow | null> {
+  const { data, error } = await supabase.rpc("get_public_contractor_profile", {
+    p_profile_id: profileId,
+  });
 
-  const res = await supabase.from("organizations").select(selectOrg).eq("created_by", profileId).maybeSingle();
-  if (res.error) throw res.error;
-  return (res.data as any) ?? null;
+  if (error) throw error;
+
+  const row = Array.isArray(data) ? data[0] : data;
+  return (row as PublicContractorProfileRow) ?? null;
 }
 
 async function fetchInfluencerRating(profileId: string) {
@@ -554,22 +575,46 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
           return;
         }
 
-        const orgFromOwner = await fetchOrgByOwnerProfile(p.id);
-        if (!alive) return;
+        let contractorRpc: PublicContractorProfileRow | null = null;
 
-        const hasOrg = !!orgFromOwner?.id;
-        const roleFromProfile = String(p.desired_role ?? "").toLowerCase() === "contractor" ? "contractor" : "influencer";
-        const finalRole: "influencer" | "contractor" = hasOrg ? "contractor" : roleFromProfile;
+        try {
+          contractorRpc = await fetchPublicContractorProfile(p.id);
+        } catch (rpcError) {
+          console.error("PUBLIC_CONTRACTOR_PROFILE_RPC_ERROR", rpcError);
+        }
 
-        setProfile(p);
+        const hasOrg = !!contractorRpc?.organization_id;
+        const finalRole: "influencer" | "contractor" = hasOrg ? "contractor" : "influencer";
+
+        setProfile({
+          ...p,
+          approval_status: contractorRpc?.approval_status ?? p.approval_status ?? null,
+        });
+
         setRole(finalRole);
 
-        if (finalRole === "contractor") {
-          setOrg(orgFromOwner);
+        if (finalRole === "contractor" && contractorRpc) {
+          setOrg({
+            id: contractorRpc.organization_id || "",
+            created_by: contractorRpc.profile_id,
+            name: contractorRpc.organization_name,
+            region_city: contractorRpc.region_city,
+            region_state: contractorRpc.region_state,
+            business_category: contractorRpc.business_category,
+            product_or_brand: contractorRpc.product_or_brand,
+            bio: contractorRpc.bio,
+            logo_url: contractorRpc.logo_url,
+            instagram: contractorRpc.instagram,
+            website_url: contractorRpc.website_url,
+            address_street: contractorRpc.address_street,
+            address_number: contractorRpc.address_number,
+            address_complement: contractorRpc.address_complement,
+            address_zip: contractorRpc.address_zip,
+          });
 
           try {
-            if (orgFromOwner?.id) {
-              const rr = await fetchOrgRating(orgFromOwner.id);
+            if (contractorRpc.organization_id) {
+              const rr = await fetchOrgRating(contractorRpc.organization_id);
               if (!alive) return;
               setRatingAvg(rr.avg);
               setRatingCount(rr.count || null);
