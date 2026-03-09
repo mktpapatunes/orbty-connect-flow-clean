@@ -252,12 +252,6 @@ const CampaignView = () => {
   const isContractor = userRole === "contractor";
   const isInfluencer = userRole === "influencer";
 
-  const urlKind = (() => {
-    const sp = new URLSearchParams(location.search);
-    const k = sp.get("kind");
-    return isValidKind(k) ? (k as CampaignFileKind) : undefined;
-  })();
-
   const urlCreator = (() => {
     const sp = new URLSearchParams(location.search);
     const c = (sp.get("creator") || "").trim();
@@ -407,20 +401,6 @@ const CampaignView = () => {
         const pStatus = (cp.status as ParticipantStatus) || null;
         setMyParticipationStatus(pStatus);
 
-        if (pStatus && pStatus !== "invited") {
-          const { data: campaignData, error: campaignError } = await supabase
-            .from("campaigns")
-            .select("*")
-            .eq("id", id)
-            .neq("status", "deleted")
-            .maybeSingle();
-
-          if (campaignError) console.error("CAMPAIGNVIEW_INFLUENCER_FETCH_AFTER_CONFIRM_ERROR", campaignError);
-
-          setCampaign((campaignData ?? null) as unknown as PublicCampaignFeed);
-          return;
-        }
-
         const { data: campaignData, error: campaignError } = await supabase
           .from("campaigns")
           .select("*")
@@ -441,7 +421,7 @@ const CampaignView = () => {
     };
 
     fetchData();
-  }, [authReady, userRole, id, user, isContractor, isInfluencer]);
+  }, [authReady, userRole, id, user, isContractor]);
 
   useEffect(() => {
     const run = async () => {
@@ -599,7 +579,12 @@ const CampaignView = () => {
 
       toast.success("Entregas confirmadas.");
 
-      setParticipants((prev) => prev.map((p) => (p.influencer_id === creatorId ? { ...p, status: "approved" } : p)));
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.influencer_id === creatorId ? { ...p, status: "approved" } : p
+        )
+      );
+
       setDeliverablesMap((prev) => ({
         ...prev,
         [creatorId]: {
@@ -688,7 +673,9 @@ const CampaignView = () => {
     ? internal.selected_creator_ids.filter((x: any) => typeof x === "string" && x.trim().length > 0)
     : [];
 
-  const creatorsToRender = Array.from(new Set([...(selectedCreatorIds || []), ...(participants.map((p) => p.influencer_id) || [])]));
+  const creatorsToRender = Array.from(
+    new Set([...(selectedCreatorIds || []), ...(participants.map((p) => p.influencer_id) || [])])
+  );
 
   const modalCreatorProfile = deliverableModalCreatorId ? creatorProfiles[deliverableModalCreatorId] : null;
   const modalCreatorName = (modalCreatorProfile?.name || "Creator").trim();
@@ -716,7 +703,12 @@ const CampaignView = () => {
   const confirmedCreatorIds = creatorsToRender.filter((cid) => {
     const p = participants.find((x) => x.influencer_id === cid);
     if (!p) return true;
-    return p.status === "confirmed" || p.status === "approved";
+
+    return (
+      p.status === "confirmed" ||
+      p.status === "delivered" ||
+      p.status === "approved"
+    );
   });
 
   return (
@@ -858,11 +850,12 @@ const CampaignView = () => {
 
                         const p = participants.find((x) => x.influencer_id === creatorId);
                         const isApproved = p?.status === "approved";
+                        const isDelivered = p?.status === "delivered";
 
                         const hasDeliverables = !!deliverablesMap[creatorId];
                         const isBusy = approvingCreatorId === creatorId;
 
-                        const showDeliverablesDot = hasDeliverables && !isApproved;
+                        const showDeliverablesDot = (isDelivered || hasDeliverables) && !isApproved;
 
                         return (
                           <div key={creatorId} className="rounded-2xl border border-border/50 bg-white/5 px-3 py-2.5">
@@ -890,14 +883,14 @@ const CampaignView = () => {
                               <div className="flex items-center gap-2 shrink-0">
                                 <IconActionButton
                                   onClick={() => {
-                                    if (!hasDeliverables) {
+                                    if (!hasDeliverables && !isDelivered) {
                                       toast.message("Este creator ainda não enviou entregas.");
                                       return;
                                     }
                                     openDeliverablesModal(creatorId);
                                   }}
-                                  disabled={!hasDeliverables}
-                                  title={hasDeliverables ? "Ver entregas" : "Ainda sem entregas"}
+                                  disabled={!hasDeliverables && !isDelivered}
+                                  title={hasDeliverables || isDelivered ? "Ver entregas" : "Ainda sem entregas"}
                                   tone="default"
                                   showDot={showDeliverablesDot}
                                 >
