@@ -26,6 +26,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { PublicCampaignFeed } from "@/types/database";
 import CampaignFilesTab from "@/components/campaign/CampaignFilesTab";
+import CreatorDeliverablesPanel from "@/components/campaign/CreatorDeliverablesPanel";
 import PublicProfile from "@/pages/profile/PublicProfile";
 import { toast } from "sonner";
 import type { CampaignFileKind } from "@/services/campaignFiles";
@@ -407,7 +408,16 @@ const CampaignView = () => {
         setMyParticipationStatus(pStatus);
 
         if (pStatus && pStatus !== "invited") {
-          navigate(`/campanha-detalhe/${id}`, { replace: true });
+          const { data: campaignData, error: campaignError } = await supabase
+            .from("campaigns")
+            .select("*")
+            .eq("id", id)
+            .neq("status", "deleted")
+            .maybeSingle();
+
+          if (campaignError) console.error("CAMPAIGNVIEW_INFLUENCER_FETCH_AFTER_CONFIRM_ERROR", campaignError);
+
+          setCampaign((campaignData ?? null) as unknown as PublicCampaignFeed);
           return;
         }
 
@@ -431,7 +441,7 @@ const CampaignView = () => {
     };
 
     fetchData();
-  }, [authReady, userRole, id, user, isContractor, isInfluencer, navigate]);
+  }, [authReady, userRole, id, user, isContractor, isInfluencer]);
 
   useEffect(() => {
     const run = async () => {
@@ -577,13 +587,13 @@ const CampaignView = () => {
       }
 
       const { error: pErr } = await supabase
-  .from("campaign_participants")
-  .update({
-    status: "approved",
-    approved_at: approvedAt,
-  })
-  .eq("campaign_id", id)
-  .eq("influencer_id", creatorId);
+        .from("campaign_participants")
+        .update({
+          status: "approved",
+          approved_at: approvedAt,
+        })
+        .eq("campaign_id", id)
+        .eq("influencer_id", creatorId);
 
       if (pErr) throw pErr;
 
@@ -635,6 +645,12 @@ const CampaignView = () => {
   const shouldShowInfluencerConfirmCta = isInvitedInfluencer;
   const shouldShowRequirementsToInfluencer = isInfluencer;
   const shouldShowCompensationToInfluencer = isInfluencer;
+
+  const creatorAccepted =
+    isInfluencer &&
+    (myParticipationStatus === "confirmed" ||
+      myParticipationStatus === "delivered" ||
+      myParticipationStatus === "approved");
 
   const status = (campaign as any)?.status as string | null;
   const req = (((campaign as any)?.requirements as CampaignRequirements | null) ?? null);
@@ -1038,6 +1054,13 @@ const CampaignView = () => {
                   </span>
                 </div>
               </div>
+            )}
+
+            {isInfluencer && !isInvitedInfluencer && (
+              <CreatorDeliverablesPanel
+                campaignId={String(id)}
+                creatorAccepted={!!creatorAccepted}
+              />
             )}
           </>
         )}
