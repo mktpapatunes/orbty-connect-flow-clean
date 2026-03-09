@@ -577,10 +577,13 @@ const CampaignView = () => {
       }
 
       const { error: pErr } = await supabase
-        .from("campaign_participants")
-        .update({ status: "approved" })
-        .eq("campaign_id", id)
-        .eq("influencer_id", creatorId);
+  .from("campaign_participants")
+  .update({
+    status: "approved",
+    approved_at: approvedAt,
+  })
+  .eq("campaign_id", id)
+  .eq("influencer_id", creatorId);
 
       if (pErr) throw pErr;
 

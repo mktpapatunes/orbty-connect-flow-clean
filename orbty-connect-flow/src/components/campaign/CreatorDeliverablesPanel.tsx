@@ -145,6 +145,7 @@ export default function CreatorDeliverablesPanel(props: {
       if (!auth.user) throw new Error("Usuário não autenticado.");
 
       const creatorId = auth.user.id;
+      const updatedAt = new Date().toISOString();
 
       const payload = {
         campaign_id: props.campaignId,
@@ -153,7 +154,7 @@ export default function CreatorDeliverablesPanel(props: {
         checklist: checklist ?? {},
         links: normalizeLinks(links),
         notes: notes.trim() || null,
-        updated_at: new Date().toISOString(),
+        updated_at: updatedAt,
       };
 
       const { error } = await supabase
@@ -221,16 +222,21 @@ export default function CreatorDeliverablesPanel(props: {
 
       if (deliverablesError) throw deliverablesError;
 
-      const { error: participantError } = await supabase
+      const { data: participantRows, error: participantError } = await supabase
         .from("campaign_participants")
         .update({
           status: "delivered",
           delivered_at: submittedAt,
         })
         .eq("campaign_id", props.campaignId)
-        .eq("influencer_id", creatorId);
+        .eq("influencer_id", creatorId)
+        .select("campaign_id, influencer_id, status, delivered_at");
 
       if (participantError) throw participantError;
+
+      if (!participantRows || participantRows.length === 0) {
+        throw new Error("A participação não foi atualizada para entregue.");
+      }
 
       toast.success("Entregas enviadas! Agora aguarde a confirmação do contratante.");
       await fetchRow();
