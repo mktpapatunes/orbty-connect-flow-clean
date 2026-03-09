@@ -16,11 +16,10 @@ import {
   Zap,
   TrendingUp,
   MapPin,
-  Tag,
   Store,
   RefreshCw,
-  CheckCircle2,
   Building2,
+  ClipboardCheck,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -41,6 +40,13 @@ type BusinessInfo = {
   logo_url: string | null;
 };
 
+type CampaignParticipantStats = {
+  total: number;
+  confirmed: number;
+  delivered: number;
+  approved: number;
+};
+
 const ContractorCampaigns = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -56,6 +62,7 @@ const ContractorCampaigns = () => {
   });
 
   const [selectedCounts, setSelectedCounts] = useState<Record<string, number>>({});
+  const [participantStats, setParticipantStats] = useState<Record<string, CampaignParticipantStats>>({});
 
   const formatDateBR = (value?: string | null) => {
     if (!value) return "-";
@@ -201,11 +208,58 @@ const ContractorCampaigns = () => {
         return;
       }
 
-      console.warn(
-        "SELECTED_CREATORS_COUNT: não encontrei fonte acessível/compatível.",
-        { campaignIds: ids }
-      );
+      console.warn("SELECTED_CREATORS_COUNT: não encontrei fonte acessível/compatível.", { campaignIds: ids });
       setSelectedCounts({});
+    },
+    [user]
+  );
+
+  const fetchParticipantStats = useCallback(
+    async (rows: MyCampaignRow[]) => {
+      if (!user) return;
+
+      const ids = rows.map((c) => c.id).filter(Boolean);
+      if (ids.length === 0) {
+        setParticipantStats({});
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("campaign_participants")
+        .select("campaign_id,status")
+        .in("campaign_id", ids as any);
+
+      if (error) {
+        console.error("FETCH_PARTICIPANT_STATS_ERROR", error);
+        setParticipantStats({});
+        return;
+      }
+
+      const map: Record<string, CampaignParticipantStats> = {};
+
+      for (const row of data ?? []) {
+        const campaignId = String((row as any).campaign_id || "");
+        const status = String((row as any).status || "");
+
+        if (!campaignId) continue;
+
+        if (!map[campaignId]) {
+          map[campaignId] = {
+            total: 0,
+            confirmed: 0,
+            delivered: 0,
+            approved: 0,
+          };
+        }
+
+        map[campaignId].total += 1;
+
+        if (status === "confirmed") map[campaignId].confirmed += 1;
+        if (status === "delivered") map[campaignId].delivered += 1;
+        if (status === "approved") map[campaignId].approved += 1;
+      }
+
+      setParticipantStats(map);
     },
     [user]
   );
@@ -218,7 +272,8 @@ const ContractorCampaigns = () => {
   useEffect(() => {
     if (isLoading) return;
     fetchSelectedCreatorsCounts(campaigns);
-  }, [campaigns, fetchSelectedCreatorsCounts, isLoading]);
+    fetchParticipantStats(campaigns);
+  }, [campaigns, fetchSelectedCreatorsCounts, fetchParticipantStats, isLoading]);
 
   const runAction = async (campaignId: string, action: "complete" | "delete") => {
     if (action === "complete") {
@@ -332,7 +387,7 @@ const ContractorCampaigns = () => {
     return map[t] ?? t;
   };
 
-  const campaignVisualStatus = (c: MyCampaignRow) => {
+  const campaignVisualStatus = (c: MyCampaignRow, stats: CampaignParticipantStats | null) => {
     if (c.bucket === "completed") {
       return {
         label: "Concluída",
@@ -374,6 +429,43 @@ const ContractorCampaigns = () => {
         line: "bg-muted-foreground",
         Icon: Store,
         step: 1,
+      };
+    }
+
+    const deliveredCount = stats?.delivered ?? 0;
+    const approvedCount = stats?.approved ?? 0;
+    const totalCount = stats?.total ?? 0;
+
+    if (deliveredCount > 0) {
+      return {
+        label: "Aguardando confirmação",
+        helper: `Há ${deliveredCount} entrega(s) aguardando sua confirmação`,
+        chip: "border-warning/30 bg-warning/10 text-warning",
+        line: "bg-warning",
+        Icon: ClipboardCheck,
+        step: 3,
+      };
+    }
+
+    if (approvedCount > 0 && approvedCount < totalCount) {
+      return {
+        label: "Entregas parciais",
+        helper: `${approvedCount} creator(s) já confirmado(s)`,
+        chip: "border-warning/30 bg-warning/10 text-warning",
+        line: "bg-warning",
+        Icon: ClipboardCheck,
+        step: 3,
+      };
+    }
+
+    if (approvedCount > 0 && totalCount > 0) {
+      return {
+        label: "Pronta para concluir",
+        helper: "Todas as entregas foram confirmadas",
+        chip: "border-warning/30 bg-warning/10 text-warning",
+        line: "bg-warning",
+        Icon: ClipboardCheck,
+        step: 3,
       };
     }
 
@@ -487,8 +579,9 @@ const ContractorCampaigns = () => {
                       ? `${campaign.city}, ${campaign.state}`
                       : `${campaign.city || ""}${campaign.state ? `, ${campaign.state}` : ""}`.trim();
 
-                  const selected = selectedCounts[campaign.id] ?? 0;
-                  const ui = campaignVisualStatus(campaign);
+                  const statsForCampaign = participantStats[campaign.id] ?? null;
+                  const selected = statsForCampaign?.total ?? selectedCounts[campaign.id] ?? 0;
+                  const ui = campaignVisualStatus(campaign, statsForCampaign);
 
                   return (
                     <motion.div
