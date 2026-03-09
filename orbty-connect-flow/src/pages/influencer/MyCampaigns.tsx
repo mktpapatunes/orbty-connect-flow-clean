@@ -18,6 +18,7 @@ import {
   Eye,
   Sparkles,
   Building2,
+  Star,
 } from "lucide-react";
 
 type ParticipantStatus = "invited" | "confirmed" | "delivered" | "approved";
@@ -132,6 +133,33 @@ function StatusRail({ status }: { status: ParticipantStatus }) {
   );
 }
 
+function StarPicker(props: {
+  value: number;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-center gap-2">
+      {[1, 2, 3, 4, 5].map((n) => {
+        const active = n <= props.value;
+        return (
+          <button
+            key={n}
+            type="button"
+            disabled={props.disabled}
+            onClick={() => props.onChange(n)}
+            className={`text-3xl transition ${
+              active ? "text-yellow-400" : "text-white/20"
+            } disabled:opacity-60`}
+          >
+            ★
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function MyCampaigns() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -151,6 +179,15 @@ export default function MyCampaigns() {
   const [profileContractorName, setProfileContractorName] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
 
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewCampaignId, setReviewCampaignId] = useState<string | null>(null);
+  const [reviewBusinessId, setReviewBusinessId] = useState<string | null>(null);
+  const [reviewBusinessName, setReviewBusinessName] = useState<string | null>(null);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewedMap, setReviewedMap] = useState<Record<string, boolean>>({});
+
   async function refetch() {
     if (!user) return;
     setIsLoading(true);
@@ -168,6 +205,42 @@ export default function MyCampaigns() {
     setIsLoading(false);
   }
 
+  async function fetchReviewedMap(list: MyCampaignRow[]) {
+    if (!user) return;
+
+    const approvedRows = list.filter(
+      (r) => r.participant_status === "approved" && r.contractor_id && r.campaign_id
+    );
+
+    if (approvedRows.length === 0) {
+      setReviewedMap({});
+      return;
+    }
+
+    const campaignIds = approvedRows.map((r) => r.campaign_id);
+
+    const { data, error } = await supabase
+      .from("campaign_reviews")
+      .select("campaign_id")
+      .eq("influencer_id", user.id)
+      .eq("reviewer_role", "influencer")
+      .in("campaign_id", campaignIds);
+
+    if (error) {
+      console.error("FETCH_INFLUENCER_REVIEWED_MAP_ERROR", error);
+      setReviewedMap({});
+      return;
+    }
+
+    const map: Record<string, boolean> = {};
+    for (const row of data || []) {
+      const id = String((row as any).campaign_id || "");
+      if (id) map[id] = true;
+    }
+
+    setReviewedMap(map);
+  }
+
   useEffect(() => {
     if (!user) {
       setIsLoading(false);
@@ -178,7 +251,12 @@ export default function MyCampaigns() {
   }, [user]);
 
   useEffect(() => {
-    const modalOpen = profileOpen || declineModalOpen;
+    fetchReviewedMap(rows);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, user]);
+
+  useEffect(() => {
+    const modalOpen = profileOpen || declineModalOpen || reviewOpen;
     if (!modalOpen) return;
 
     const prevHtmlOverflow = document.documentElement.style.overflow;
@@ -194,7 +272,7 @@ export default function MyCampaigns() {
       document.body.style.overflow = prevBodyOverflow;
       document.body.style.touchAction = prevBodyTouchAction;
     };
-  }, [profileOpen, declineModalOpen]);
+  }, [profileOpen, declineModalOpen, reviewOpen]);
 
   const counts = useMemo(() => {
     const invited = rows.filter((r) => r.participant_status === "invited").length;
@@ -381,6 +459,59 @@ export default function MyCampaigns() {
     await refetch();
   };
 
+  const openReviewModal = (row: MyCampaignRow) => {
+    if (!row.campaign_id || !row.contractor_id) return;
+
+    setReviewCampaignId(row.campaign_id);
+    setReviewBusinessId(row.contractor_id);
+    setReviewBusinessName(row.contractor_name || "Marca");
+    setReviewRating(0);
+    setReviewComment("");
+    setReviewOpen(true);
+  };
+
+  const closeReviewModal = () => {
+    if (reviewSubmitting) return;
+    setReviewOpen(false);
+    setReviewCampaignId(null);
+    setReviewBusinessId(null);
+    setReviewBusinessName(null);
+    setReviewRating(0);
+    setReviewComment("");
+  };
+
+  const submitReview = async () => {
+    if (!user || !reviewCampaignId || !reviewBusinessId) return;
+
+    if (reviewRating < 1 || reviewRating > 5) {
+      toast.error("Escolha uma nota de 1 a 5.");
+      return;
+    }
+
+    setReviewSubmitting(true);
+    try {
+      const { error } = await supabase.from("campaign_reviews").insert({
+        campaign_id: reviewCampaignId,
+        influencer_id: user.id,
+        business_id: reviewBusinessId,
+        reviewer_role: "influencer",
+        rating: reviewRating,
+        comment: reviewComment.trim() || null,
+      });
+
+      if (error) throw error;
+
+      toast.success("Avaliação enviada com sucesso.");
+      setReviewedMap((prev) => ({ ...prev, [reviewCampaignId]: true }));
+      closeReviewModal();
+    } catch (e: any) {
+      console.error("SUBMIT_INFLUENCER_REVIEW_ERROR", e);
+      toast.error(e?.message || "Erro ao enviar avaliação.");
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
   return (
     <MobileLayout title="Minhas campanhas" navType="influencer">
       <div className="px-6 py-6 space-y-6">
@@ -451,6 +582,7 @@ export default function MyCampaigns() {
               const isConfirmingThis = confirmingId === r.campaign_id;
               const isDelivered = r.participant_status === "delivered";
               const isApproved = r.participant_status === "approved";
+              const alreadyReviewed = !!reviewedMap[r.campaign_id];
 
               return (
                 <motion.div
@@ -606,23 +738,43 @@ export default function MyCampaigns() {
                           </div>
                         </>
                       ) : (
-                        <button
-                          onClick={() => handleOpenDetails(r)}
-                          className={`w-full min-h-[42px] py-2.5 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition ${
-                            isDelivered
-                              ? "border border-warning/25 bg-warning/10 text-warning hover:bg-warning/15"
+                        <>
+                          <button
+                            onClick={() => handleOpenDetails(r)}
+                            className={`w-full min-h-[42px] py-2.5 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition ${
+                              isDelivered
+                                ? "border border-warning/25 bg-warning/10 text-warning hover:bg-warning/15"
+                                : isApproved
+                                  ? "border border-accent/25 bg-accent/10 text-accent hover:bg-accent/15"
+                                  : "border border-accent/30 bg-accent/5 text-accent hover:bg-accent/10"
+                            }`}
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            {isDelivered
+                              ? "Ver entrega enviada"
                               : isApproved
-                                ? "border border-accent/25 bg-accent/10 text-accent hover:bg-accent/15"
-                                : "border border-accent/30 bg-accent/5 text-accent hover:bg-accent/10"
-                          }`}
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                          {isDelivered
-                            ? "Ver entrega enviada"
-                            : isApproved
-                              ? "Ver campanha concluída"
-                              : "Ver detalhes da campanha"}
-                        </button>
+                                ? "Ver campanha concluída"
+                                : "Ver detalhes da campanha"}
+                          </button>
+
+                          {isApproved && !alreadyReviewed && (
+                            <button
+                              type="button"
+                              onClick={() => openReviewModal(r)}
+                              className="w-full min-h-[42px] py-2.5 rounded-2xl border border-primary/25 bg-primary/10 text-primary font-semibold text-sm flex items-center justify-center gap-2 hover:bg-primary/15 transition"
+                            >
+                              <Star className="w-4 h-4" />
+                              Avaliar marca/negócio
+                            </button>
+                          )}
+
+                          {isApproved && alreadyReviewed && (
+                            <div className="w-full min-h-[42px] py-2.5 rounded-2xl border border-border/50 bg-card/60 text-muted-foreground font-semibold text-sm flex items-center justify-center gap-2">
+                              <BadgeCheck className="w-4 h-4" />
+                              Marca já avaliada nesta campanha
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -685,6 +837,89 @@ export default function MyCampaigns() {
           </div>
         </div>
       )}
+
+      <AnimatePresence>
+        {reviewOpen && reviewCampaignId && reviewBusinessId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[85] bg-black/60 backdrop-blur-sm"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) closeReviewModal();
+            }}
+          >
+            <div className="fixed inset-0 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                className="w-full max-w-[520px] rounded-3xl border border-border/50 bg-background/95 shadow-2xl overflow-hidden"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="px-5 pt-5 pb-4 border-b border-border/40">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs text-muted-foreground uppercase tracking-widest">
+                        Avaliação
+                      </div>
+                      <div className="mt-1 text-lg font-bold text-foreground truncate">
+                        {reviewBusinessName || "Marca"}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={closeReviewModal}
+                      className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 transition flex items-center justify-center text-muted-foreground hover:text-foreground shrink-0"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="px-5 py-5 space-y-5">
+                  <div>
+                    <div className="text-sm font-semibold text-foreground text-center mb-3">
+                      Nota de 1 a 5
+                    </div>
+                    <StarPicker
+                      value={reviewRating}
+                      onChange={setReviewRating}
+                      disabled={reviewSubmitting}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-semibold text-foreground mb-2">
+                      Comentário
+                    </div>
+                    <textarea
+                      value={reviewComment}
+                      onChange={(e) => setReviewComment(e.target.value)}
+                      disabled={reviewSubmitting}
+                      rows={4}
+                      placeholder="Opcional"
+                      className="w-full rounded-2xl border border-border/50 bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-70"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={submitReview}
+                    disabled={reviewSubmitting || reviewRating < 1}
+                    className="w-full min-h-[44px] rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue disabled:opacity-60 flex items-center justify-center gap-2"
+                  >
+                    {reviewSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4" />}
+                    {reviewSubmitting ? "Enviando..." : "Enviar avaliação"}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {profileOpen && profileContractorId && (

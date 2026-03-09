@@ -1,5 +1,7 @@
+// src/pages/profile/PublicProfile.tsx
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import MobileLayout from "@/components/MobileLayout";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,8 +21,13 @@ import {
   Home,
   Globe,
   Package,
+  Star,
+  X,
 } from "lucide-react";
-import RateCreatorModal from "@/components/reviews/RateCreatorModal";
+
+/* =========================
+   Helpers
+========================= */
 
 function clamp(n: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, n));
@@ -103,6 +110,10 @@ function formatIGCount(input: number | null | undefined) {
   }
   return `${Math.floor(m)}M`;
 }
+
+/* =========================
+   UI blocks
+========================= */
 
 function SkeletonLine({ w = "100%", h = 12 }: { w?: string; h?: number }) {
   return <div className="animate-pulse rounded-xl bg-white/10" style={{ width: w, height: h }} />;
@@ -354,6 +365,10 @@ function AgeBarsCard(props: { data: Record<string, number> | null; buckets: stri
   );
 }
 
+/* =========================
+   Types
+========================= */
+
 type ProfileRow = {
   id: string;
   name: string | null;
@@ -408,6 +423,10 @@ type PublicContractorProfileRow = {
   address_complement: string | null;
   address_zip: string | null;
 };
+
+/* =========================
+   Fetchers
+========================= */
 
 async function fetchProfileById(id: string): Promise<ProfileRow | null> {
   const selectFull =
@@ -478,6 +497,10 @@ async function fetchInfluencerAcceptedCount(profileId: string) {
   return Number.isFinite(cnt) ? cnt : 0;
 }
 
+/* =========================
+   Page
+========================= */
+
 const AGE_BARS_BUCKETS = ["18-24", "25-34", "35-44", "45-54", "55-64"] as const;
 
 type PublicProfileProps = {
@@ -490,7 +513,7 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
   const params = useParams<{ id: string }>();
   const id = idOverride ?? params.id;
   const navigate = useNavigate();
-  const { userRole } = useAuth();
+  const { user, userRole } = useAuth();
 
   const [searchParams] = useSearchParams();
   const isEmbed = embed || searchParams.get("embed") === "1";
@@ -511,7 +534,13 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
   const [acceptedCount, setAcceptedCount] = useState(0);
   const [loadingAccepted, setLoadingAccepted] = useState(true);
 
-  const [rateModalOpen, setRateModalOpen] = useState(false);
+  const [reviewableCampaignId, setReviewableCampaignId] = useState<string | null>(null);
+  const [checkingReviewable, setCheckingReviewable] = useState(false);
+
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
 
   useLayoutEffect(() => {
     setLoadedId(null);
@@ -527,6 +556,13 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
 
     setAcceptedCount(0);
     setLoadingAccepted(true);
+
+    setReviewableCampaignId(null);
+    setCheckingReviewable(false);
+    setReviewOpen(false);
+    setReviewRating(0);
+    setReviewComment("");
+    setReviewSubmitting(false);
   }, [id]);
 
   useEffect(() => {
@@ -664,6 +700,45 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
     };
   }, [id]);
 
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      if (!user || userRole !== "influencer" || role !== "contractor" || !profile?.id) {
+        if (!alive) return;
+        setReviewableCampaignId(null);
+        setCheckingReviewable(false);
+        return;
+      }
+
+      setCheckingReviewable(true);
+
+      try {
+        const { data, error } = await supabase.rpc(
+          "get_influencer_reviewable_campaign_with_business",
+          { p_business_id: profile.id }
+        );
+
+        if (error) throw error;
+
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!alive) return;
+
+        setReviewableCampaignId(row?.campaign_id ? String(row.campaign_id) : null);
+      } catch (e) {
+        console.error("CHECK_REVIEWABLE_BUSINESS_ERROR", e);
+        if (!alive) return;
+        setReviewableCampaignId(null);
+      } finally {
+        if (alive) setCheckingReviewable(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [user, userRole, role, profile?.id]);
+
   const isVerified = useMemo(() => String((profile as any)?.approval_status ?? "").toLowerCase() === "approved", [profile]);
 
   const headerName = useMemo(() => {
@@ -769,10 +844,12 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
 
   const ready = !!id && loadedId === id && !loading;
 
-  const canContractorRateThisCreator =
-    role === "influencer" &&
-    userRole === "contractor" &&
-    !!profile?.id;
+  const canReviewThisBusiness =
+    userRole === "influencer" &&
+    role === "contractor" &&
+    !!user &&
+    !!profile?.id &&
+    !!reviewableCampaignId;
 
   const handleBack = () => {
     if (onBack) {
@@ -780,6 +857,52 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
       return;
     }
     navigate(-1);
+  };
+
+  const openReviewModal = () => {
+    if (!canReviewThisBusiness) return;
+    setReviewRating(0);
+    setReviewComment("");
+    setReviewOpen(true);
+  };
+
+  const closeReviewModal = () => {
+    if (reviewSubmitting) return;
+    setReviewOpen(false);
+    setReviewRating(0);
+    setReviewComment("");
+  };
+
+  const submitBusinessReview = async () => {
+    if (!user || !profile?.id || !reviewableCampaignId) return;
+
+    if (reviewRating < 1 || reviewRating > 5) {
+      toast.error("Escolha uma nota de 1 a 5.");
+      return;
+    }
+
+    setReviewSubmitting(true);
+    try {
+      const { error } = await supabase.from("campaign_reviews").insert({
+        campaign_id: reviewableCampaignId,
+        influencer_id: user.id,
+        business_id: profile.id,
+        reviewer_role: "influencer",
+        rating: reviewRating,
+        comment: reviewComment.trim() || null,
+      });
+
+      if (error) throw error;
+
+      toast.success("Avaliação enviada com sucesso.");
+      setReviewableCampaignId(null);
+      closeReviewModal();
+    } catch (e: any) {
+      console.error("SUBMIT_PUBLIC_BUSINESS_REVIEW_ERROR", e);
+      toast.error(e?.message || "Erro ao enviar avaliação.");
+    } finally {
+      setReviewSubmitting(false);
+    }
   };
 
   const pageContent = (
@@ -953,26 +1076,34 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
 
           <RatingsCard rating={ratingAvg} count={ratingCount} loading={loadingRatings} />
 
-          {canContractorRateThisCreator ? (
+          {role === "contractor" && userRole === "influencer" && (
             <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-foreground">Avaliar creator</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Disponível para campanhas concluídas entre sua marca e este creator.
-                  </div>
-                </div>
+              <div className="text-sm font-semibold text-foreground text-center">
+                Sua avaliação desta marca
+              </div>
 
-                <button
-                  type="button"
-                  onClick={() => setRateModalOpen(true)}
-                  className="rounded-2xl bg-gradient-neon text-primary-foreground px-4 py-2 text-xs font-semibold"
-                >
-                  Avaliar
-                </button>
+              <div className="mt-3">
+                {checkingReviewable ? (
+                  <div className="flex justify-center py-2">
+                    <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                  </div>
+                ) : canReviewThisBusiness ? (
+                  <button
+                    type="button"
+                    onClick={openReviewModal}
+                    className="w-full min-h-[44px] rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue flex items-center justify-center gap-2"
+                  >
+                    <Star className="w-4 h-4" />
+                    Avaliar marca/negócio
+                  </button>
+                ) : (
+                  <div className="text-center text-xs text-muted-foreground">
+                    Você só pode avaliar esta marca após concluir uma campanha com ela.
+                  </div>
+                )}
               </div>
             </div>
-          ) : null}
+          )}
 
           {role === "influencer" ? (
             <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
@@ -998,23 +1129,102 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
         </>
       )}
 
-      <RateCreatorModal
-        open={rateModalOpen}
-        onClose={() => setRateModalOpen(false)}
-        influencerId={profile?.id || ""}
-        influencerName={profile?.name || "Creator"}
-        onSubmitted={async () => {
-          if (profile?.id) {
-            try {
-              const rr = await fetchInfluencerRating(profile.id);
-              setRatingAvg(rr.avg);
-              setRatingCount(rr.count || null);
-            } catch {
-              // ignore
-            }
-          }
-        }}
-      />
+      <AnimatePresence>
+        {reviewOpen && role === "contractor" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[95] bg-black/60 backdrop-blur-sm"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) closeReviewModal();
+            }}
+          >
+            <div className="fixed inset-0 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                className="w-full max-w-[520px] rounded-3xl border border-border/50 bg-background/95 shadow-2xl overflow-hidden"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="px-5 pt-5 pb-4 border-b border-border/40">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs text-muted-foreground uppercase tracking-widest">
+                        Avaliação
+                      </div>
+                      <div className="mt-1 text-lg font-bold text-foreground truncate">
+                        {headerName}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={closeReviewModal}
+                      className="w-10 h-10 rounded-2xl border border-border/50 bg-card/60 hover:bg-card/80 transition flex items-center justify-center text-muted-foreground hover:text-foreground shrink-0"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="px-5 py-5 space-y-5">
+                  <div>
+                    <div className="text-sm font-semibold text-foreground text-center mb-3">
+                      Nota de 1 a 5
+                    </div>
+
+                    <div className="flex items-center justify-center gap-2">
+                      {[1, 2, 3, 4, 5].map((n) => {
+                        const active = n <= reviewRating;
+                        return (
+                          <button
+                            key={n}
+                            type="button"
+                            disabled={reviewSubmitting}
+                            onClick={() => setReviewRating(n)}
+                            className={`text-3xl transition ${
+                              active ? "text-yellow-400" : "text-white/20"
+                            } disabled:opacity-60`}
+                          >
+                            ★
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-semibold text-foreground mb-2">
+                      Comentário
+                    </div>
+                    <textarea
+                      value={reviewComment}
+                      onChange={(e) => setReviewComment(e.target.value)}
+                      disabled={reviewSubmitting}
+                      rows={4}
+                      placeholder="Opcional"
+                      className="w-full rounded-2xl border border-border/50 bg-card/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-70"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={submitBusinessReview}
+                    disabled={reviewSubmitting || reviewRating < 1}
+                    className="w-full min-h-[44px] rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue disabled:opacity-60 flex items-center justify-center gap-2"
+                  >
+                    {reviewSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4" />}
+                    {reviewSubmitting ? "Enviando..." : "Enviar avaliação"}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 
