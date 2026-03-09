@@ -270,6 +270,7 @@ export default function CreateCampaign() {
 
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -991,6 +992,11 @@ export default function CreateCampaign() {
 
   const canSimulatePay = !!user && canGoPayment && quote?.ok && quoteTotal !== null && quoteTotal > 0;
 
+  const handleGoToMyCampaigns = () => {
+    setSuccessModalOpen(false);
+    navigate("/dashboard-contratante");
+  };
+
   const onSimulateApproved = async () => {
     if (!user || !canSimulatePay) return;
     if (isSubmitting) return;
@@ -1118,7 +1124,7 @@ export default function CreateCampaign() {
         // ignore
       }
 
-      navigate("/dashboard-contratante");
+      setSuccessModalOpen(true);
     } catch (error: any) {
       console.error("PAYMENT_STEP_EXCEPTION", error);
       toast.error(error?.message || "Erro ao processar o pagamento.");
@@ -2005,6 +2011,55 @@ export default function CreateCampaign() {
                   embed
                   onBack={closeProfileModal}
                 />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {successModalOpen && (
+        <div
+          className="fixed inset-0 z-[95] bg-black/60 backdrop-blur-sm"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setSuccessModalOpen(false);
+          }}
+        >
+          <div className="fixed inset-0 flex items-center justify-center p-4">
+            <div
+              className="w-full max-w-[420px] rounded-3xl border border-border/50 bg-background/95 shadow-2xl overflow-hidden"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-5 pt-6 pb-5 text-center">
+                <div className="mx-auto w-16 h-16 rounded-2xl border border-primary/20 bg-primary/10 flex items-center justify-center">
+                  <CheckCircle2 className="w-8 h-8 text-primary" />
+                </div>
+
+                <h4 className="mt-4 text-xl font-bold text-foreground">
+                  Campanha criada com sucesso
+                </h4>
+
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                  Sua campanha foi criada e o pagamento foi confirmado com sucesso.
+                </p>
+
+                <div className="mt-6 space-y-3">
+                  <button
+                    type="button"
+                    onClick={handleGoToMyCampaigns}
+                    className="w-full min-h-[44px] rounded-2xl bg-gradient-neon text-primary-foreground font-semibold text-sm glow-blue"
+                  >
+                    Ver campanhas
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSuccessModalOpen(false)}
+                    className="w-full min-h-[44px] rounded-2xl border border-border/50 text-muted-foreground font-medium text-sm"
+                  >
+                    Fechar
+                  </button>
+                </div>
               </div>
             </div>
           </div>
