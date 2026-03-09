@@ -1059,7 +1059,7 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
                     <h1 className="text-xl font-semibold text-foreground leading-tight break-words">{headerName}</h1>
                     {isVerified ? (
                       <span className="shrink-0">
-                        <VerifiedBadge size="sm" />
+                        <VerifiedBadge size="sm" role={role} />
                       </span>
                     ) : null}
                   </div>
