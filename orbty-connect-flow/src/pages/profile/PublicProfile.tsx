@@ -20,10 +20,7 @@ import {
   Globe,
   Package,
 } from "lucide-react";
-
-/* =========================
-   Helpers
-========================= */
+import RateCreatorModal from "@/components/reviews/RateCreatorModal";
 
 function clamp(n: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, n));
@@ -106,10 +103,6 @@ function formatIGCount(input: number | null | undefined) {
   }
   return `${Math.floor(m)}M`;
 }
-
-/* =========================
-   UI blocks
-========================= */
 
 function SkeletonLine({ w = "100%", h = 12 }: { w?: string; h?: number }) {
   return <div className="animate-pulse rounded-xl bg-white/10" style={{ width: w, height: h }} />;
@@ -361,10 +354,6 @@ function AgeBarsCard(props: { data: Record<string, number> | null; buckets: stri
   );
 }
 
-/* =========================
-   Types
-========================= */
-
 type ProfileRow = {
   id: string;
   name: string | null;
@@ -419,10 +408,6 @@ type PublicContractorProfileRow = {
   address_complement: string | null;
   address_zip: string | null;
 };
-
-/* =========================
-   Fetchers
-========================= */
 
 async function fetchProfileById(id: string): Promise<ProfileRow | null> {
   const selectFull =
@@ -493,10 +478,6 @@ async function fetchInfluencerAcceptedCount(profileId: string) {
   return Number.isFinite(cnt) ? cnt : 0;
 }
 
-/* =========================
-   Page
-========================= */
-
 const AGE_BARS_BUCKETS = ["18-24", "25-34", "35-44", "45-54", "55-64"] as const;
 
 type PublicProfileProps = {
@@ -529,6 +510,8 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
 
   const [acceptedCount, setAcceptedCount] = useState(0);
   const [loadingAccepted, setLoadingAccepted] = useState(true);
+
+  const [rateModalOpen, setRateModalOpen] = useState(false);
 
   useLayoutEffect(() => {
     setLoadedId(null);
@@ -786,6 +769,11 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
 
   const ready = !!id && loadedId === id && !loading;
 
+  const canContractorRateThisCreator =
+    role === "influencer" &&
+    userRole === "contractor" &&
+    !!profile?.id;
+
   const handleBack = () => {
     if (onBack) {
       onBack();
@@ -965,6 +953,27 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
 
           <RatingsCard rating={ratingAvg} count={ratingCount} loading={loadingRatings} />
 
+          {canContractorRateThisCreator ? (
+            <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Avaliar creator</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Disponível para campanhas concluídas entre sua marca e este creator.
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setRateModalOpen(true)}
+                  className="rounded-2xl bg-gradient-neon text-primary-foreground px-4 py-2 text-xs font-semibold"
+                >
+                  Avaliar
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {role === "influencer" ? (
             <div className="glass-card p-5 shadow-sm transition hover:shadow-md hover:bg-white/[0.06]">
               <div className="text-sm font-semibold text-foreground text-center">Ativações e campanhas</div>
@@ -988,6 +997,24 @@ export default function PublicProfile({ idOverride, embed = false, onBack }: Pub
           ) : null}
         </>
       )}
+
+      <RateCreatorModal
+        open={rateModalOpen}
+        onClose={() => setRateModalOpen(false)}
+        influencerId={profile?.id || ""}
+        influencerName={profile?.name || "Creator"}
+        onSubmitted={async () => {
+          if (profile?.id) {
+            try {
+              const rr = await fetchInfluencerRating(profile.id);
+              setRatingAvg(rr.avg);
+              setRatingCount(rr.count || null);
+            } catch {
+              // ignore
+            }
+          }
+        }}
+      />
     </div>
   );
 

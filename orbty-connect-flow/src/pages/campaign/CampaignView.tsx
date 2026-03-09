@@ -26,10 +26,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { PublicCampaignFeed } from "@/types/database";
 import CampaignFilesTab from "@/components/campaign/CampaignFilesTab";
-import CreatorDeliverablesPanel from "@/components/campaign/CreatorDeliverablesPanel";
 import PublicProfile from "@/pages/profile/PublicProfile";
 import { toast } from "sonner";
 import type { CampaignFileKind } from "@/services/campaignFiles";
+import RateCreatorModal from "@/components/reviews/RateCreatorModal";
 
 type TabKey = "details" | "files";
 type ParticipantStatus = "invited" | "confirmed" | "delivered" | "approved";
@@ -249,8 +249,19 @@ const CampaignView = () => {
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileModalCreatorId, setProfileModalCreatorId] = useState<string | null>(null);
 
+  const [rateModalOpen, setRateModalOpen] = useState(false);
+  const [rateModalCreatorId, setRateModalCreatorId] = useState<string | null>(null);
+  const [rateModalCreatorName, setRateModalCreatorName] = useState<string | null>(null);
+  const [rateModalCampaignId, setRateModalCampaignId] = useState<string | null>(null);
+
   const isContractor = userRole === "contractor";
   const isInfluencer = userRole === "influencer";
+
+  const urlKind = (() => {
+    const sp = new URLSearchParams(location.search);
+    const k = sp.get("kind");
+    return isValidKind(k) ? (k as CampaignFileKind) : undefined;
+  })();
 
   const urlCreator = (() => {
     const sp = new URLSearchParams(location.search);
@@ -291,11 +302,10 @@ const CampaignView = () => {
       const next = t as TabKey;
       if (tab !== next) setTab(next);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.search]);
+  }, [location.search, tab]);
 
   useEffect(() => {
-    const modalOpen = deliverableModalOpen || profileModalOpen;
+    const modalOpen = deliverableModalOpen || profileModalOpen || rateModalOpen;
     if (!modalOpen) return;
 
     const previousHtmlOverflow = document.documentElement.style.overflow;
@@ -311,7 +321,7 @@ const CampaignView = () => {
       document.body.style.overflow = previousBodyOverflow;
       document.body.style.touchAction = previousBodyTouchAction;
     };
-  }, [deliverableModalOpen, profileModalOpen]);
+  }, [deliverableModalOpen, profileModalOpen, rateModalOpen]);
 
   const openCreatorProfileModal = (creatorId: string) => {
     setProfileModalCreatorId(creatorId);
@@ -531,6 +541,8 @@ const CampaignView = () => {
 
     if (!window.confirm("Confirmar entregas deste creator?\n\nUse apenas quando estiver tudo correto.")) return;
 
+    const creatorName = creatorProfiles[creatorId]?.name || "Creator";
+
     setApprovingCreatorId(creatorId);
     try {
       const approvedAt = new Date().toISOString();
@@ -579,12 +591,7 @@ const CampaignView = () => {
 
       toast.success("Entregas confirmadas.");
 
-      setParticipants((prev) =>
-        prev.map((p) =>
-          p.influencer_id === creatorId ? { ...p, status: "approved" } : p
-        )
-      );
-
+      setParticipants((prev) => prev.map((p) => (p.influencer_id === creatorId ? { ...p, status: "approved" } : p)));
       setDeliverablesMap((prev) => ({
         ...prev,
         [creatorId]: {
@@ -595,6 +602,11 @@ const CampaignView = () => {
           updated_at: approvedAt,
         },
       }));
+
+      setRateModalCreatorId(creatorId);
+      setRateModalCreatorName(creatorName);
+      setRateModalCampaignId(id);
+      setRateModalOpen(true);
     } catch (e: any) {
       console.error("APPROVE_CREATOR_ERROR", e);
       toast.error(e?.message || "Erro ao confirmar entregas.");
@@ -630,12 +642,6 @@ const CampaignView = () => {
   const shouldShowInfluencerConfirmCta = isInvitedInfluencer;
   const shouldShowRequirementsToInfluencer = isInfluencer;
   const shouldShowCompensationToInfluencer = isInfluencer;
-
-  const creatorAccepted =
-    isInfluencer &&
-    (myParticipationStatus === "confirmed" ||
-      myParticipationStatus === "delivered" ||
-      myParticipationStatus === "approved");
 
   const status = (campaign as any)?.status as string | null;
   const req = (((campaign as any)?.requirements as CampaignRequirements | null) ?? null);
@@ -673,9 +679,7 @@ const CampaignView = () => {
     ? internal.selected_creator_ids.filter((x: any) => typeof x === "string" && x.trim().length > 0)
     : [];
 
-  const creatorsToRender = Array.from(
-    new Set([...(selectedCreatorIds || []), ...(participants.map((p) => p.influencer_id) || [])])
-  );
+  const creatorsToRender = Array.from(new Set([...(selectedCreatorIds || []), ...(participants.map((p) => p.influencer_id) || [])]));
 
   const modalCreatorProfile = deliverableModalCreatorId ? creatorProfiles[deliverableModalCreatorId] : null;
   const modalCreatorName = (modalCreatorProfile?.name || "Creator").trim();
@@ -703,12 +707,7 @@ const CampaignView = () => {
   const confirmedCreatorIds = creatorsToRender.filter((cid) => {
     const p = participants.find((x) => x.influencer_id === cid);
     if (!p) return true;
-
-    return (
-      p.status === "confirmed" ||
-      p.status === "delivered" ||
-      p.status === "approved"
-    );
+    return p.status === "confirmed" || p.status === "approved";
   });
 
   return (
@@ -850,12 +849,11 @@ const CampaignView = () => {
 
                         const p = participants.find((x) => x.influencer_id === creatorId);
                         const isApproved = p?.status === "approved";
-                        const isDelivered = p?.status === "delivered";
 
                         const hasDeliverables = !!deliverablesMap[creatorId];
                         const isBusy = approvingCreatorId === creatorId;
 
-                        const showDeliverablesDot = (isDelivered || hasDeliverables) && !isApproved;
+                        const showDeliverablesDot = hasDeliverables && !isApproved;
 
                         return (
                           <div key={creatorId} className="rounded-2xl border border-border/50 bg-white/5 px-3 py-2.5">
@@ -883,14 +881,14 @@ const CampaignView = () => {
                               <div className="flex items-center gap-2 shrink-0">
                                 <IconActionButton
                                   onClick={() => {
-                                    if (!hasDeliverables && !isDelivered) {
+                                    if (!hasDeliverables) {
                                       toast.message("Este creator ainda não enviou entregas.");
                                       return;
                                     }
                                     openDeliverablesModal(creatorId);
                                   }}
-                                  disabled={!hasDeliverables && !isDelivered}
-                                  title={hasDeliverables || isDelivered ? "Ver entregas" : "Ainda sem entregas"}
+                                  disabled={!hasDeliverables}
+                                  title={hasDeliverables ? "Ver entregas" : "Ainda sem entregas"}
                                   tone="default"
                                   showDot={showDeliverablesDot}
                                 >
@@ -1047,13 +1045,6 @@ const CampaignView = () => {
                   </span>
                 </div>
               </div>
-            )}
-
-            {isInfluencer && !isInvitedInfluencer && (
-              <CreatorDeliverablesPanel
-                campaignId={String(id)}
-                creatorAccepted={!!creatorAccepted}
-              />
             )}
           </>
         )}
@@ -1251,6 +1242,20 @@ const CampaignView = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <RateCreatorModal
+        open={rateModalOpen}
+        onClose={() => {
+          setRateModalOpen(false);
+          setRateModalCreatorId(null);
+          setRateModalCreatorName(null);
+          setRateModalCampaignId(null);
+        }}
+        influencerId={rateModalCreatorId || ""}
+        influencerName={rateModalCreatorName}
+        preselectedCampaignId={rateModalCampaignId}
+        onSubmitted={async () => {}}
+      />
     </MobileLayout>
   );
 };
