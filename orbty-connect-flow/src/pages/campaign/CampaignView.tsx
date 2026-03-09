@@ -29,7 +29,6 @@ import CampaignFilesTab from "@/components/campaign/CampaignFilesTab";
 import PublicProfile from "@/pages/profile/PublicProfile";
 import { toast } from "sonner";
 import type { CampaignFileKind } from "@/services/campaignFiles";
-import RateCreatorModal from "@/components/reviews/RateCreatorModal";
 
 type TabKey = "details" | "files";
 type ParticipantStatus = "invited" | "confirmed" | "delivered" | "approved";
@@ -249,11 +248,6 @@ const CampaignView = () => {
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileModalCreatorId, setProfileModalCreatorId] = useState<string | null>(null);
 
-  const [rateModalOpen, setRateModalOpen] = useState(false);
-  const [rateModalCreatorId, setRateModalCreatorId] = useState<string | null>(null);
-  const [rateModalCreatorName, setRateModalCreatorName] = useState<string | null>(null);
-  const [rateModalCampaignId, setRateModalCampaignId] = useState<string | null>(null);
-
   const isContractor = userRole === "contractor";
   const isInfluencer = userRole === "influencer";
 
@@ -305,7 +299,7 @@ const CampaignView = () => {
   }, [location.search, tab]);
 
   useEffect(() => {
-    const modalOpen = deliverableModalOpen || profileModalOpen || rateModalOpen;
+    const modalOpen = deliverableModalOpen || profileModalOpen;
     if (!modalOpen) return;
 
     const previousHtmlOverflow = document.documentElement.style.overflow;
@@ -321,7 +315,7 @@ const CampaignView = () => {
       document.body.style.overflow = previousBodyOverflow;
       document.body.style.touchAction = previousBodyTouchAction;
     };
-  }, [deliverableModalOpen, profileModalOpen, rateModalOpen]);
+  }, [deliverableModalOpen, profileModalOpen]);
 
   const openCreatorProfileModal = (creatorId: string) => {
     setProfileModalCreatorId(creatorId);
@@ -541,8 +535,6 @@ const CampaignView = () => {
 
     if (!window.confirm("Confirmar entregas deste creator?\n\nUse apenas quando estiver tudo correto.")) return;
 
-    const creatorName = creatorProfiles[creatorId]?.name || "Creator";
-
     setApprovingCreatorId(creatorId);
     try {
       const approvedAt = new Date().toISOString();
@@ -602,11 +594,6 @@ const CampaignView = () => {
           updated_at: approvedAt,
         },
       }));
-
-      setRateModalCreatorId(creatorId);
-      setRateModalCreatorName(creatorName);
-      setRateModalCampaignId(id);
-      setRateModalOpen(true);
     } catch (e: any) {
       console.error("APPROVE_CREATOR_ERROR", e);
       toast.error(e?.message || "Erro ao confirmar entregas.");
@@ -707,7 +694,12 @@ const CampaignView = () => {
   const confirmedCreatorIds = creatorsToRender.filter((cid) => {
     const p = participants.find((x) => x.influencer_id === cid);
     if (!p) return true;
-    return p.status === "confirmed" || p.status === "approved";
+
+    return (
+      p.status === "confirmed" ||
+      p.status === "delivered" ||
+      p.status === "approved"
+    );
   });
 
   return (
@@ -829,7 +821,7 @@ const CampaignView = () => {
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <ClipboardCheck className="w-4 h-4 text-primary" />
-                  <h4 className="font-semibold text-foreground text-sm">Creators confirmados</h4>
+                  <h4 className="font-semibold text-foreground text-sm">Creators da campanha</h4>
                 </div>
 
                 <div className="glass-card p-4">
@@ -849,11 +841,12 @@ const CampaignView = () => {
 
                         const p = participants.find((x) => x.influencer_id === creatorId);
                         const isApproved = p?.status === "approved";
+                        const isDelivered = p?.status === "delivered";
 
                         const hasDeliverables = !!deliverablesMap[creatorId];
                         const isBusy = approvingCreatorId === creatorId;
 
-                        const showDeliverablesDot = hasDeliverables && !isApproved;
+                        const showDeliverablesDot = hasDeliverables && (isDelivered || !isApproved);
 
                         return (
                           <div key={creatorId} className="rounded-2xl border border-border/50 bg-white/5 px-3 py-2.5">
@@ -1242,20 +1235,6 @@ const CampaignView = () => {
           </motion.div>
         )}
       </AnimatePresence>
-
-      <RateCreatorModal
-        open={rateModalOpen}
-        onClose={() => {
-          setRateModalOpen(false);
-          setRateModalCreatorId(null);
-          setRateModalCreatorName(null);
-          setRateModalCampaignId(null);
-        }}
-        influencerId={rateModalCreatorId || ""}
-        influencerName={rateModalCreatorName}
-        preselectedCampaignId={rateModalCampaignId}
-        onSubmitted={async () => {}}
-      />
     </MobileLayout>
   );
 };
