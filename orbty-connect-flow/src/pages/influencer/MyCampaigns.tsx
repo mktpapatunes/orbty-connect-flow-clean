@@ -243,29 +243,39 @@ export default function MyCampaigns() {
     const value = String(rawId || "").trim();
     if (!value) return null;
 
-    // 1) se já for um organization.id, usa ele mesmo
-    const { data: orgById, error: orgByIdError } = await supabase
-      .from("organizations")
-      .select("id")
+    const { data: profileRow, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, desired_role")
       .eq("id", value)
       .maybeSingle();
 
-    if (!orgByIdError && orgById?.id) {
-      return String(orgById.id);
+    if (!profileError && profileRow) {
+      const desiredRole = String((profileRow as any).desired_role || "").toLowerCase();
+      if (desiredRole === "contractor") {
+        return String((profileRow as any).id);
+      }
     }
 
-    // 2) se vier um user id dono de organization, resolve para organization.id
+    const { data: orgRow, error: orgError } = await supabase
+      .from("organizations")
+      .select("id, created_by")
+      .eq("id", value)
+      .maybeSingle();
+
+    if (!orgError && orgRow && (orgRow as any).created_by) {
+      return String((orgRow as any).created_by);
+    }
+
     const { data: orgByOwner, error: orgByOwnerError } = await supabase
       .from("organizations")
-      .select("id")
+      .select("created_by")
       .eq("created_by", value)
       .maybeSingle();
 
-    if (!orgByOwnerError && orgByOwner?.id) {
-      return String(orgByOwner.id);
+    if (!orgByOwnerError && orgByOwner && (orgByOwner as any).created_by) {
+      return String((orgByOwner as any).created_by);
     }
 
-    // 3) fallback final: mantém o valor original
     return value;
   };
 
