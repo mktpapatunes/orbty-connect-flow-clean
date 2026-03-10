@@ -39,29 +39,20 @@ type ParticipantRow = {
   approved_at: string | null;
 };
 
-type Organization = {
-  id: string;
-  created_by: string;
-  name: string;
-  logo_url: string | null;
-  region_city: string | null;
-  region_state: string | null;
-  bio: string | null;
-  instagram: string | null;
-};
-
-type OrganizationRatingSummary = {
-  organization_id: string;
-  avg_rating: number | string | null;
-};
-
-type CampaignRow = {
-  created_by: string;
-  completed_at: string | null;
-};
-
 type AdminUserRow = {
   user_id: string;
+};
+
+type RankingBusinessRow = {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  city: string | null;
+  state: string | null;
+  bio: string | null;
+  instagram: string | null;
+  avg_rating: number | string | null;
+  completed_count: number | null;
 };
 
 type RankingCardItem = {
@@ -405,9 +396,7 @@ export default function Ranking() {
           creatorsProfilesRes,
           creatorsRatingsRes,
           participantsRes,
-          organizationsRes,
-          organizationsRatingsRes,
-          campaignsRes,
+          businessesRankingRes,
           adminIdsRes,
         ] = await Promise.all([
           supabase
@@ -420,34 +409,20 @@ export default function Ranking() {
             .from("campaign_participants")
             .select("influencer_id, approved_at")
             .not("approved_at", "is", null),
-          supabase
-            .from("organizations")
-            .select("id, created_by, name, logo_url, region_city, region_state, bio, instagram"),
-          supabase
-            .from("organization_rating_summary")
-            .select("organization_id, avg_rating"),
-          supabase
-            .from("campaigns")
-            .select("created_by, completed_at")
-            .not("completed_at", "is", null),
+          supabase.rpc("get_ranking_businesses"),
           supabase.rpc("get_admin_user_ids"),
         ]);
 
         if (creatorsProfilesRes.error) throw creatorsProfilesRes.error;
         if (creatorsRatingsRes.error) throw creatorsRatingsRes.error;
         if (participantsRes.error) throw participantsRes.error;
-        if (organizationsRes.error) throw organizationsRes.error;
-        if (organizationsRatingsRes.error) throw organizationsRatingsRes.error;
-        if (campaignsRes.error) throw campaignsRes.error;
+        if (businessesRankingRes.error) throw businessesRankingRes.error;
         if (adminIdsRes.error) throw adminIdsRes.error;
 
         const creatorProfiles = (creatorsProfilesRes.data ?? []) as CreatorProfile[];
         const creatorRatings = (creatorsRatingsRes.data ?? []) as InfluencerRatingSummary[];
         const participantRows = (participantsRes.data ?? []) as ParticipantRow[];
-
-        const organizations = (organizationsRes.data ?? []) as Organization[];
-        const organizationRatings = (organizationsRatingsRes.data ?? []) as OrganizationRatingSummary[];
-        const campaignRows = (campaignsRes.data ?? []) as CampaignRow[];
+        const businessesRankingRows = (businessesRankingRes.data ?? []) as RankingBusinessRow[];
         const adminRows = (adminIdsRes.data ?? []) as AdminUserRow[];
 
         const adminIds = new Set(adminRows.map((row) => row.user_id));
@@ -497,50 +472,17 @@ export default function Ranking() {
             return a.name.localeCompare(b.name, "pt-BR");
           });
 
-        const businessCompletedMap = new Map<string, number>();
-        for (const row of campaignRows) {
-          if (!row.created_by) continue;
-          businessCompletedMap.set(
-            row.created_by,
-            (businessCompletedMap.get(row.created_by) ?? 0) + 1
-          );
-        }
-
-        const organizationRatingMap = new Map<string, number | null>();
-        for (const row of organizationRatings) {
-          organizationRatingMap.set(
-            row.organization_id,
-            row.avg_rating === null ? null : Number(row.avg_rating)
-          );
-        }
-
-        const businesses: RankingCardItem[] = organizations
-          .filter((org) => !adminIds.has(org.created_by))
-          .map((org) => ({
-            id: org.id,
-            name: org.name,
-            avatarUrl: org.logo_url,
-            completedCount: businessCompletedMap.get(org.created_by) ?? 0,
-            avgRating: organizationRatingMap.get(org.id) ?? null,
-            city: org.region_city,
-            state: org.region_state,
-            bio: org.bio,
-            instagram: org.instagram,
-          }))
-          .sort((a, b) => {
-            const aRating = a.avgRating ?? -1;
-            const bRating = b.avgRating ?? -1;
-
-            if (b.completedCount !== a.completedCount) {
-              return b.completedCount - a.completedCount;
-            }
-
-            if (bRating !== aRating) {
-              return bRating - aRating;
-            }
-
-            return a.name.localeCompare(b.name, "pt-BR");
-          });
+        const businesses: RankingCardItem[] = businessesRankingRows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          avatarUrl: row.logo_url,
+          completedCount: Number(row.completed_count ?? 0),
+          avgRating: row.avg_rating === null ? null : Number(row.avg_rating),
+          city: row.city,
+          state: row.state,
+          bio: row.bio,
+          instagram: row.instagram,
+        }));
 
         setCreatorItems(creators);
         setBusinessItems(businesses);
