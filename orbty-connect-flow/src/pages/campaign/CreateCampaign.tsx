@@ -23,8 +23,8 @@ import { useCampaign } from "@/contexts/CampaignContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-
 import PublicProfile from "@/pages/profile/PublicProfile";
+import { sendCampaignInviteEmails } from "@/services/campaignInviteEmails";
 
 /* =========================
    Consts
@@ -116,7 +116,6 @@ type CreatorListItem = {
   content_style: string | null;
   approval_status?: string | null;
   desired_role?: string | null;
-
   avatar_url?: string | null;
   photo_url?: string | null;
   profile_photo_url?: string | null;
@@ -198,7 +197,9 @@ function formatDateBR(value?: string | null) {
   const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
   const d = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value);
   if (Number.isNaN(d.getTime())) return "-";
-  return isDateOnly ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : d.toLocaleDateString("pt-BR");
+  return isDateOnly
+    ? d.toLocaleDateString("pt-BR", { timeZone: "UTC" })
+    : d.toLocaleDateString("pt-BR");
 }
 
 function diffDaysInclusive(startISO?: string, endISO?: string) {
@@ -242,7 +243,10 @@ function normalizeAtHandles(raw: string, max = 4) {
 function formatBRL(value: any) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(n);
 }
 
 /* =========================
@@ -279,8 +283,7 @@ export default function CreateCampaign() {
         if (f.preview) URL.revokeObjectURL(f.preview);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [files]);
 
   const todayISO = useMemo(() => {
     const d = new Date();
@@ -310,7 +313,10 @@ export default function CreateCampaign() {
     return picked;
   };
 
-  const selectedObjectives = useMemo(() => parseObjectives((data as any).briefPublic || ""), [(data as any).briefPublic]);
+  const selectedObjectives = useMemo(
+    () => parseObjectives((data as any).briefPublic || ""),
+    [(data as any).briefPublic]
+  );
 
   const toggleObjective = (opt: ObjectiveOption) => {
     const current = selectedObjectives.slice();
@@ -346,7 +352,10 @@ export default function CreateCampaign() {
     return picked;
   };
 
-  const selectedSegments = useMemo(() => parseSegments((data as any).contentSegments || ""), [(data as any).contentSegments]);
+  const selectedSegments = useMemo(
+    () => parseSegments((data as any).contentSegments || ""),
+    [(data as any).contentSegments]
+  );
 
   const toggleSegment = (seg: SegmentOption) => {
     const current = selectedSegments.slice();
@@ -382,7 +391,11 @@ export default function CreateCampaign() {
     return clamp(Math.floor(n), 1, 50);
   }, [creatorsNeededInput]);
 
-  const creatorsNeededOk = creatorsNeededNumber !== null && creatorsNeededNumber >= 1 && creatorsNeededNumber <= 50;
+  const creatorsNeededOk =
+    creatorsNeededNumber !== null &&
+    creatorsNeededNumber >= 1 &&
+    creatorsNeededNumber <= 50;
+
   const currentLimit = creatorsNeededNumber ?? creatorsNeededFromData;
 
   /* =========================
@@ -411,8 +424,7 @@ export default function CreateCampaign() {
 
   useEffect(() => {
     if (!locationQuery && displayLocationLabel) setLocationQuery(displayLocationLabel);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayLocationLabel]);
+  }, [displayLocationLabel, locationQuery]);
 
   useEffect(() => {
     const onDown = (e: MouseEvent | TouchEvent) => {
@@ -470,7 +482,8 @@ export default function CreateCampaign() {
   const buildFullLocationLabel = (item: NominatimItem) => {
     const addr = item.address || {};
     const neighborhood = addr.neighbourhood || addr.suburb || "";
-    const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
+    const city =
+      addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
     const state = addr.state || addr.state_district || addr.region || "";
     const parts = [neighborhood, city, state].map((x) => (x || "").trim()).filter(Boolean);
     if (parts.length >= 2) return parts.join(", ");
@@ -479,7 +492,8 @@ export default function CreateCampaign() {
 
   const applyLocationFromNominatim = (item: NominatimItem) => {
     const addr = item.address || {};
-    const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
+    const city =
+      addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
     const state = addr.state || addr.state_district || addr.region || "";
     const full = buildFullLocationLabel(item);
 
@@ -508,13 +522,19 @@ export default function CreateCampaign() {
   };
 
   const [hydratingMap, setHydratingMap] = useState(false);
+
   useEffect(() => {
     let alive = true;
 
     const city = String((data as any).selectedCity || "").trim();
     const state = String((data as any).selectedState || "").trim();
 
-    const shouldHydrate = step === 1 && !!city && !!state && (locationLat === null || locationLon === null) && !hydratingMap;
+    const shouldHydrate =
+      step === 1 &&
+      !!city &&
+      !!state &&
+      (locationLat === null || locationLon === null) &&
+      !hydratingMap;
 
     if (!shouldHydrate) return;
 
@@ -552,8 +572,7 @@ export default function CreateCampaign() {
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, (data as any).selectedCity, (data as any).selectedState]);
+  }, [step, (data as any).selectedCity, (data as any).selectedState, locationLat, locationLon, hydratingMap, data, updateData]);
 
   const mapSrc = useMemo(() => {
     if (locationLat !== null && locationLon !== null) {
@@ -585,7 +604,10 @@ export default function CreateCampaign() {
   const campaignStart = String((data as any).campaignDate || "");
   const campaignEnd = String((data as any).applyDeadline || "");
 
-  const periodDays = useMemo(() => diffDaysInclusive(campaignStart, campaignEnd), [campaignStart, campaignEnd]);
+  const periodDays = useMemo(
+    () => diffDaysInclusive(campaignStart, campaignEnd),
+    [campaignStart, campaignEnd]
+  );
 
   const periodLabel = useMemo(() => {
     if (!campaignStart || !campaignEnd) return "";
@@ -803,15 +825,27 @@ export default function CreateCampaign() {
 
   const rawFormat = String((data as any).format || "stories").toLowerCase();
   const formatFromData: PostFormat =
-    rawFormat === "reels" || rawFormat === "feed" || rawFormat === "stories" ? (rawFormat as PostFormat) : "stories";
+    rawFormat === "reels" || rawFormat === "feed" || rawFormat === "stories"
+      ? (rawFormat as PostFormat)
+      : "stories";
+
   const formatOk = !!String(formatFromData || "").trim();
 
   const collabValue = (data as any).collab;
   const collabBool: boolean | null =
-    typeof collabValue === "boolean" ? collabValue : collabValue === "true" ? true : collabValue === "false" ? false : null;
+    typeof collabValue === "boolean"
+      ? collabValue
+      : collabValue === "true"
+        ? true
+        : collabValue === "false"
+          ? false
+          : null;
 
   const collabMentionsRaw = String((data as any).collabMentions || "");
-  const collabMentionsList = useMemo(() => normalizeAtHandles(collabMentionsRaw, 4), [collabMentionsRaw]);
+  const collabMentionsList = useMemo(
+    () => normalizeAtHandles(collabMentionsRaw, 4),
+    [collabMentionsRaw]
+  );
 
   const caption = String((data as any).caption || "");
   const captionLimit = 2200;
@@ -845,18 +879,19 @@ export default function CreateCampaign() {
   const [couponInput, setCouponInput] = useState<string>(String((data as any).couponInput || ""));
   useEffect(() => {
     updateData({ couponInput } as any);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [couponInput]);
+  }, [couponInput, updateData]);
 
   const [couponApplied, setCouponApplied] = useState<string>(String((data as any).couponApplied || ""));
   useEffect(() => {
     updateData({ couponApplied } as any);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [couponApplied]);
+  }, [couponApplied, updateData]);
 
   const hasCouponApplied = !!couponApplied.trim();
 
-  const applyIntentRef = useRef<{ pending: boolean; code: string | null }>({ pending: false, code: null });
+  const applyIntentRef = useRef<{ pending: boolean; code: string | null }>({
+    pending: false,
+    code: null,
+  });
 
   const onCouponButtonClick = () => {
     if (hasCouponApplied) {
@@ -936,7 +971,6 @@ export default function CreateCampaign() {
       alive = false;
       clearTimeout(t);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     step,
     canStep4,
@@ -990,7 +1024,8 @@ export default function CreateCampaign() {
     return Number.isFinite(n) ? n : null;
   }, [quote]);
 
-  const canSimulatePay = !!user && canGoPayment && quote?.ok && quoteTotal !== null && quoteTotal > 0;
+  const canSimulatePay =
+    !!user && canGoPayment && quote?.ok && quoteTotal !== null && quoteTotal > 0;
 
   const handleGoToMyCampaigns = () => {
     setSuccessModalOpen(false);
@@ -1004,7 +1039,8 @@ export default function CreateCampaign() {
     setIsSubmitting(true);
 
     try {
-      const region = String((data as any).region || "").trim() || `${selectedCity}, ${selectedState}`;
+      const region =
+        String((data as any).region || "").trim() || `${selectedCity}, ${selectedState}`;
       const creatorsNeededFinal = creatorsNeededNumber ?? creatorsNeededFromData;
       const postsFinal = postsNumber ?? postsFromData;
 
@@ -1081,7 +1117,9 @@ export default function CreateCampaign() {
 
       for (const { file } of files) {
         const path = `${campaignId}/${Date.now()}-${file.name}`;
-        const { error: uploadError } = await supabase.storage.from("campaign-assets").upload(path, file);
+        const { error: uploadError } = await supabase.storage
+          .from("campaign-assets")
+          .upload(path, file);
 
         if (uploadError) {
           console.error("Upload error:", uploadError);
@@ -1097,9 +1135,12 @@ export default function CreateCampaign() {
         } as any);
       }
 
-      const { data: payData, error: payError } = await (supabase.rpc as any)("simulate_campaign_payment", {
-        p_campaign_id: campaignId,
-      });
+      const { data: payData, error: payError } = await (supabase.rpc as any)(
+        "simulate_campaign_payment",
+        {
+          p_campaign_id: campaignId,
+        }
+      );
 
       if (payError) {
         console.error("SIMULATE_PAYMENT_RPC_ERROR", payError);
@@ -1116,6 +1157,21 @@ export default function CreateCampaign() {
       }
 
       toast.success(message || "Pagamento aprovado!");
+
+      try {
+        const emailResult = await sendCampaignInviteEmails(String(campaignId));
+
+        if (emailResult.failed > 0) {
+          toast.message(
+            "Campanha criada, mas alguns e-mails não puderam ser enviados agora."
+          );
+        }
+      } catch (emailError) {
+        console.error("SEND_CAMPAIGN_INVITE_EMAILS_ERROR", emailError);
+        toast.message(
+          "Campanha criada, mas não foi possível enviar os e-mails agora."
+        );
+      }
 
       resetData();
       try {
@@ -1150,10 +1206,14 @@ export default function CreateCampaign() {
 
       {step === 1 && (
         <div className="px-6 py-4 space-y-4">
-          <h3 className="font-display text-xl font-bold text-foreground">Informações da campanha</h3>
+          <h3 className="font-display text-xl font-bold text-foreground">
+            Informações da campanha
+          </h3>
 
           <div>
-            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Título</label>
+            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+              Título
+            </label>
             <input
               type="text"
               value={String((data as any).title || "")}
@@ -1164,7 +1224,9 @@ export default function CreateCampaign() {
           </div>
 
           <div>
-            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Tipo</label>
+            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+              Tipo
+            </label>
             <div className="grid grid-cols-3 gap-2">
               {campaignTypes.map((type) => {
                 const selected = String((data as any).campaignType || "") === type.id;
@@ -1174,7 +1236,9 @@ export default function CreateCampaign() {
                     type="button"
                     onClick={() => updateData({ campaignType: selected ? "" : type.id } as any)}
                     className={`p-3 rounded-xl border text-center transition-all ${
-                      selected ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
+                      selected
+                        ? "border-primary/60 bg-primary/5 text-primary"
+                        : "border-border/50 bg-card/60 text-foreground/70"
                     }`}
                   >
                     <type.icon className="w-5 h-5 mx-auto mb-1" />
@@ -1183,12 +1247,17 @@ export default function CreateCampaign() {
                 );
               })}
             </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">Dica: clique novamente no tipo selecionado para remover.</p>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Dica: clique novamente no tipo selecionado para remover.
+            </p>
           </div>
 
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
-              Objetivo da campanha * <span className="normal-case tracking-normal text-muted-foreground">(até 3)</span>
+              Objetivo da campanha *{" "}
+              <span className="normal-case tracking-normal text-muted-foreground">
+                (até 3)
+              </span>
             </label>
 
             <div className="grid grid-cols-2 gap-2">
@@ -1200,7 +1269,9 @@ export default function CreateCampaign() {
                     type="button"
                     onClick={() => toggleObjective(opt)}
                     className={`px-3 py-3 rounded-xl border text-sm font-medium transition-all text-center ${
-                      selected ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
+                      selected
+                        ? "border-primary/60 bg-primary/5 text-primary"
+                        : "border-border/50 bg-card/60 text-foreground/70"
                     }`}
                   >
                     {opt}
@@ -1211,12 +1282,16 @@ export default function CreateCampaign() {
 
             <div className="mt-2 text-[11px] text-muted-foreground">
               Selecionados:{" "}
-              <span className="text-foreground font-medium">{selectedObjectives.length ? selectedObjectives.join(", ") : "—"}</span>
+              <span className="text-foreground font-medium">
+                {selectedObjectives.length ? selectedObjectives.join(", ") : "—"}
+              </span>
             </div>
           </div>
 
           <div className="space-y-2" ref={autocompleteWrapRef}>
-            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1 block">Localização</label>
+            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1 block">
+              Localização
+            </label>
 
             <div className="relative">
               <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1262,7 +1337,9 @@ export default function CreateCampaign() {
                             <MapPin className="w-4 h-4 text-primary mt-0.5 shrink-0" />
                             <div className="min-w-0">
                               <div className="text-foreground truncate">{line}</div>
-                              <div className="text-[11px] text-muted-foreground truncate">{r.display_name}</div>
+                              <div className="text-[11px] text-muted-foreground truncate">
+                                {r.display_name}
+                              </div>
                             </div>
                           </button>
                         );
@@ -1277,11 +1354,20 @@ export default function CreateCampaign() {
             </div>
 
             <div className="text-xs text-muted-foreground">
-              Localização selecionada: <span className="text-foreground font-medium">{displayLocationLabel || "—"}</span>
+              Localização selecionada:{" "}
+              <span className="text-foreground font-medium">
+                {displayLocationLabel || "—"}
+              </span>
             </div>
 
             <div className="rounded-2xl overflow-hidden border border-border/50 bg-card/60">
-              <iframe title="Mapa" src={mapSrc} className="w-full h-44" loading="lazy" referrerPolicy="no-referrer" />
+              <iframe
+                title="Mapa"
+                src={mapSrc}
+                className="w-full h-44"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
             </div>
 
             {hydratingMap ? (
@@ -1293,7 +1379,9 @@ export default function CreateCampaign() {
           </div>
 
           <div>
-            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Período de campanha *</label>
+            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+              Período de campanha *
+            </label>
 
             <button
               type="button"
@@ -1302,17 +1390,24 @@ export default function CreateCampaign() {
             >
               <div className="flex items-center gap-2 min-w-0">
                 <Calendar className="w-4 h-4 text-primary shrink-0" />
-                <span className="truncate">{periodLabel ? periodLabel : "Selecionar período (início e fim)"}</span>
+                <span className="truncate">
+                  {periodLabel ? periodLabel : "Selecionar período (início e fim)"}
+                </span>
               </div>
               <span className="text-xs text-muted-foreground shrink-0">Alterar</span>
             </button>
 
             {periodDays ? (
               <div className="mt-2 text-[11px] text-muted-foreground">
-                Total: <span className="text-foreground font-medium">{periodDays} dia{periodDays > 1 ? "s" : ""}</span>
+                Total:{" "}
+                <span className="text-foreground font-medium">
+                  {periodDays} dia{periodDays > 1 ? "s" : ""}
+                </span>
               </div>
             ) : (
-              <div className="mt-2 text-[11px] text-muted-foreground">Escolha início e fim a partir de hoje.</div>
+              <div className="mt-2 text-[11px] text-muted-foreground">
+                Escolha início e fim a partir de hoje.
+              </div>
             )}
           </div>
 
@@ -1325,15 +1420,24 @@ export default function CreateCampaign() {
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold text-foreground">Período de campanha</div>
-                  <button className="p-2 rounded-xl hover:bg-white/5" onClick={closePeriodModal} type="button" aria-label="Fechar">
+                  <div className="text-sm font-semibold text-foreground">
+                    Período de campanha
+                  </div>
+                  <button
+                    className="p-2 rounded-xl hover:bg-white/5"
+                    onClick={closePeriodModal}
+                    type="button"
+                    aria-label="Fechar"
+                  >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Início</label>
+                    <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+                      Início
+                    </label>
                     <input
                       type="date"
                       value={tmpStart}
@@ -1348,7 +1452,9 @@ export default function CreateCampaign() {
                   </div>
 
                   <div>
-                    <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Fim</label>
+                    <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+                      Fim
+                    </label>
                     <input
                       type="date"
                       value={tmpEnd}
@@ -1367,7 +1473,10 @@ export default function CreateCampaign() {
                         {formatDateBR(tmpStart)} → {formatDateBR(tmpEnd)}
                       </span>
                       {diffDaysInclusive(tmpStart, tmpEnd) ? (
-                        <span className="text-muted-foreground"> • {diffDaysInclusive(tmpStart, tmpEnd)} dia(s)</span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          • {diffDaysInclusive(tmpStart, tmpEnd)} dia(s)
+                        </span>
                       ) : null}
                     </>
                   ) : (
@@ -1399,13 +1508,18 @@ export default function CreateCampaign() {
 
       {step === 2 && (
         <div className="px-6 py-4 space-y-4">
-          <h3 className="font-display text-xl font-bold text-foreground">Requisitos da campanha</h3>
+          <h3 className="font-display text-xl font-bold text-foreground">
+            Requisitos da campanha
+          </h3>
 
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Layers className="w-4 h-4 text-primary" />
               <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block">
-                Segmento do conteúdo * <span className="normal-case tracking-normal text-muted-foreground">(até 3)</span>
+                Segmento do conteúdo *{" "}
+                <span className="normal-case tracking-normal text-muted-foreground">
+                  (até 3)
+                </span>
               </label>
             </div>
 
@@ -1420,9 +1534,15 @@ export default function CreateCampaign() {
                     className={`px-2 sm:px-3 py-2.5 sm:py-3 rounded-xl border font-medium transition-all text-center leading-tight
                     text-[12px] sm:text-[12px] md:text-sm
                     whitespace-normal break-words min-w-0
-                    ${selected ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"}`}
+                    ${
+                      selected
+                        ? "border-primary/60 bg-primary/5 text-primary"
+                        : "border-border/50 bg-card/60 text-foreground/70"
+                    }`}
                   >
-                    <span className="block w-full min-w-0 overflow-hidden text-ellipsis">{seg}</span>
+                    <span className="block w-full min-w-0 overflow-hidden text-ellipsis">
+                      {seg}
+                    </span>
                   </button>
                 );
               })}
@@ -1430,14 +1550,18 @@ export default function CreateCampaign() {
 
             <div className="mt-2 text-[11px] text-muted-foreground">
               Selecionados:{" "}
-              <span className="text-foreground font-medium">{selectedSegments.length ? selectedSegments.join(", ") : "—"}</span>
+              <span className="text-foreground font-medium">
+                {selectedSegments.length ? selectedSegments.join(", ") : "—"}
+              </span>
             </div>
           </div>
 
           <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 shadow-[0_0_0_1px_rgba(59,130,246,0.15)]">
             <div className="flex items-center gap-2 mb-2">
               <Users className="w-4 h-4 text-primary" />
-              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block">Quantidade de creators *</label>
+              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider block">
+                Quantidade de creators *
+              </label>
             </div>
 
             <div className="text-[12px] text-muted-foreground mb-3">
@@ -1457,7 +1581,9 @@ export default function CreateCampaign() {
                 updateData({ creatorsNeeded: safe } as any);
 
                 const cut = selectedCreatorIds.slice(0, safe);
-                if (cut.length !== selectedCreatorIds.length) updateData({ selectedCreatorIds: cut } as any);
+                if (cut.length !== selectedCreatorIds.length) {
+                  updateData({ selectedCreatorIds: cut } as any);
+                }
 
                 setCreatorsNeededInput(String(safe));
               }}
@@ -1470,7 +1596,8 @@ export default function CreateCampaign() {
               Limite: até <span className="text-foreground font-medium">50 creators</span>.{" "}
               {creatorsNeededOk ? (
                 <>
-                  Você poderá selecionar até <span className="text-foreground font-medium">{currentLimit}</span>.
+                  Você poderá selecionar até{" "}
+                  <span className="text-foreground font-medium">{currentLimit}</span>.
                 </>
               ) : (
                 "Digite um número entre 1 e 50."
@@ -1480,7 +1607,9 @@ export default function CreateCampaign() {
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators sugeridos</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
+                Creators sugeridos
+              </div>
               {creatorLoading ? (
                 <div className="text-xs text-muted-foreground flex items-center gap-2">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1508,7 +1637,9 @@ export default function CreateCampaign() {
                   return (
                     <div
                       key={c.id}
-                      className={`glass-card p-3 flex items-center gap-3 transition ${selected ? "border-primary/60 bg-primary/5" : ""}`}
+                      className={`glass-card p-3 flex items-center gap-3 transition ${
+                        selected ? "border-primary/60 bg-primary/5" : ""
+                      }`}
                     >
                       <button
                         type="button"
@@ -1518,16 +1649,28 @@ export default function CreateCampaign() {
                       >
                         <div className="w-11 h-11 rounded-full border border-border/50 bg-white/5 overflow-hidden shrink-0 flex items-center justify-center">
                           {avatarUrl ? (
-                            <img src={avatarUrl} alt={c.name || "Creator"} className="w-full h-full object-cover" loading="lazy" />
+                            <img
+                              src={avatarUrl}
+                              alt={c.name || "Creator"}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
                           ) : (
-                            <span className="text-xs font-semibold text-muted-foreground">{initialsFromName(c.name)}</span>
+                            <span className="text-xs font-semibold text-muted-foreground">
+                              {initialsFromName(c.name)}
+                            </span>
                           )}
                         </div>
 
                         <div className="min-w-0">
-                          <div className="text-sm font-semibold text-foreground truncate">{c.name || "Creator"}</div>
+                          <div className="text-sm font-semibold text-foreground truncate">
+                            {c.name || "Creator"}
+                          </div>
                           <div className="text-[11px] text-muted-foreground truncate">
-                            {c.city && c.state ? `${c.city}, ${c.state}` : c.city || c.state || "—"} • {followersLabel} seguidores
+                            {c.city && c.state
+                              ? `${c.city}, ${c.state}`
+                              : c.city || c.state || "—"}{" "}
+                            • {followersLabel} seguidores
                           </div>
                         </div>
                       </button>
@@ -1539,7 +1682,9 @@ export default function CreateCampaign() {
                           toggleSelectCreator(c.id);
                         }}
                         className={`shrink-0 text-xs font-semibold px-3 py-2 rounded-xl border transition ${
-                          selected ? "border-primary/60 text-primary bg-primary/5" : "border-border/50 text-muted-foreground hover:bg-white/5"
+                          selected
+                            ? "border-primary/60 text-primary bg-primary/5"
+                            : "border-border/50 text-muted-foreground hover:bg-white/5"
                         }`}
                         aria-label={selected ? "Remover seleção" : "Selecionar creator"}
                       >
@@ -1552,25 +1697,35 @@ export default function CreateCampaign() {
             )}
 
             <div className="text-[11px] text-muted-foreground">
-              Clique no card para ver o perfil. Use o botão <span className="text-foreground font-medium">Selecionar</span> para escolher.
+              Clique no card para ver o perfil. Use o botão{" "}
+              <span className="text-foreground font-medium">Selecionar</span> para escolher.
             </div>
           </div>
 
           <div className="glass-card p-4">
             <div className="flex items-center justify-between">
-              <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Creators selecionados</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
+                Creators selecionados
+              </div>
               <div className="text-xs text-muted-foreground">
                 {selectedCreatorIds.length}/{currentLimit}
               </div>
             </div>
 
             {selectedCreatorIds.length === 0 ? (
-              <div className="mt-3 text-sm text-muted-foreground">Nenhum creator selecionado ainda.</div>
+              <div className="mt-3 text-sm text-muted-foreground">
+                Nenhum creator selecionado ainda.
+              </div>
             ) : (
               <div className="mt-3 flex flex-wrap gap-2">
                 {selectedCreators.map((c) => (
-                  <div key={c.id} className="inline-flex items-center gap-2 rounded-xl border border-border/50 bg-white/5 px-3 py-2 text-sm">
-                    <span className="text-foreground font-medium truncate max-w-[170px]">{c.name || "Creator"}</span>
+                  <div
+                    key={c.id}
+                    className="inline-flex items-center gap-2 rounded-xl border border-border/50 bg-white/5 px-3 py-2 text-sm"
+                  >
+                    <span className="text-foreground font-medium truncate max-w-[170px]">
+                      {c.name || "Creator"}
+                    </span>
                     <button
                       type="button"
                       onClick={() => removeSelectedCreator(c.id)}
@@ -1589,11 +1744,15 @@ export default function CreateCampaign() {
 
       {step === 3 && (
         <div className="px-6 py-4 space-y-4">
-          <h3 className="font-display text-xl font-bold text-foreground">Arquivos & Publicação</h3>
+          <h3 className="font-display text-xl font-bold text-foreground">
+            Arquivos & Publicação
+          </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Posts por creator *</label>
+              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+                Posts por creator *
+              </label>
               <input
                 inputMode="numeric"
                 pattern="[0-9]*"
@@ -1624,7 +1783,9 @@ export default function CreateCampaign() {
             </div>
 
             <div>
-              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Formato *</label>
+              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+                Formato *
+              </label>
               <select
                 value={formatFromData}
                 onChange={(e) => updateData({ format: e.target.value } as any)}
@@ -1636,13 +1797,18 @@ export default function CreateCampaign() {
                   </option>
                 ))}
               </select>
-              <div className="mt-2 text-[11px] text-muted-foreground">Escolha o formato principal do post.</div>
+              <div className="mt-2 text-[11px] text-muted-foreground">
+                Escolha o formato principal do post.
+              </div>
             </div>
           </div>
 
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
-              Briefing <span className="normal-case tracking-normal text-muted-foreground">(Descreva as informações da sua campanha)</span>
+              Briefing{" "}
+              <span className="normal-case tracking-normal text-muted-foreground">
+                (Descreva as informações da sua campanha)
+              </span>
             </label>
             <textarea
               value={String((data as any).briefPrivate || "")}
@@ -1655,7 +1821,10 @@ export default function CreateCampaign() {
 
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
-              Menções <span className="normal-case tracking-normal text-muted-foreground">(Adicione o @ dos perfis que devem ser marcados)</span>
+              Menções{" "}
+              <span className="normal-case tracking-normal text-muted-foreground">
+                (Adicione o @ dos perfis que devem ser marcados)
+              </span>
             </label>
             <input
               type="text"
@@ -1667,7 +1836,9 @@ export default function CreateCampaign() {
           </div>
 
           <div>
-            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">Collab</label>
+            <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
+              Collab
+            </label>
 
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -1677,7 +1848,9 @@ export default function CreateCampaign() {
                   else updateData({ collab: true } as any);
                 }}
                 className={`px-3 py-3 rounded-xl border text-sm font-semibold transition-all ${
-                  collabBool === true ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
+                  collabBool === true
+                    ? "border-primary/60 bg-primary/5 text-primary"
+                    : "border-border/50 bg-card/60 text-foreground/70"
                 }`}
               >
                 Sim
@@ -1690,7 +1863,9 @@ export default function CreateCampaign() {
                   else updateData({ collab: false, collabMentions: "" } as any);
                 }}
                 className={`px-3 py-3 rounded-xl border text-sm font-semibold transition-all ${
-                  collabBool === false ? "border-primary/60 bg-primary/5 text-primary" : "border-border/50 bg-card/60 text-foreground/70"
+                  collabBool === false
+                    ? "border-primary/60 bg-primary/5 text-primary"
+                    : "border-border/50 bg-card/60 text-foreground/70"
                 }`}
               >
                 Não
@@ -1699,13 +1874,18 @@ export default function CreateCampaign() {
 
             <div className="mt-2 text-[11px] text-muted-foreground">
               Selecionado:{" "}
-              <span className="text-foreground font-medium">{collabBool === null ? "—" : collabBool ? "Sim" : "Não"}</span>
+              <span className="text-foreground font-medium">
+                {collabBool === null ? "—" : collabBool ? "Sim" : "Não"}
+              </span>
             </div>
 
             {collabBool === true ? (
               <div className="mt-3">
                 <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
-                  @ para Collab <span className="normal-case tracking-normal text-muted-foreground">(até 4)</span>
+                  @ para Collab{" "}
+                  <span className="normal-case tracking-normal text-muted-foreground">
+                    (até 4)
+                  </span>
                 </label>
 
                 <input
@@ -1722,7 +1902,9 @@ export default function CreateCampaign() {
 
                 <div className="mt-2 text-[11px] text-muted-foreground">
                   Selecionados:{" "}
-                  <span className="text-foreground font-medium">{collabMentionsList.length ? collabMentionsList.join(", ") : "—"}</span>
+                  <span className="text-foreground font-medium">
+                    {collabMentionsList.length ? collabMentionsList.join(", ") : "—"}
+                  </span>
                 </div>
               </div>
             ) : null}
@@ -1730,7 +1912,10 @@ export default function CreateCampaign() {
 
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
-              Hashtags <span className="normal-case tracking-normal text-muted-foreground">(Adicione as hashtags que devem estar na publicação)</span>
+              Hashtags{" "}
+              <span className="normal-case tracking-normal text-muted-foreground">
+                (Adicione as hashtags que devem estar na publicação)
+              </span>
             </label>
             <input
               type="text"
@@ -1741,7 +1926,15 @@ export default function CreateCampaign() {
             />
           </div>
 
-          <input ref={fileInputRef} type="file" multiple accept="image/*,video/*,.pdf" onChange={handleFileSelect} className="hidden" />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,video/*,.pdf"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+
           <button
             onClick={() => fileInputRef.current?.click()}
             className="w-full border-2 border-dashed border-border/60 rounded-xl p-6 flex flex-col items-center gap-2 text-center hover:border-primary/30 transition-colors"
@@ -1765,9 +1958,15 @@ export default function CreateCampaign() {
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-foreground truncate">{f.file.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{(f.file.size / 1024).toFixed(0)} KB</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {(f.file.size / 1024).toFixed(0)} KB
+                    </p>
                   </div>
-                  <button onClick={() => removeFile(i)} className="text-muted-foreground hover:text-destructive transition-colors" type="button">
+                  <button
+                    onClick={() => removeFile(i)}
+                    className="text-muted-foreground hover:text-destructive transition-colors"
+                    type="button"
+                  >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -1777,7 +1976,10 @@ export default function CreateCampaign() {
 
           <div>
             <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2 block">
-              Legenda <span className="normal-case tracking-normal text-muted-foreground">(Sugestão de texto para o post, caso necessário)</span>
+              Legenda{" "}
+              <span className="normal-case tracking-normal text-muted-foreground">
+                (Sugestão de texto para o post, caso necessário)
+              </span>
             </label>
             <textarea
               value={caption}
@@ -1802,12 +2004,16 @@ export default function CreateCampaign() {
           <h3 className="font-display text-xl font-bold text-foreground">Resumo</h3>
 
           <div className="glass-card p-4 space-y-2">
-            <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Resumo</h4>
+            <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+              Resumo
+            </h4>
 
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Título</span>
-                <span className="text-foreground font-medium truncate ml-4">{String((data as any).title || "")}</span>
+                <span className="text-foreground font-medium truncate ml-4">
+                  {String((data as any).title || "")}
+                </span>
               </div>
 
               <div className="flex justify-between">
@@ -1819,25 +2025,32 @@ export default function CreateCampaign() {
 
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Posts por creator</span>
-                <span className="text-foreground font-medium">{postsNumber ?? postsFromData}</span>
+                <span className="text-foreground font-medium">
+                  {postsNumber ?? postsFromData}
+                </span>
               </div>
 
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Formato</span>
                 <span className="text-foreground font-medium">
-                  {postFormatOptions.find((x) => x.id === formatFromData)?.label || String(formatFromData || "-")}
+                  {postFormatOptions.find((x) => x.id === formatFromData)?.label ||
+                    String(formatFromData || "-")}
                 </span>
               </div>
 
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Período</span>
-                <span className="text-foreground font-medium truncate ml-4">{periodLabel || "-"}</span>
+                <span className="text-foreground font-medium truncate ml-4">
+                  {periodLabel || "-"}
+                </span>
               </div>
             </div>
           </div>
 
           <div className="glass-card p-4 space-y-2">
-            <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Cupom</h4>
+            <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+              Cupom
+            </h4>
 
             <div className="flex gap-2">
               <input
@@ -1862,7 +2075,9 @@ export default function CreateCampaign() {
                   <Loader2 className="w-3.5 h-3.5 animate-spin" /> Calculando…
                 </span>
               ) : quote?.coupon?.message ? (
-                <span className={quote.coupon.applied ? "text-primary" : ""}>{quote.coupon.message}</span>
+                <span className={quote.coupon.applied ? "text-primary" : ""}>
+                  {quote.coupon.message}
+                </span>
               ) : (
                 " "
               )}
@@ -1870,7 +2085,9 @@ export default function CreateCampaign() {
           </div>
 
           <div className="glass-card p-4 space-y-2">
-            <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Valores</h4>
+            <h4 className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+              Valores
+            </h4>
 
             {quoteLoading ? (
               <div className="text-sm text-muted-foreground flex items-center gap-2 py-2">
@@ -1893,9 +2110,16 @@ export default function CreateCampaign() {
                   return (
                     <div key={line.key} className="flex justify-between">
                       <span className="text-muted-foreground">
-                        {line.label} {qtyLabel ? <span className="text-muted-foreground/70">{qtyLabel}</span> : null}
+                        {line.label}{" "}
+                        {qtyLabel ? (
+                          <span className="text-muted-foreground/70">{qtyLabel}</span>
+                        ) : null}
                       </span>
-                      <span className={`text-foreground font-medium ${isDiscount && line.total !== 0 ? "text-primary" : ""}`}>
+                      <span
+                        className={`text-foreground font-medium ${
+                          isDiscount && line.total !== 0 ? "text-primary" : ""
+                        }`}
+                      >
                         {formatBRL(line.total)}
                       </span>
                     </div>
@@ -1904,23 +2128,31 @@ export default function CreateCampaign() {
 
                 <div className="border-t border-border/30 pt-2 flex justify-between">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="text-foreground font-medium">{formatBRL(quote.subtotal)}</span>
+                  <span className="text-foreground font-medium">
+                    {formatBRL(quote.subtotal)}
+                  </span>
                 </div>
 
                 {quote.discount ? (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Desconto</span>
-                    <span className="text-primary font-semibold">- {formatBRL(quote.discount)}</span>
+                    <span className="text-primary font-semibold">
+                      - {formatBRL(quote.discount)}
+                    </span>
                   </div>
                 ) : null}
 
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total da campanha</span>
-                  <span className="text-foreground font-semibold">{formatBRL(quote.total)}</span>
+                  <span className="text-foreground font-semibold">
+                    {formatBRL(quote.total)}
+                  </span>
                 </div>
               </div>
             ) : (
-              <div className="text-sm text-muted-foreground">Não foi possível calcular os valores.</div>
+              <div className="text-sm text-muted-foreground">
+                Não foi possível calcular os valores.
+              </div>
             )}
           </div>
 
@@ -1928,7 +2160,9 @@ export default function CreateCampaign() {
             onClick={handleGoToPayment}
             disabled={!canGoPayment}
             className={`w-full py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
-              canGoPayment ? "bg-gradient-neon text-primary-foreground glow-blue" : "bg-secondary text-muted-foreground"
+              canGoPayment
+                ? "bg-gradient-neon text-primary-foreground glow-blue"
+                : "bg-secondary text-muted-foreground"
             }`}
             type="button"
           >
@@ -1951,7 +2185,9 @@ export default function CreateCampaign() {
           <h3 className="font-display text-xl font-bold text-foreground">Pagamento</h3>
 
           <div className="glass-card p-4 space-y-2">
-            <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Total</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
+              Total
+            </div>
             <div className="text-2xl font-bold text-foreground">{formatBRL(quoteTotal)}</div>
             <div className="text-[11px] text-muted-foreground">Simulação.</div>
           </div>
@@ -1966,7 +2202,11 @@ export default function CreateCampaign() {
                 : "bg-secondary text-muted-foreground"
             }`}
           >
-            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4" />
+            )}
             {isSubmitting ? "Processando..." : "Simular pagamento aprovado"}
           </button>
 
@@ -1996,7 +2236,11 @@ export default function CreateCampaign() {
             >
               <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between bg-background/80 backdrop-blur-xl shrink-0">
                 <div className="text-sm font-semibold text-foreground">Perfil do creator</div>
-                <button type="button" onClick={closeProfileModal} className="p-2 rounded-xl hover:bg-white/5">
+                <button
+                  type="button"
+                  onClick={closeProfileModal}
+                  className="p-2 rounded-xl hover:bg-white/5"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -2082,9 +2326,19 @@ export default function CreateCampaign() {
             onClick={() => setStep(step + 1)}
             disabled={step === 1 ? !canStep2 : step === 2 ? !canStep3 : !canStep4}
             className={`flex-[2] py-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
-              (step === 1 ? canStep2 : step === 2 ? canStep3 : canStep4)
-                ? "bg-gradient-neon text-primary-foreground glow-blue"
-                : "bg-secondary text-muted-foreground"
+              step === 1 ? (
+                canStep2
+                  ? "bg-gradient-neon text-primary-foreground glow-blue"
+                  : "bg-secondary text-muted-foreground"
+              ) : step === 2 ? (
+                canStep3
+                  ? "bg-gradient-neon text-primary-foreground glow-blue"
+                  : "bg-secondary text-muted-foreground"
+              ) : canStep4 ? (
+                "bg-gradient-neon text-primary-foreground glow-blue"
+              ) : (
+                "bg-secondary text-muted-foreground"
+              )
             }`}
             type="button"
           >
