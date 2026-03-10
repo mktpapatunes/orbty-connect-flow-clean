@@ -10,6 +10,8 @@ import FAQ from "./pages/FAQ";
 
 import Welcome from "./pages/Welcome";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import ProfileChoice from "./pages/ProfileChoice";
 import ContractorRegistration from "./pages/registration/ContractorRegistration";
 import InfluencerRegistration from "./pages/registration/InfluencerRegistration";
@@ -55,12 +57,12 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-              {/* Redirect raiz */}
               <Route path="/" element={<Navigate to="/welcome" replace />} />
 
-              {/* ===== PUBLIC AUTH FLOW ===== */}
               <Route path="/welcome" element={<Welcome />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/recuperar-senha" element={<ForgotPassword />} />
+              <Route path="/redefinir-senha" element={<ResetPassword />} />
               <Route path="/check-email" element={<CheckEmail />} />
               <Route path="/escolha-perfil" element={<ProfileChoice />} />
               <Route
@@ -72,7 +74,6 @@ const App = () => (
                 element={<InfluencerRegistration />}
               />
 
-              {/* ===== STATUS PAGES ===== */}
               <Route
                 path="/aguardando-aprovacao"
                 element={
@@ -90,7 +91,6 @@ const App = () => (
                 }
               />
 
-              {/* ===== ADMIN ===== */}
               <Route
                 path="/admin"
                 element={
@@ -100,7 +100,6 @@ const App = () => (
                 }
               />
 
-              {/* ================== CONTRACTOR FLOW ================== */}
               <Route
                 path="/dashboard-contratante"
                 element={
@@ -137,7 +136,6 @@ const App = () => (
                 }
               />
 
-              {/* ================== INFLUENCER FLOW ================== */}
               <Route
                 path="/dashboard-influenciadora"
                 element={
@@ -174,7 +172,6 @@ const App = () => (
                 }
               />
 
-              {/* ===== Shared campaign view (role-aware) ===== */}
               <Route
                 path="/campanha/:id"
                 element={
@@ -184,7 +181,6 @@ const App = () => (
                 }
               />
 
-              {/* ====================== PERFIL ======================= */}
               <Route
                 path="/perfil"
                 element={
@@ -239,10 +235,8 @@ const App = () => (
                 }
               />
 
-              {/* Perfil público */}
               <Route path="/u/:id" element={<PublicProfileKeyed />} />
 
-              {/* ===== Histórico compartilhado (role-aware) ===== */}
               <Route
                 path="/historico"
                 element={
@@ -270,7 +264,6 @@ const App = () => (
                 }
               />
 
-              {/* ===== 404 ===== */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

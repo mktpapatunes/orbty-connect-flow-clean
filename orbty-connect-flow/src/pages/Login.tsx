@@ -16,20 +16,31 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // When auth is fully ready and session exists → redirect to dashboard
-  // Only redirect when we have enough data (role, admin, or pending/rejected status)
   useEffect(() => {
     if (!authReady || loading || !session) return;
 
-    if (isAdmin) { redirectToDashboard(); return; }
-    if (approvalStatus === "pending" || approvalStatus === "rejected") { redirectToDashboard(); return; }
-    if (approvalStatus === "approved" && (userRole === "contractor" || userRole === "influencer")) { redirectToDashboard(); return; }
+    if (isAdmin) {
+      redirectToDashboard();
+      return;
+    }
 
-    // Otherwise: still loading or no valid route yet -- do nothing
+    if (approvalStatus === "pending" || approvalStatus === "rejected") {
+      redirectToDashboard();
+      return;
+    }
+
+    if (
+      approvalStatus === "approved" &&
+      (userRole === "contractor" || userRole === "influencer")
+    ) {
+      redirectToDashboard();
+      return;
+    }
   }, [authReady, loading, session, isAdmin, approvalStatus, userRole, redirectToDashboard]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!email.trim() || !password.trim()) {
       toast.error("Preencha email e senha");
       return;
@@ -40,21 +51,22 @@ const Login = () => {
 
     if (result.error) {
       const msg = result.error.toLowerCase();
+
       if (msg.includes("email not confirmed") || msg.includes("email_not_confirmed")) {
         toast.error("Confirme seu e-mail antes de entrar. Verifique Inbox/Spam.");
         navigate("/check-email?email=" + encodeURIComponent(email.trim()));
       } else {
-        toast.error(result.error === "Invalid login credentials"
-          ? "Email ou senha incorretos"
-          : result.error
+        toast.error(
+          result.error === "Invalid login credentials"
+            ? "Email ou senha incorretos"
+            : result.error
         );
       }
+
       setIsSubmitting(false);
     }
-    // On success, onAuthStateChange will update context → useEffect redirects when authReady
   };
 
-  // Show inline loading while auth initializes OR while waiting for context after login
   if (loading && !session) {
     return (
       <div className="mobile-container flex flex-col items-center justify-center bg-background gap-3">
@@ -70,7 +82,6 @@ const Login = () => {
     <div className="mobile-container relative flex flex-col bg-background">
       <NetworkBackground />
 
-      {/* Header */}
       <div className="relative z-10 pt-16 pb-8 px-8">
         <motion.button
           initial={{ opacity: 0 }}
@@ -87,9 +98,9 @@ const Login = () => {
           transition={{ delay: 0.1 }}
           className="font-display text-3xl font-bold text-foreground mb-2"
         >
-          Bem-vindo de volta ao{" "}
-          <span className="text-gradient-neon">Orbty</span>
+          Bem-vindo de volta ao <span className="text-gradient-neon">Orbty</span>
         </motion.h1>
+
         <motion.p
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -100,7 +111,6 @@ const Login = () => {
         </motion.p>
       </div>
 
-      {/* Login Form */}
       <motion.form
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -108,7 +118,6 @@ const Login = () => {
         onSubmit={handleLogin}
         className="relative z-10 flex-1 px-8 space-y-4"
       >
-        {/* Email */}
         <div className="relative">
           <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
           <input
@@ -121,7 +130,6 @@ const Login = () => {
           />
         </div>
 
-        {/* Password */}
         <div className="relative">
           <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
           <input
@@ -134,7 +142,16 @@ const Login = () => {
           />
         </div>
 
-        {/* Submit */}
+        <div className="flex justify-end -mt-1">
+          <button
+            type="button"
+            onClick={() => navigate("/recuperar-senha")}
+            className="text-sm text-primary hover:underline"
+          >
+            Esqueci minha senha
+          </button>
+        </div>
+
         <motion.button
           type="submit"
           disabled={isSubmitting}
@@ -152,7 +169,6 @@ const Login = () => {
           )}
         </motion.button>
 
-        {/* Create account link */}
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -170,7 +186,6 @@ const Login = () => {
         </motion.p>
       </motion.form>
 
-      {/* Bottom */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}

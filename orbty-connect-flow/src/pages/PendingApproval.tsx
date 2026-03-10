@@ -1,17 +1,44 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Clock, Shield, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import NetworkBackground from "@/components/NetworkBackground";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+
+const POLLING_INTERVAL_MS = 15000;
 
 const PendingApproval = () => {
-  const { profile, approvalStatus, signOut, refreshProfile } = useAuth();
+  const { user, profile, approvalStatus, signOut, refreshProfile } = useAuth();
   const navigate = useNavigate();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  const mountedRef = useRef(true);
+  const refreshInFlightRef = useRef(false);
+
+  const safeRefresh = async () => {
+    if (refreshInFlightRef.current) return;
+
+    try {
+      refreshInFlightRef.current = true;
+      await refreshProfile();
+    } catch (error) {
+      console.error("[PendingApproval] erro ao atualizar status:", error);
+    } finally {
+      refreshInFlightRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // Redirect automático ao mudar o status no contexto
   useEffect(() => {
     if (approvalStatus === "approved") {
       navigate("/login", { replace: true });
@@ -23,12 +50,55 @@ const PendingApproval = () => {
     }
   }, [approvalStatus, navigate]);
 
+  // 1) Polling leve
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const interval = window.setInterval(() => {
+      void safeRefresh();
+    }, POLLING_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [user?.id]);
+
+  // 2) Realtime no profile do usuário
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`profile-approval-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${user.id}`,
+        },
+        async (payload) => {
+          console.log("[PendingApproval] realtime profile update:", payload);
+          await safeRefresh();
+        }
+      )
+      .subscribe((status) => {
+        console.log("[PendingApproval] realtime status:", status);
+      });
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true);
       await signOut();
     } finally {
-      setIsLoggingOut(false);
+      if (mountedRef.current) {
+        setIsLoggingOut(false);
+      }
     }
   };
 
@@ -37,19 +107,21 @@ const PendingApproval = () => {
       setIsLoggingOut(true);
       await signOut();
     } finally {
-      setIsLoggingOut(false);
+      if (mountedRef.current) {
+        setIsLoggingOut(false);
+      }
     }
   };
 
   const handleRefresh = async () => {
     try {
       setIsRefreshing(true);
-      await refreshProfile();
+      await safeRefresh();
       window.location.reload();
-    } catch (error) {
-      console.error("[PendingApproval] erro ao atualizar status:", error);
     } finally {
-      setIsRefreshing(false);
+      if (mountedRef.current) {
+        setIsRefreshing(false);
+      }
     }
   };
 
