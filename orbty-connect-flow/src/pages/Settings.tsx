@@ -207,7 +207,7 @@ export default function Settings() {
 
         <div className="pt-2">
           <p className="text-[10px] text-muted-foreground text-center">
-            Orbty • v1.0 (beta)
+            Orbty • v1.0
           </p>
         </div>
       </div>
