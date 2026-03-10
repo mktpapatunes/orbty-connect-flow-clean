@@ -42,13 +42,13 @@ const ProfileChoice = () => {
   const roles = [{
     id: "contratante",
     title: "Quero divulgar um evento, música ou marca",
-    description: "Conecte sua campanha ao público certo com influenciadoras regionais",
+    description: "Conecte seu produto ou negócio ao público certo com criadores regionais",
     icon: Megaphone,
     route: "/cadastro-contratante"
   }, {
     id: "influenciadora",
     title: "Quero ser creator na Orbty",
-    description: "Receba campanhas da sua região e ganhe com seu conteúdo",
+    description: "Divulgue produtos e campanhas e ganhe com seu conteúdo",
     icon: Sparkles,
     route: "/cadastro-influenciadora"
   }];
