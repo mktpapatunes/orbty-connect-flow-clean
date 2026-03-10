@@ -1,49 +1,78 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import type { AppRole } from "@/types/database";
+
+function sanitizeRole(v: any): AppRole | null {
+  const s = String(v ?? "").trim().toLowerCase();
+
+  if (s === "contractor" || s === "influencer" || s === "admin") {
+    return s as AppRole;
+  }
+
+  if (s === "creator") {
+    return "influencer";
+  }
+
+  return null;
+}
 
 /**
- * Returns the correct dashboard path based on user role and approval status.
- * Also provides a `redirectToDashboard` function for post-login/signup use.
+ * Retorna a rota correta com base em role e approval status.
+ * Também expõe redirectToDashboard para pós-login / pós-confirmação.
  */
 export const useDashboardRedirect = () => {
   const navigate = useNavigate();
   const { userRole, approvalStatus, isAdmin, session, profile } = useAuth();
 
   const getDashboardPath = useCallback((): string | null => {
-    // Admin always takes priority
-    if (isAdmin) return "/admin";
+    if (isAdmin) {
+      return "/admin";
+    }
 
-    // Still loading — don't redirect anywhere yet
-    if (approvalStatus === undefined && userRole === undefined) return null;
+    // ainda carregando contexto
+    if (approvalStatus === undefined && userRole === undefined && profile === undefined) {
+      return null;
+    }
 
-    if (approvalStatus === "pending") return "/aguardando-aprovacao";
-    if (approvalStatus === "rejected") return "/conta-rejeitada";
+    if (approvalStatus === "pending") {
+      return "/aguardando-aprovacao";
+    }
 
-    // Fallback: alguns ambientes não retornam role via user_roles/RPC.
-    // Quando isso acontece, usamos o que estiver salvo no profile.
-    const desiredRole = (profile as any)?.desired_role as
-      | "contractor"
-      | "influencer"
-      | "admin"
-      | undefined;
+    if (approvalStatus === "rejected") {
+      return "/conta-rejeitada";
+    }
 
-    const roleToUse = userRole ?? desiredRole ?? null;
+    const roleFromProfile = sanitizeRole((profile as any)?.desired_role);
+    const roleToUse = sanitizeRole(userRole) ?? roleFromProfile ?? null;
 
-    if (roleToUse === "contractor") return "/dashboard-contratante";
-    if (roleToUse === "influencer") return "/dashboard-influenciadora";
+    if (approvalStatus === "approved") {
+      if (roleToUse === "contractor") {
+        return "/dashboard-contratante";
+      }
 
-    // Session exists but no role/profile → incomplete
+      if (roleToUse === "influencer") {
+        return "/dashboard-influenciadora";
+      }
+    }
+
     return null;
   }, [userRole, approvalStatus, isAdmin, profile]);
 
   const redirectToDashboard = useCallback(() => {
     const path = getDashboardPath();
-    console.log("AUTH_REDIRECT", { path, userRole, approvalStatus, isAdmin, hasSession: !!session });
+
+    console.log("AUTH_REDIRECT", {
+      path,
+      userRole,
+      approvalStatus,
+      isAdmin,
+      hasSession: !!session,
+    });
+
     if (path) {
       navigate(path, { replace: true });
     }
-    // If path is null, do nothing — data is still loading
   }, [navigate, getDashboardPath, userRole, approvalStatus, isAdmin, session]);
 
   return { getDashboardPath, redirectToDashboard };

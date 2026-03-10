@@ -1,18 +1,56 @@
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Clock, Shield, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import NetworkBackground from "@/components/NetworkBackground";
 import { useAuth } from "@/contexts/AuthContext";
 
 const PendingApproval = () => {
-  const { profile, signOut, refreshProfile } = useAuth();
+  const { profile, approvalStatus, signOut, refreshProfile } = useAuth();
+  const navigate = useNavigate();
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  useEffect(() => {
+    if (approvalStatus === "approved") {
+      navigate("/login", { replace: true });
+      return;
+    }
+
+    if (approvalStatus === "rejected") {
+      navigate("/conta-rejeitada", { replace: true });
+    }
+  }, [approvalStatus, navigate]);
 
   const handleLogout = async () => {
-    console.log("[UI] logout clicked");
-    await signOut();
+    try {
+      setIsLoggingOut(true);
+      await signOut();
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  const handleBackToWelcome = async () => {
+    try {
+      setIsLoggingOut(true);
+      await signOut();
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const handleRefresh = async () => {
-    await refreshProfile();
+    try {
+      setIsRefreshing(true);
+      await refreshProfile();
+      window.location.reload();
+    } catch (error) {
+      console.error("[PendingApproval] erro ao atualizar status:", error);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   return (
@@ -20,7 +58,6 @@ const PendingApproval = () => {
       <NetworkBackground />
 
       <div className="relative z-10 flex flex-col items-center justify-center px-8 text-center">
-        {/* Animated icon */}
         <motion.div
           initial={{ opacity: 0, scale: 0.5 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -37,18 +74,15 @@ const PendingApproval = () => {
           />
         </motion.div>
 
-        {/* Title */}
         <motion.h1
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
           className="font-display text-2xl font-bold text-foreground mb-3"
         >
-          Seu perfil está sendo{" "}
-          <span className="text-gradient-neon">analisado</span>
+          Seu perfil está sendo <span className="text-gradient-neon">analisado</span>
         </motion.h1>
 
-        {/* Subtitle */}
         <motion.p
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -58,7 +92,6 @@ const PendingApproval = () => {
           Você será avisado assim que for aprovado para começar a usar a plataforma.
         </motion.p>
 
-        {/* Info cards */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -74,6 +107,7 @@ const PendingApproval = () => {
               </p>
             </div>
           </div>
+
           <div className="glass-card p-4 flex items-start gap-3">
             <Sparkles className="w-5 h-5 text-accent shrink-0 mt-0.5" />
             <div className="text-left">
@@ -85,7 +119,6 @@ const PendingApproval = () => {
           </div>
         </motion.div>
 
-        {/* User info */}
         {profile && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -99,7 +132,6 @@ const PendingApproval = () => {
           </motion.div>
         )}
 
-        {/* Actions */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -108,25 +140,29 @@ const PendingApproval = () => {
         >
           <button
             onClick={handleLogout}
-            className="w-full py-3 rounded-xl border border-border/50 text-sm text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
+            disabled={isLoggingOut || isRefreshing}
+            className="w-full py-3 rounded-xl border border-border/50 text-sm text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Sair da conta
+            {isLoggingOut ? "Saindo..." : "Sair da conta"}
           </button>
+
           <button
-            onClick={handleLogout}
-            className="w-full py-3 rounded-xl border border-border/50 text-sm text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
+            onClick={handleBackToWelcome}
+            disabled={isLoggingOut || isRefreshing}
+            className="w-full py-3 rounded-xl border border-border/50 text-sm text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Voltar para Welcome
           </button>
+
           <button
             onClick={handleRefresh}
-            className="w-full py-3 rounded-xl text-sm text-primary hover:text-primary/80 transition-all"
+            disabled={isRefreshing || isLoggingOut}
+            className="w-full py-3 rounded-xl text-sm text-primary hover:text-primary/80 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Atualizar status
+            {isRefreshing ? "Atualizando..." : "Atualizar status"}
           </button>
         </motion.div>
 
-        {/* Status dot */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

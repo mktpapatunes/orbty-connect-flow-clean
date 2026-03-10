@@ -19,7 +19,6 @@ import { toast } from "sonner";
 
 function sanitizeRole(v: any): AppRole | null {
   const sRaw = String(v ?? "").trim().toLowerCase();
-
   const s = sRaw === "contract" ? "contractor" : sRaw;
 
   if (s === "contractor" || s === "influencer" || s === "admin") return s as AppRole;
@@ -150,17 +149,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       try {
         const { data, error } = await supabase.rpc("get_my_context");
+
         if (error) {
           console.error("get_my_context error:", error);
         } else if (Array.isArray(data) && data.length > 0) {
           const ctx = data[0] as any;
-
           roleFromRpc = sanitizeRole(ctx?.role);
           approvalFromRpc = sanitizeApproval(ctx?.approval_status);
-
-          if (mountedRef.current && approvalFromRpc) {
-            setRpcApprovalStatus(approvalFromRpc);
-          }
         }
       } catch (e) {
         console.error("get_my_context exception:", e);
@@ -180,24 +175,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (profileData) {
         const p = profileData as unknown as Profile;
-        setProfile(p);
-
         const roleFromProfile = inferRoleFromProfile(p);
-        const finalRole = roleFromRpc ?? roleFromSess ?? roleFromProfile ?? null;
-        setUserRole(finalRole);
+        const approvalFromProfile = inferApprovalFromProfile(p);
 
-        setRpcApprovalStatus((prev) => prev ?? approvalFromRpc ?? inferApprovalFromProfile(p));
+        const finalRole = roleFromRpc ?? roleFromSess ?? roleFromProfile ?? null;
+        const finalApproval = approvalFromRpc ?? approvalFromProfile ?? null;
+
+        setProfile(p);
+        setUserRole(finalRole);
+        setRpcApprovalStatus(finalApproval);
         return;
       }
 
       setProfile(null);
       setUserRole(roleFromRpc ?? roleFromSess ?? null);
-      setRpcApprovalStatus((prev) => prev ?? approvalFromRpc ?? null);
+      setRpcApprovalStatus(approvalFromRpc ?? null);
     } catch (e) {
       console.error("fetchUserData exception:", e);
+
       if (mountedRef.current) {
         setProfile(null);
         setUserRole(inferRoleFromSession(currentSession ?? sessionRef.current));
+        setRpcApprovalStatus(null);
       }
     }
   }, []);
@@ -219,7 +218,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       sessionRef.current = newSession;
 
       if (event === "TOKEN_REFRESHED") {
-        if (newSession?.user && (profile === undefined || userRole === undefined)) {
+        if (newSession?.user) {
           fetchUserData(newSession.user.id, newSession).catch(() => {});
         }
         return;
@@ -280,7 +279,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       mountedRef.current = false;
       subscription.unsubscribe();
     };
-  }, [finalizeLoading, clearUserState]);
+  }, [finalizeLoading, clearUserState, fetchUserData]);
 
   const register: AuthContextType["register"] = async (email, password, role, profileData) => {
     registeringRef.current = true;

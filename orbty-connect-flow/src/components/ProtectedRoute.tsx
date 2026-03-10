@@ -11,13 +11,18 @@ interface ProtectedRouteProps {
   adminOnly?: boolean;
 }
 
-/** garante que nunca entra "" / lixo */
 function sanitizeRole(v: any): AppRole | null {
   const s = String(v ?? "").trim().toLowerCase();
   if (s === "contractor" || s === "influencer" || s === "admin") return s as AppRole;
   if (s === "creator") return "influencer";
   return null;
 }
+
+const LoadingScreen = () => (
+  <div className="mobile-container flex items-center justify-center bg-background">
+    <Loader2 className="w-8 h-8 text-primary animate-spin" />
+  </div>
+);
 
 const ProtectedRoute = ({
   children,
@@ -27,7 +32,6 @@ const ProtectedRoute = ({
 }: ProtectedRouteProps) => {
   const { session, profile, userRole, approvalStatus, isAdmin, loading, authReady } = useAuth();
 
-  // role fallback completo: userRole -> profile.desired_role -> session metadata
   const roleFromUserRole = sanitizeRole(userRole);
   const roleFromProfile = sanitizeRole((profile as any)?.desired_role);
   const roleFromMeta = sanitizeRole((session?.user as any)?.user_metadata?.role);
@@ -36,11 +40,7 @@ const ProtectedRoute = ({
     roleFromUserRole ?? roleFromProfile ?? roleFromMeta ?? null;
 
   if (loading || !authReady) {
-    return (
-      <div className="mobile-container flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!session) {
@@ -48,7 +48,10 @@ const ProtectedRoute = ({
   }
 
   if (adminOnly) {
-    if (!(isAdmin || roleToUse === "admin")) return <Navigate to="/login" replace />;
+    if (!(isAdmin || roleToUse === "admin")) {
+      return <Navigate to="/login" replace />;
+    }
+
     return <>{children}</>;
   }
 
@@ -57,41 +60,40 @@ const ProtectedRoute = ({
   }
 
   if (profile === undefined) {
-    return (
-      <div className="mobile-container flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (profile === null) {
     return <Navigate to="/escolha-perfil" replace />;
   }
 
-  if (approvalStatus === undefined) {
-    return (
-      <div className="mobile-container flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-      </div>
-    );
+  if (requireApproval) {
+    if (approvalStatus === undefined) {
+      return <LoadingScreen />;
+    }
+
+    if (approvalStatus === "pending") {
+      return <Navigate to="/aguardando-aprovacao" replace />;
+    }
+
+    if (approvalStatus === "rejected") {
+      return <Navigate to="/conta-rejeitada" replace />;
+    }
   }
 
-  if (requireApproval && approvalStatus === "pending") {
-    return <Navigate to="/aguardando-aprovacao" replace />;
-  }
-
-  if (requireApproval && approvalStatus === "rejected") {
-    return <Navigate to="/conta-rejeitada" replace />;
-  }
-
-  // Sessão existe, mas role ainda não veio válido -> manda para escolha de perfil (não para login)
   if (!roleToUse) {
     return <Navigate to="/escolha-perfil" replace />;
   }
 
   if (requiredRole && roleToUse !== requiredRole) {
-    if (roleToUse === "contractor") return <Navigate to="/dashboard-contratante" replace />;
-    if (roleToUse === "influencer") return <Navigate to="/dashboard-influenciadora" replace />;
+    if (roleToUse === "contractor") {
+      return <Navigate to="/dashboard-contratante" replace />;
+    }
+
+    if (roleToUse === "influencer") {
+      return <Navigate to="/dashboard-influenciadora" replace />;
+    }
+
     return <Navigate to="/login" replace />;
   }
 
