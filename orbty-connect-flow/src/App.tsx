@@ -48,6 +48,8 @@ import Settings from "./pages/Settings";
 
 import ChangePassword from "./pages/ChangePassword";
 
+import Ranking from "./pages/Ranking";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -247,6 +249,15 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+
+              <Route
+  path="/ranking"
+  element={
+    <ProtectedRoute>
+      <Ranking />
+    </ProtectedRoute>
+  }
+/>
 
               <Route
                 path="/ajuda"
