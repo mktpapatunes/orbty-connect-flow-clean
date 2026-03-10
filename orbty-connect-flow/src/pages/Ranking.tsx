@@ -60,6 +60,11 @@ type CampaignRow = {
   completed_at: string | null;
 };
 
+type ProfileRoleRow = {
+  id: string;
+  desired_role: "admin" | "contractor" | "influencer" | null;
+};
+
 type RankingCardItem = {
   id: string;
   name: string;
@@ -93,11 +98,27 @@ const AvatarFallback = ({ name }: { name: string }) => {
   );
 };
 
+const ModalAvatarFallback = ({ name }: { name: string }) => {
+  const initials = name
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+  return (
+    <div className="w-20 h-20 rounded-3xl bg-gradient-neon-subtle border border-primary/20 flex items-center justify-center text-primary font-semibold text-lg shadow-md shrink-0">
+      {initials || "OR"}
+    </div>
+  );
+};
+
 const RankBadge = ({ index }: { index: number }) => {
   if (index === 0) {
     return (
       <div className="absolute -top-2 -left-2 w-8 h-8 rounded-full bg-gradient-neon text-primary-foreground flex items-center justify-center shadow-lg">
-        <Trophy className="w-4 h-4" />
+        <Crown className="w-4 h-4" />
       </div>
     );
   }
@@ -169,21 +190,21 @@ const RankingProfileModal = ({
             >
               <div className="glass-card p-6 shadow-2xl border border-primary/20 max-h-[85vh] overflow-y-auto">
                 <div className="flex items-start justify-between gap-4 mb-5">
-                  <div className="flex items-center gap-4 min-w-0">
-                    {item.avatarUrl ? (
-                      <img
-                        src={item.avatarUrl}
-                        alt={item.name}
-                        className="w-20 h-20 rounded-3xl object-cover border border-border/50 shadow-md"
-                      />
-                    ) : (
-                      <div className="scale-125 origin-left">
-                        <AvatarFallback name={item.name} />
-                      </div>
-                    )}
+                  <div className="flex items-start gap-4 min-w-0 flex-1">
+                    <div className="shrink-0">
+                      {item.avatarUrl ? (
+                        <img
+                          src={item.avatarUrl}
+                          alt={item.name}
+                          className="w-20 h-20 rounded-3xl object-cover border border-border/50 shadow-md"
+                        />
+                      ) : (
+                        <ModalAvatarFallback name={item.name} />
+                      )}
+                    </div>
 
-                    <div className="min-w-0">
-                      <h3 className="text-lg font-bold text-foreground truncate">
+                    <div className="min-w-0 flex-1 pt-1">
+                      <h3 className="text-lg font-bold text-foreground break-words leading-tight">
                         {item.name}
                       </h3>
 
@@ -192,9 +213,11 @@ const RankingProfileModal = ({
                       </p>
 
                       {(item.city || item.state) && (
-                        <div className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
-                          <MapPin className="w-3.5 h-3.5 text-primary" />
-                          <span>{[item.city, item.state].filter(Boolean).join(" • ")}</span>
+                        <div className="mt-2 inline-flex items-start gap-1 text-xs text-muted-foreground">
+                          <MapPin className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                          <span className="break-words">
+                            {[item.city, item.state].filter(Boolean).join(" • ")}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -236,7 +259,7 @@ const RankingProfileModal = ({
                     <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
                       Sobre
                     </p>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
+                    <p className="text-sm text-muted-foreground leading-relaxed break-words">
                       {item.bio}
                     </p>
                   </div>
@@ -247,9 +270,9 @@ const RankingProfileModal = ({
                     <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
                       Instagram
                     </p>
-                    <div className="inline-flex items-center gap-2 text-sm text-foreground">
-                      <Instagram className="w-4 h-4 text-primary" />
-                      <span>{item.instagram}</span>
+                    <div className="inline-flex items-start gap-2 text-sm text-foreground max-w-full">
+                      <Instagram className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                      <span className="break-all">{item.instagram}</span>
                     </div>
                   </div>
                 )}
@@ -259,89 +282,6 @@ const RankingProfileModal = ({
         </>
       )}
     </AnimatePresence>
-  );
-};
-
-const TopOneCard = ({
-  item,
-  type,
-  onOpenProfile,
-}: {
-  item: RankingCardItem;
-  type: RankingTab;
-  onOpenProfile: (item: RankingCardItem) => void;
-}) => {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 14, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.3 }}
-      className="relative overflow-hidden rounded-[28px] border border-primary/20 bg-gradient-to-br from-primary/15 via-card to-card p-5 shadow-xl"
-    >
-      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top_right,rgba(120,80,255,0.18),transparent_35%)]" />
-
-      <div className="relative flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => onOpenProfile(item)}
-          className="relative shrink-0 transition-transform hover:scale-[1.02] active:scale-[0.99]"
-          aria-label={`Abrir perfil de ${item.name}`}
-        >
-          {item.avatarUrl ? (
-            <img
-              src={item.avatarUrl}
-              alt={item.name}
-              className="w-20 h-20 rounded-3xl object-cover border border-border/50 shadow-lg"
-            />
-          ) : (
-            <div className="scale-125 origin-left">
-              <AvatarFallback name={item.name} />
-            </div>
-          )}
-
-          <div className="absolute -top-2 -left-2 w-9 h-9 rounded-full bg-gradient-neon text-primary-foreground flex items-center justify-center shadow-lg">
-            <Crown className="w-4 h-4" />
-          </div>
-        </button>
-
-        <div className="flex-1 min-w-0">
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-medium text-primary mb-2">
-            <Trophy className="w-3.5 h-3.5" />
-            Top 1 do ranking
-          </div>
-
-          <h3 className="text-lg font-bold text-foreground truncate">{item.name}</h3>
-
-          {(item.city || item.state) && (
-            <p className="text-sm text-muted-foreground mt-1 truncate">
-              {[item.city, item.state].filter(Boolean).join(" • ")}
-            </p>
-          )}
-
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <div className="rounded-2xl border border-border/50 bg-secondary/20 px-3 py-2">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                Avaliações
-              </p>
-              <div className="flex items-center gap-1 text-sm font-semibold text-foreground">
-                <Star className="w-3.5 h-3.5 text-primary" />
-                <span>{formatRating(item.avgRating)} / 5</span>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-border/50 bg-secondary/20 px-3 py-2">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                Concluídas
-              </p>
-              <div className="flex items-center gap-1 text-sm font-semibold text-foreground">
-                <Trophy className="w-3.5 h-3.5 text-primary" />
-                <span>{item.completedCount}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </motion.div>
   );
 };
 
@@ -390,7 +330,7 @@ const RankingCard = ({
             <AvatarFallback name={item.name} />
           )}
 
-          <RankBadge index={index + 1} />
+          <RankBadge index={index} />
         </button>
       </div>
 
@@ -469,6 +409,7 @@ export default function Ranking() {
           organizationsRes,
           organizationsRatingsRes,
           campaignsRes,
+          rolesRes,
         ] = await Promise.all([
           supabase
             .from("public_profiles")
@@ -490,6 +431,9 @@ export default function Ranking() {
             .from("campaigns")
             .select("created_by, completed_at")
             .not("completed_at", "is", null),
+          supabase
+            .from("profiles")
+            .select("id, desired_role"),
         ]);
 
         if (creatorsProfilesRes.error) throw creatorsProfilesRes.error;
@@ -498,6 +442,7 @@ export default function Ranking() {
         if (organizationsRes.error) throw organizationsRes.error;
         if (organizationsRatingsRes.error) throw organizationsRatingsRes.error;
         if (campaignsRes.error) throw campaignsRes.error;
+        if (rolesRes.error) throw rolesRes.error;
 
         const creatorProfiles = (creatorsProfilesRes.data ?? []) as CreatorProfile[];
         const creatorRatings = (creatorsRatingsRes.data ?? []) as InfluencerRatingSummary[];
@@ -506,6 +451,13 @@ export default function Ranking() {
         const organizations = (organizationsRes.data ?? []) as Organization[];
         const organizationRatings = (organizationsRatingsRes.data ?? []) as OrganizationRatingSummary[];
         const campaignRows = (campaignsRes.data ?? []) as CampaignRow[];
+        const roles = (rolesRes.data ?? []) as ProfileRoleRow[];
+
+        const adminIds = new Set(
+          roles
+            .filter((row) => row.desired_role === "admin")
+            .map((row) => row.id)
+        );
 
         const creatorCompletedMap = new Map<string, number>();
         for (const row of participantRows) {
@@ -525,6 +477,7 @@ export default function Ranking() {
         }
 
         const creators: RankingCardItem[] = creatorProfiles
+          .filter((profile) => !adminIds.has(profile.id))
           .map((profile) => ({
             id: profile.id,
             name: profile.name,
@@ -569,6 +522,7 @@ export default function Ranking() {
         }
 
         const businesses: RankingCardItem[] = organizations
+          .filter((org) => !adminIds.has(org.created_by))
           .map((org) => ({
             id: org.id,
             name: org.name,
@@ -619,9 +573,6 @@ export default function Ranking() {
 
     return currentItems.filter((item) => item.name.toLowerCase().includes(term));
   }, [currentItems, search]);
-
-  const topItem = filteredItems[0] ?? null;
-  const listItems = topItem ? filteredItems.slice(1) : filteredItems;
 
   return (
     <MobileLayout title="Ranking" navType={navType} showBack showHome>
@@ -713,28 +664,16 @@ export default function Ranking() {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {topItem && (
-              <TopOneCard
-                item={topItem}
+          <div className="space-y-3">
+            {filteredItems.map((item, index) => (
+              <RankingCard
+                key={item.id}
+                item={item}
+                index={index}
                 type={activeTab}
                 onOpenProfile={setSelectedItem}
               />
-            )}
-
-            {listItems.length > 0 && (
-              <div className="space-y-3">
-                {listItems.map((item, index) => (
-                  <RankingCard
-                    key={item.id}
-                    item={item}
-                    index={index}
-                    type={activeTab}
-                    onOpenProfile={setSelectedItem}
-                  />
-                ))}
-              </div>
-            )}
+            ))}
           </div>
         )}
 
