@@ -6,6 +6,7 @@ import NetworkBackground from "@/components/NetworkBackground";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDashboardRedirect } from "@/hooks/useDashboardRedirect";
 import { toast } from "sonner";
+import { translateSupabaseError } from "@/utils/supabaseErrorTranslator";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -34,7 +35,6 @@ const Login = () => {
       (userRole === "contractor" || userRole === "influencer")
     ) {
       redirectToDashboard();
-      return;
     }
   }, [authReady, loading, session, isAdmin, approvalStatus, userRole, redirectToDashboard]);
 
@@ -47,22 +47,21 @@ const Login = () => {
     }
 
     setIsSubmitting(true);
-    const result = await signIn(email.trim(), password);
 
-    if (result.error) {
-      const msg = result.error.toLowerCase();
+    try {
+      const result = await signIn(email.trim(), password);
 
-      if (msg.includes("email not confirmed") || msg.includes("email_not_confirmed")) {
-  toast.error("Confirme seu e-mail antes de entrar. Verifique Inbox/Spam.");
-  navigate("/check-email?mode=signup&email=" + encodeURIComponent(email.trim()));
-} else {
-  toast.error(
-    result.error === "Invalid login credentials"
-      ? "Email ou senha incorretos"
-      : result.error
-  );
-}
+      if (result.error) {
+        const msg = result.error.toLowerCase();
 
+        if (msg.includes("email not confirmed") || msg.includes("email_not_confirmed")) {
+          toast.error("Confirme seu e-mail antes de entrar. Verifique Inbox/Spam.");
+          navigate("/check-email?mode=signup&email=" + encodeURIComponent(email.trim()));
+        } else {
+          toast.error(translateSupabaseError(result.error));
+        }
+      }
+    } finally {
       setIsSubmitting(false);
     }
   };

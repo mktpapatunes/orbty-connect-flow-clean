@@ -5,6 +5,7 @@ import { Lock, Loader2, CheckCircle2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import NetworkBackground from "@/components/NetworkBackground";
 import { supabase } from "@/integrations/supabase/client";
+import { translateSupabaseError } from "@/utils/supabaseErrorTranslator";
 
 const MIN_PASSWORD_LENGTH = 6;
 
@@ -98,7 +99,7 @@ const ResetPassword = () => {
       });
 
       if (error) {
-        toast.error(error.message || "Não foi possível redefinir sua senha.");
+        toast.error(translateSupabaseError(error.message));
         return;
       }
 

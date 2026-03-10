@@ -5,6 +5,7 @@ import { Mail, ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import NetworkBackground from "@/components/NetworkBackground";
 import { supabase } from "@/integrations/supabase/client";
+import { translateSupabaseError } from "@/utils/supabaseErrorTranslator";
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
@@ -30,12 +31,14 @@ const ForgotPassword = () => {
       });
 
       if (error) {
-        toast.error(error.message || "Não foi possível enviar o e-mail de recuperação.");
+        toast.error(translateSupabaseError(error.message));
         return;
       }
 
       toast.success("Enviamos o link de recuperação para seu e-mail.");
-navigate(`/check-email?mode=recovery&email=${encodeURIComponent(normalizedEmail)}`, {replace: true,});
+      navigate(`/check-email?mode=recovery&email=${encodeURIComponent(normalizedEmail)}`, {
+        replace: true,
+      });
     } catch (error) {
       console.error("[ForgotPassword] reset email error:", error);
       toast.error("Não foi possível enviar o e-mail de recuperação.");
@@ -103,7 +106,11 @@ navigate(`/check-email?mode=recovery&email=${encodeURIComponent(normalizedEmail)
           whileTap={{ scale: 0.98 }}
           className="w-full py-4 rounded-xl bg-gradient-neon text-primary-foreground font-semibold text-base tracking-wide glow-blue transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Enviar link de recuperação"}
+          {isSubmitting ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            "Enviar link de recuperação"
+          )}
         </motion.button>
 
         <button
