@@ -53,15 +53,15 @@ const Login = () => {
       const msg = result.error.toLowerCase();
 
       if (msg.includes("email not confirmed") || msg.includes("email_not_confirmed")) {
-        toast.error("Confirme seu e-mail antes de entrar. Verifique Inbox/Spam.");
-        navigate("/check-email?email=" + encodeURIComponent(email.trim()));
-      } else {
-        toast.error(
-          result.error === "Invalid login credentials"
-            ? "Email ou senha incorretos"
-            : result.error
-        );
-      }
+  toast.error("Confirme seu e-mail antes de entrar. Verifique Inbox/Spam.");
+  navigate("/check-email?mode=signup&email=" + encodeURIComponent(email.trim()));
+} else {
+  toast.error(
+    result.error === "Invalid login credentials"
+      ? "Email ou senha incorretos"
+      : result.error
+  );
+}
 
       setIsSubmitting(false);
     }

@@ -35,7 +35,7 @@ const ForgotPassword = () => {
       }
 
       toast.success("Enviamos o link de recuperação para seu e-mail.");
-      navigate(`/check-email?email=${encodeURIComponent(normalizedEmail)}`, { replace: true });
+navigate(`/check-email?mode=recovery&email=${encodeURIComponent(normalizedEmail)}`, {replace: true,});
     } catch (error) {
       console.error("[ForgotPassword] reset email error:", error);
       toast.error("Não foi possível enviar o e-mail de recuperação.");
