@@ -60,16 +60,7 @@ const Welcome = () => {
           transition={{ delay: 0.7, duration: 0.6 }}
           className="text-foreground/80 text-center text-base leading-relaxed mb-3 max-w-xs font-medium"
         >
-          Conecte sua campanha ao público certo, na região certa.
-        </motion.p>
-
-        <motion.p
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.85, duration: 0.5 }}
-          className="text-muted-foreground text-center text-xs leading-relaxed mb-12 max-w-xs"
-        >
-          Marketing inteligente com criadores reais
+          Conecte sua campanha ao público certo, na localização certa.
         </motion.p>
 
         <motion.button
