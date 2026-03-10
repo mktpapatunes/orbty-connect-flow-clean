@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
@@ -13,6 +13,7 @@ import {
   Clock,
   LayoutDashboard,
   FileText,
+  KeyRound,
 } from "lucide-react";
 
 type Item = {
@@ -30,12 +31,13 @@ export default function Settings() {
 
   const navType = userRole === "contractor" ? "contractor" : "influencer";
 
-  const handleSignOut = async () => {
+  const handleSignOut = useCallback(async () => {
     const ok = window.confirm("Você tem certeza que deseja sair da conta?");
     if (!ok) return;
+
     await signOut();
     navigate("/welcome");
-  };
+  }, [signOut, navigate]);
 
   const sections = useMemo(() => {
     const isInfluencer = userRole === "influencer";
@@ -48,6 +50,7 @@ export default function Settings() {
         desc: "Dados da conta e configurações do perfil.",
         route: "/perfil",
       },
+
       ...(isInfluencer
         ? [
             {
@@ -58,6 +61,7 @@ export default function Settings() {
             } as Item,
           ]
         : []),
+
       ...(isContractor
         ? [
             {
@@ -68,6 +72,7 @@ export default function Settings() {
             } as Item,
           ]
         : []),
+
       {
         icon: HelpCircle,
         title: "Ajuda / FAQ",
@@ -85,6 +90,7 @@ export default function Settings() {
               desc: "Convites, entregas e status.",
               route: "/minhas-campanhas",
             } as Item,
+
             {
               icon: Clock,
               title: "Histórico",
@@ -93,6 +99,7 @@ export default function Settings() {
             } as Item,
           ]
         : []),
+
       ...(isContractor
         ? [
             {
@@ -101,6 +108,7 @@ export default function Settings() {
               desc: "Gerencie suas campanhas.",
               route: "/dashboard-contratante",
             } as Item,
+
             {
               icon: Clock,
               title: "Histórico",
@@ -113,11 +121,12 @@ export default function Settings() {
 
     const security: Item[] = [
       {
-        icon: Shield,
-        title: "Segurança",
-        desc: "Recursos de segurança do app (em breve).",
-        disabled: true,
+        icon: KeyRound,
+        title: "Alterar senha",
+        desc: "Atualize sua senha de acesso com segurança.",
+        route: "/alterar-senha",
       },
+
       {
         icon: LogOut,
         title: "Sair da conta",
@@ -131,7 +140,7 @@ export default function Settings() {
       { title: "Campanhas", items: campaigns },
       { title: "Segurança", items: security },
     ];
-  }, [userRole]);
+  }, [userRole, handleSignOut]);
 
   return (
     <MobileLayout title="Configurações" navType={navType} showBack showHome>
@@ -140,6 +149,7 @@ export default function Settings() {
           <h2 className="font-display text-2xl font-bold text-foreground">
             Configurações <span className="text-gradient-neon">do app</span>
           </h2>
+
           <p className="text-sm text-muted-foreground mt-2">
             Acesse atalhos, ajuda e opções da sua conta.
           </p>
@@ -160,21 +170,16 @@ export default function Settings() {
             <div className="space-y-3">
               {section.items.map((it) => {
                 const Icon = it.icon;
-                const disabled = !!it.disabled;
 
                 return (
                   <button
                     key={it.title}
                     type="button"
-                    disabled={disabled}
                     onClick={() => {
-                      if (disabled) return;
                       if (it.action) return it.action();
                       if (it.route) return navigate(it.route);
                     }}
-                    className={`w-full glass-card-hover p-5 flex items-center gap-4 text-left group ${
-                      disabled ? "opacity-60 cursor-not-allowed" : ""
-                    }`}
+                    className="w-full glass-card-hover p-5 flex items-center gap-4 text-left group"
                   >
                     <div className="w-11 h-11 rounded-xl bg-gradient-neon-subtle flex items-center justify-center shrink-0">
                       <Icon className="w-5 h-5 text-primary" />
@@ -184,11 +189,12 @@ export default function Settings() {
                       <h3 className="font-semibold text-foreground text-sm">
                         {it.title}
                       </h3>
-                      {it.desc ? (
+
+                      {it.desc && (
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {it.desc}
                         </p>
-                      ) : null}
+                      )}
                     </div>
 
                     <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />

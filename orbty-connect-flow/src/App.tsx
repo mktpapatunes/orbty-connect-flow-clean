@@ -46,6 +46,8 @@ import LegacyProfile from "@/pages/Profile";
 import PaymentSimulated from "./pages/campaign/PaymentSimulated";
 import Settings from "./pages/Settings";
 
+import ChangePassword from "./pages/ChangePassword";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -263,6 +265,15 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+
+              <Route
+  path="/alterar-senha"
+  element={
+    <ProtectedRoute>
+      <ChangePassword />
+    </ProtectedRoute>
+  }
+/>
 
               <Route path="*" element={<NotFound />} />
             </Routes>
