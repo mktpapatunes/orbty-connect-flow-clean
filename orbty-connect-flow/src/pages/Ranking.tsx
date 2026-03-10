@@ -60,9 +60,8 @@ type CampaignRow = {
   completed_at: string | null;
 };
 
-type ProfileRoleRow = {
-  id: string;
-  desired_role: "admin" | "contractor" | "influencer" | null;
+type AdminUserRow = {
+  user_id: string;
 };
 
 type RankingCardItem = {
@@ -409,7 +408,7 @@ export default function Ranking() {
           organizationsRes,
           organizationsRatingsRes,
           campaignsRes,
-          rolesRes,
+          adminIdsRes,
         ] = await Promise.all([
           supabase
             .from("public_profiles")
@@ -431,9 +430,7 @@ export default function Ranking() {
             .from("campaigns")
             .select("created_by, completed_at")
             .not("completed_at", "is", null),
-          supabase
-            .from("profiles")
-            .select("id, desired_role"),
+          supabase.rpc("get_admin_user_ids"),
         ]);
 
         if (creatorsProfilesRes.error) throw creatorsProfilesRes.error;
@@ -442,7 +439,7 @@ export default function Ranking() {
         if (organizationsRes.error) throw organizationsRes.error;
         if (organizationsRatingsRes.error) throw organizationsRatingsRes.error;
         if (campaignsRes.error) throw campaignsRes.error;
-        if (rolesRes.error) throw rolesRes.error;
+        if (adminIdsRes.error) throw adminIdsRes.error;
 
         const creatorProfiles = (creatorsProfilesRes.data ?? []) as CreatorProfile[];
         const creatorRatings = (creatorsRatingsRes.data ?? []) as InfluencerRatingSummary[];
@@ -451,13 +448,9 @@ export default function Ranking() {
         const organizations = (organizationsRes.data ?? []) as Organization[];
         const organizationRatings = (organizationsRatingsRes.data ?? []) as OrganizationRatingSummary[];
         const campaignRows = (campaignsRes.data ?? []) as CampaignRow[];
-        const roles = (rolesRes.data ?? []) as ProfileRoleRow[];
+        const adminRows = (adminIdsRes.data ?? []) as AdminUserRow[];
 
-        const adminIds = new Set(
-          roles
-            .filter((row) => row.desired_role === "admin")
-            .map((row) => row.id)
-        );
+        const adminIds = new Set(adminRows.map((row) => row.user_id));
 
         const creatorCompletedMap = new Map<string, number>();
         for (const row of participantRows) {
