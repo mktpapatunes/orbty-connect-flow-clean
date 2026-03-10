@@ -13,6 +13,8 @@ import {
   Instagram,
   X,
   Medal,
+  Search,
+  Crown,
 } from "lucide-react";
 
 type RankingTab = "creators" | "businesses";
@@ -156,107 +158,190 @@ const RankingProfileModal = ({
             className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
           />
 
-          <motion.div
-            key="ranking-modal-content"
-            initial={{ opacity: 0, y: 24, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 24, scale: 0.96 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-x-4 top-1/2 z-[61] -translate-y-1/2 mx-auto w-[calc(100%-2rem)] max-w-md"
-          >
-            <div className="glass-card p-6 shadow-2xl border border-primary/20">
-              <div className="flex items-start justify-between gap-4 mb-5">
-                <div className="flex items-center gap-4 min-w-0">
-                  {item.avatarUrl ? (
-                    <img
-                      src={item.avatarUrl}
-                      alt={item.name}
-                      className="w-20 h-20 rounded-3xl object-cover border border-border/50 shadow-md"
-                    />
-                  ) : (
-                    <div className="scale-125 origin-left">
-                      <AvatarFallback name={item.name} />
-                    </div>
-                  )}
-
-                  <div className="min-w-0">
-                    <h3 className="text-lg font-bold text-foreground truncate">
-                      {item.name}
-                    </h3>
-
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {type === "creators" ? "Creator" : "Marca / Negócio"}
-                    </p>
-
-                    {(item.city || item.state) && (
-                      <div className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
-                        <MapPin className="w-3.5 h-3.5 text-primary" />
-                        <span>
-                          {[item.city, item.state].filter(Boolean).join(" • ")}
-                        </span>
+          <div className="fixed inset-0 z-[61] flex items-center justify-center p-4">
+            <motion.div
+              key="ranking-modal-content"
+              initial={{ opacity: 0, y: 20, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.96 }}
+              transition={{ duration: 0.2 }}
+              className="w-full max-w-md"
+            >
+              <div className="glass-card p-6 shadow-2xl border border-primary/20 max-h-[85vh] overflow-y-auto">
+                <div className="flex items-start justify-between gap-4 mb-5">
+                  <div className="flex items-center gap-4 min-w-0">
+                    {item.avatarUrl ? (
+                      <img
+                        src={item.avatarUrl}
+                        alt={item.name}
+                        className="w-20 h-20 rounded-3xl object-cover border border-border/50 shadow-md"
+                      />
+                    ) : (
+                      <div className="scale-125 origin-left">
+                        <AvatarFallback name={item.name} />
                       </div>
                     )}
+
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-bold text-foreground truncate">
+                        {item.name}
+                      </h3>
+
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {type === "creators" ? "Creator" : "Marca / Negócio"}
+                      </p>
+
+                      {(item.city || item.state) && (
+                        <div className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <MapPin className="w-3.5 h-3.5 text-primary" />
+                          <span>{[item.city, item.state].filter(Boolean).join(" • ")}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={onClose}
+                    className="w-9 h-9 rounded-xl border border-border/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all shrink-0"
+                    aria-label="Fechar modal"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-5">
+                  <div className="rounded-2xl border border-border/50 bg-secondary/30 p-4">
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">
+                      Avaliações
+                    </p>
+                    <div className="flex items-center gap-1 text-foreground font-semibold">
+                      <Star className="w-4 h-4 text-primary" />
+                      <span>{formatRating(item.avgRating)} / 5</span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-border/50 bg-secondary/30 p-4">
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">
+                      Concluídas
+                    </p>
+                    <div className="flex items-center gap-1 text-foreground font-semibold">
+                      <Trophy className="w-4 h-4 text-primary" />
+                      <span>{item.completedCount}</span>
+                    </div>
                   </div>
                 </div>
 
-                <button
-                  onClick={onClose}
-                  className="w-9 h-9 rounded-xl border border-border/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all shrink-0"
-                  aria-label="Fechar modal"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                {item.bio && (
+                  <div className="rounded-2xl border border-border/50 bg-secondary/20 p-4 mb-4">
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
+                      Sobre
+                    </p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {item.bio}
+                    </p>
+                  </div>
+                )}
+
+                {item.instagram && (
+                  <div className="rounded-2xl border border-border/50 bg-secondary/20 p-4">
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
+                      Instagram
+                    </p>
+                    <div className="inline-flex items-center gap-2 text-sm text-foreground">
+                      <Instagram className="w-4 h-4 text-primary" />
+                      <span>{item.instagram}</span>
+                    </div>
+                  </div>
+                )}
               </div>
-
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                <div className="rounded-2xl border border-border/50 bg-secondary/30 p-4">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">
-                    Nota
-                  </p>
-                  <div className="flex items-center gap-1 text-foreground font-semibold">
-                    <Star className="w-4 h-4 text-primary" />
-                    <span>{formatRating(item.avgRating)} / 5</span>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-border/50 bg-secondary/30 p-4">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">
-                    Concluídas
-                  </p>
-                  <div className="flex items-center gap-1 text-foreground font-semibold">
-                    <Trophy className="w-4 h-4 text-primary" />
-                    <span>{item.completedCount}</span>
-                  </div>
-                </div>
-              </div>
-
-              {item.bio && (
-                <div className="rounded-2xl border border-border/50 bg-secondary/20 p-4 mb-4">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
-                    Sobre
-                  </p>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {item.bio}
-                  </p>
-                </div>
-              )}
-
-              {item.instagram && (
-                <div className="rounded-2xl border border-border/50 bg-secondary/20 p-4">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
-                    Instagram
-                  </p>
-                  <div className="inline-flex items-center gap-2 text-sm text-foreground">
-                    <Instagram className="w-4 h-4 text-primary" />
-                    <span>{item.instagram}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>
+  );
+};
+
+const TopOneCard = ({
+  item,
+  type,
+  onOpenProfile,
+}: {
+  item: RankingCardItem;
+  type: RankingTab;
+  onOpenProfile: (item: RankingCardItem) => void;
+}) => {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.3 }}
+      className="relative overflow-hidden rounded-[28px] border border-primary/20 bg-gradient-to-br from-primary/15 via-card to-card p-5 shadow-xl"
+    >
+      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top_right,rgba(120,80,255,0.18),transparent_35%)]" />
+
+      <div className="relative flex items-center gap-4">
+        <button
+          type="button"
+          onClick={() => onOpenProfile(item)}
+          className="relative shrink-0 transition-transform hover:scale-[1.02] active:scale-[0.99]"
+          aria-label={`Abrir perfil de ${item.name}`}
+        >
+          {item.avatarUrl ? (
+            <img
+              src={item.avatarUrl}
+              alt={item.name}
+              className="w-20 h-20 rounded-3xl object-cover border border-border/50 shadow-lg"
+            />
+          ) : (
+            <div className="scale-125 origin-left">
+              <AvatarFallback name={item.name} />
+            </div>
+          )}
+
+          <div className="absolute -top-2 -left-2 w-9 h-9 rounded-full bg-gradient-neon text-primary-foreground flex items-center justify-center shadow-lg">
+            <Crown className="w-4 h-4" />
+          </div>
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-medium text-primary mb-2">
+            <Trophy className="w-3.5 h-3.5" />
+            Top 1 do ranking
+          </div>
+
+          <h3 className="text-lg font-bold text-foreground truncate">{item.name}</h3>
+
+          {(item.city || item.state) && (
+            <p className="text-sm text-muted-foreground mt-1 truncate">
+              {[item.city, item.state].filter(Boolean).join(" • ")}
+            </p>
+          )}
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="rounded-2xl border border-border/50 bg-secondary/20 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                Avaliações
+              </p>
+              <div className="flex items-center gap-1 text-sm font-semibold text-foreground">
+                <Star className="w-3.5 h-3.5 text-primary" />
+                <span>{formatRating(item.avgRating)} / 5</span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border/50 bg-secondary/20 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                Concluídas
+              </p>
+              <div className="flex items-center gap-1 text-sm font-semibold text-foreground">
+                <Trophy className="w-3.5 h-3.5 text-primary" />
+                <span>{item.completedCount}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 };
 
@@ -277,7 +362,7 @@ const RankingCard = ({
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.04 * index }}
+      transition={{ delay: 0.03 * index }}
       className={`relative overflow-hidden rounded-3xl border p-4 flex items-center gap-4 ${
         isTop3
           ? "bg-gradient-to-br from-primary/10 via-card to-card border-primary/20 shadow-lg"
@@ -305,7 +390,7 @@ const RankingCard = ({
             <AvatarFallback name={item.name} />
           )}
 
-          <RankBadge index={index} />
+          <RankBadge index={index + 1} />
         </button>
       </div>
 
@@ -336,7 +421,7 @@ const RankingCard = ({
         <div className="mt-3 grid grid-cols-2 gap-2">
           <div className="rounded-2xl border border-border/50 bg-secondary/20 px-3 py-2">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-              Nota
+              Avaliações
             </p>
             <div className="flex items-center gap-1 text-sm font-semibold text-foreground">
               <Star className="w-3.5 h-3.5 text-primary" />
@@ -369,6 +454,7 @@ export default function Ranking() {
   const [businessItems, setBusinessItems] = useState<RankingCardItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<RankingCardItem | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const loadRanking = async () => {
@@ -527,10 +613,24 @@ export default function Ranking() {
     [activeTab, creatorItems, businessItems]
   );
 
+  const filteredItems = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return currentItems;
+
+    return currentItems.filter((item) => item.name.toLowerCase().includes(term));
+  }, [currentItems, search]);
+
+  const topItem = filteredItems[0] ?? null;
+  const listItems = topItem ? filteredItems.slice(1) : filteredItems;
+
   return (
     <MobileLayout title="Ranking" navType={navType} showBack showHome>
       <div className="px-6 py-6 space-y-6">
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.28 }}
+        >
           <h2 className="font-display text-2xl font-bold text-foreground">
             Ranking <span className="text-gradient-neon">Orbty</span>
           </h2>
@@ -539,7 +639,12 @@ export default function Ranking() {
           </p>
         </motion.div>
 
-        <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card p-1 shadow-lg">
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.04, duration: 0.28 }}
+          className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card p-1 shadow-lg"
+        >
           <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top_right,rgba(120,80,255,0.12),transparent_35%)]" />
           <div className="relative grid grid-cols-2 gap-1">
             <button
@@ -572,7 +677,25 @@ export default function Ranking() {
               </span>
             </button>
           </div>
-        </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.08, duration: 0.28 }}
+          className="relative"
+        >
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder={`Buscar ${
+              activeTab === "creators" ? "creator" : "marca/negócio"
+            }`}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-11 pr-4 py-4 rounded-2xl bg-secondary/40 border border-border/50 text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all"
+          />
+        </motion.div>
 
         {loading ? (
           <div className="glass-card p-8 flex flex-col items-center justify-center gap-3">
@@ -583,23 +706,35 @@ export default function Ranking() {
           <div className="glass-card p-6 text-center">
             <p className="text-sm text-muted-foreground">{error}</p>
           </div>
-        ) : currentItems.length === 0 ? (
+        ) : filteredItems.length === 0 ? (
           <div className="glass-card p-6 text-center">
             <p className="text-sm text-muted-foreground">
-              Ainda não há dados suficientes para exibir este ranking.
+              Nenhum perfil encontrado para esta busca.
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {currentItems.map((item, index) => (
-              <RankingCard
-                key={item.id}
-                item={item}
-                index={index}
+          <div className="space-y-4">
+            {topItem && (
+              <TopOneCard
+                item={topItem}
                 type={activeTab}
                 onOpenProfile={setSelectedItem}
               />
-            ))}
+            )}
+
+            {listItems.length > 0 && (
+              <div className="space-y-3">
+                {listItems.map((item, index) => (
+                  <RankingCard
+                    key={item.id}
+                    item={item}
+                    index={index}
+                    type={activeTab}
+                    onOpenProfile={setSelectedItem}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
