@@ -23,11 +23,29 @@ export async function sendCampaignInviteEmails(
     throw new Error("campaignId é obrigatório.");
   }
 
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
+  if (sessionError) {
+    throw sessionError;
+  }
+
+  const accessToken = session?.access_token;
+
+  if (!accessToken) {
+    throw new Error("Sessão inválida. Faça login novamente.");
+  }
+
   const { data, error } = await supabase.functions.invoke(
     "send-campaign-invite-email",
     {
       body: {
         campaignId: safeCampaignId,
+      },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
       },
     }
   );
